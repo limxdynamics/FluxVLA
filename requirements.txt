@@ -42,3 +42,5 @@ wandb==0.21.0
 # Optional: remote inference (only needed if using remote_inference config)
 # pip install pyzmq msgpack
 # pip install protobuf  # only if serializer='protobuf'
+# Optional: Tron2 robot control
+# pip install websocket-client

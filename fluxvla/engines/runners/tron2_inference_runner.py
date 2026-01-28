@@ -23,37 +23,44 @@ from .base_inference_runner import BaseInferenceRunner
 
 
 @RUNNERS.register_module()
-class AlohaInferenceRunner(BaseInferenceRunner):
-    """Runner for Aloha dual-arm robot inference tasks.
+class Tron2InferenceRunner(BaseInferenceRunner):
+    """Runner for Tron2 dual-arm robot inference tasks.
 
     This runner handles real-time inference tasks for dual-arm robotic
-    manipulation using Vision-Language-Action (VLA) models. It manages ROS
-    communication, observation collection, action prediction, and robot control
-    for both arms in a synchronized manner.
+    manipulation using Vision-Language-Action (VLA) models. It manages
+    ROS communication, observation collection, action prediction,
+    and robot control for both arms in a synchronized manner.
 
     The runner supports various camera configurations, action chunking,
     and provides a complete inference pipeline from sensor data to
     dual-arm robot actuation.
 
     Args:
-        gripper_threshold (float, optional): Threshold for gripper action.
-            Defaults to 0.05.
+        gripper_threshold (float, optional): Gripper 0-1; below -> 0 (closed).
+            Defaults to 0.1.
 
         prepare_pose (List[float], optional): Prepare pose for the robot.
             Defaults to None.
+
+        enable_head_control (bool, optional): Whether the runner should send
+            head commands during prepare pose execution and trajectory
+            execution. Defaults to False.
+
     """
 
     def __init__(self,
-                 gripper_threshold: float = 0.05,
+                 gripper_threshold: float = 0.1,
                  prepare_pose: List[float] = None,
+                 enable_head_control: bool = False,
                  async_execution: bool = False,
                  execute_horizon: int = None,
                  *args,
                  **kwargs):
         self.gripper_threshold = gripper_threshold
+        self.enable_head_control = enable_head_control
         self.async_execution = async_execution
         self.execute_horizon = execute_horizon
-        # Set Aloha-specific defaults
+        # Set Tron2-specific defaults
         if 'camera_names' not in kwargs or kwargs['camera_names'] is None:
             kwargs['camera_names'] = [
                 'cam_high', 'cam_left_wrist', 'cam_right_wrist'
@@ -61,45 +68,21 @@ class AlohaInferenceRunner(BaseInferenceRunner):
 
         if 'operator' not in kwargs or kwargs['operator'] is None:
             kwargs['operator'] = {
-                'type': 'AlohaOperator',
-                'img_front_topic': '/camera_f/color/image_raw',
-                'img_left_topic': '/camera_l/color/image_raw',
-                'img_right_topic': '/camera_r/color/image_raw',
-                'img_front_depth_topic': '/camera_f/depth/image_raw',
-                'img_left_depth_topic': '/camera_l/depth/image_raw',
-                'img_right_depth_topic': '/camera_r/depth/image_raw',
-                'puppet_arm_left_cmd_topic': '/master/joint_left',
-                'puppet_arm_right_cmd_topic': '/master/joint_right',
-                'puppet_arm_left_topic': '/puppet/joint_left',
-                'puppet_arm_right_topic': '/puppet/joint_right',
-                'robot_base_topic': '/odom_raw',
-                'robot_base_cmd_topic': '/cmd_vel',
+                'type': 'Tron2Operator',
+                'img_top_topic': '/camera/top/color/image_raw',
+                'img_left_topic': '/camera/left/color/image_rect_raw',
+                'img_right_topic': '/camera/right/color/image_rect_raw',
+                'img_top_depth_topic': '/camera/top/depth/image_raw',
+                'img_left_depth_topic': '/camera/left/depth/image_rect_raw',
+                'img_right_depth_topic': '/camera/right/depth/image_rect_raw',
+                'joint_state_topic': '/joint_states',
+                'gripper_state_topic': '/gripper_state',
             }
 
-        # Initialize Aloha-specific task descriptions
+        # Initialize Tron2-specific task descriptions
         if 'task_descriptions' not in kwargs or kwargs[
                 'task_descriptions'] is None:
-            kwargs['task_descriptions'] = {
-                '1':
-                'pick up the robot dog toy with right arm',
-                '2':
-                'place it in the brown paper bag',
-                '3':
-                'pick up the yellow chicken with right arm',
-                '4':
-                'touch the brown paper bag with left arm',
-                '5':
-                'push the brown paper bag with left arm',
-                '6':
-                'pick up the red tomato with right arm',
-                '7':
-                'grasp the upper edge of the brown paper bag with left arm',
-                '8':
-                'grasp the bottom edge of the brown paper bag with right arm',
-                '9':
-                'pull in opposite directions to open the brown paper bag '
-                'with both arm',
-            }
+            kwargs['task_descriptions'] = {'1': 'Complete the task.'}
 
         # Call parent constructor
         super().__init__(*args, **kwargs)
@@ -107,21 +90,30 @@ class AlohaInferenceRunner(BaseInferenceRunner):
         self.dt = 1.0 / self.publish_rate
 
         if prepare_pose is None:
-            # Initialize other special poses
-            self.prepare_pose = ([
-                0.071799504, 2.2534682520000002, -1.219353044,
-                1.4872231080000002, -0.9562277480000001, -0.603963612, 0.073
-            ], [
-                0.035167104000000005, 1.4271285280000001, -0.394077404,
-                -1.575856072, -0.86801344, 0.584007676, 0.0766
-            ])
+            # Initialize Tron2-specific prepare poses
+            # [left(7), right(7), head_pitch, head_yaw,
+            #  left_gripper(0-1), right_gripper(0-1)]
+            self.prepare_pose = [
+                [
+                    1.2, 0, 0, -2.5, 0, 0, 0, 1.2, 0, 0, -2.5, 0, 0, 0, 0, 0,
+                    1, 1
+                ],
+                [
+                    0, 0.24, 0, -2.5, 0.24, 0, 0, 0, -0.24, 0, -2.5, -0.24, 0,
+                    0, 0, 0, 1, 1
+                ],
+                [
+                    0, 0.24, 0, -1.56, 0.24, 0, 0, 0, -0.24, 0, -1.56, -0.24,
+                    0, 0, 0, 0, 1, 1
+                ],
+            ]
         else:
             self.prepare_pose = prepare_pose
 
     def get_ros_observation(
         self
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 'JointState',  # noqa: F821
-               'JointState']:  # noqa: F821
+               'JointState', 'JointState']:  # noqa: F821
         """Get synchronized observation data from ROS topics.
 
         Continuously polls the ROS operator for synchronized sensor data
@@ -130,43 +122,44 @@ class AlohaInferenceRunner(BaseInferenceRunner):
 
         Returns:
             Tuple containing:
-                - img_front (np.ndarray): Front camera RGB image
+                - img_top (np.ndarray): Top camera RGB image
                 - img_left (np.ndarray): Left camera RGB image
                 - img_right (np.ndarray): Right camera RGB image
-                - puppet_arm_left (JointState): Left arm joint states
-                - puppet_arm_right (JointState): Right arm joint states
+                - arm_left (object): Left arm joint states (7 DOF)
+                - arm_right (object): Right arm joint states (7 DOF)
+                - robot_gripper (JointState): Gripper 0-1 (operator /100)
 
         Note:
             This method blocks until synchronized data is available.
-            It uses ROS rate limiting for consistent timing.
+            It uses time.sleep for consistent timing.
         """
-        import rospy
+        import time
 
         from ..utils import initialize_overwatch
 
         overwatch = initialize_overwatch(__name__)
 
-        rate = rospy.Rate(self.publish_rate)
+        rate_period = 1.0 / self.publish_rate
         print_flag = True
-        rate.sleep()
+        time.sleep(rate_period)
 
-        while not rospy.is_shutdown():
+        while True:
             result = self.ros_operator.get_frame()
             if not result:
                 if print_flag:
                     overwatch.info(
                         'Synchronization failed in get_ros_observation')
                     print_flag = False
-                rate.sleep()
+                time.sleep(rate_period)
                 continue
 
             print_flag = True
-            (img_front, img_left, img_right, img_front_depth, img_left_depth,
-             img_right_depth, puppet_arm_left, puppet_arm_right,
-             robot_base) = result
+            (img_top, img_left, img_right, img_top_depth, img_left_depth,
+             img_right_depth, arm_left, arm_right, head,
+             robot_gripper) = result
 
-            return (img_front, img_left, img_right, puppet_arm_left,
-                    puppet_arm_right)
+            return (img_top, img_left, img_right, arm_left, arm_right, head,
+                    robot_gripper)
 
     def update_observation_window(self) -> Dict:
         """Update the observation window with latest sensor data.
@@ -177,7 +170,8 @@ class AlohaInferenceRunner(BaseInferenceRunner):
 
         Returns:
             Dict: Latest observation containing:
-                - 'qpos': Joint positions from both arms (14 dimensions)
+                - 'qpos': 18 dims: 7 left + 7 right + 2 head
+                    + 1 left_grip(0-1) + 1 right_grip(0-1)
                 - Camera images keyed by camera names
 
         Note:
@@ -196,23 +190,30 @@ class AlohaInferenceRunner(BaseInferenceRunner):
             self.observation_window.append(dummy_obs)
 
         # Get current sensor data
-        img_front, img_left, img_right, puppet_arm_left, puppet_arm_right = (
-            self.get_ros_observation())
+        (img_top, img_left, img_right, arm_left, arm_right, head,
+         robot_gripper) = self.get_ros_observation()
 
         # Apply JPEG compression to match training conditions
-        img_front = self._apply_jpeg_compression(img_front)
+        img_top = self._apply_jpeg_compression(img_top)
         img_left = self._apply_jpeg_compression(img_left)
         img_right = self._apply_jpeg_compression(img_right)
 
-        # Combine joint positions from both arms
-        qpos = np.concatenate((np.array(
-            puppet_arm_left.position), np.array(puppet_arm_right.position)),
-                              axis=0)
+        # Joints + head + grippers (0-1 from operator /100)
+        # [left(7), right(7), head_pitch, head_yaw,
+        #  left_gripper(1), right_gripper(1)]
+        gripper_pos = robot_gripper.position
+        left_gripper = np.array(gripper_pos[0:1])
+        right_gripper = np.array(gripper_pos[1:2])
+        qpos = np.concatenate(
+            (np.array(arm_left.position), np.array(arm_right.position),
+             np.array(head.position), left_gripper, right_gripper),
+            axis=0,
+        )
 
         # Create observation dictionary
         observation = {
             'qpos': qpos,
-            self.camera_names[0]: img_front,  # cam_high
+            self.camera_names[0]: img_top,  # cam_high
             self.camera_names[1]: img_left,  # cam_left_wrist
             self.camera_names[2]: img_right,  # cam_right_wrist
         }
@@ -221,20 +222,55 @@ class AlohaInferenceRunner(BaseInferenceRunner):
         return self.observation_window[-1]
 
     def _move_to_prepare_pose(self):
-        """Move robot to predefined preparation pose."""
-        if self.prepare_pose is not None:
-            left_pose, right_pose = self.prepare_pose
-            self.ros_operator.move_to_joints(left_pose, right_pose)
+        """Move robot to predefined preparation pose.
+
+        Supports prepare_pose as:
+        - 18-dim: [left(7), right(7), head(2), left_gripper(0-1),
+          right_gripper(0-1)]
+        - List of 18-dim lists: execute each pose sequentially
+        """
+        if self.prepare_pose is None:
+            return
+
+        # Check if it's a list of poses or single pose
+        if isinstance(self.prepare_pose[0], (list, tuple, np.ndarray)):
+            # Multiple poses - execute sequentially
+            poses = self.prepare_pose
+        else:
+            # Single pose
+            poses = [self.prepare_pose]
+
+        for pose in poses:
+            pose = np.array(pose)
+            left_joints = pose[:7]
+            right_joints = pose[7:14]
+            # head at indices 14-15, grippers at 16-17
+            head_joints = (
+                list(pose[14:16])
+                if self.enable_head_control and len(pose) > 15 else None)
+            left_gripper = pose[16] if len(pose) > 16 else None
+            right_gripper = pose[17] if len(pose) > 17 else None
+
+            self.ros_operator.move_to_targets(
+                left_joints,
+                right_joints,
+                head=head_joints,
+                left_gripper=left_gripper,
+                right_gripper=right_gripper,
+                control_rate=30)
+
+        self.last_actions = None
 
     def _predict_action(self, inputs: dict):
         self._action_ctx.inference_start = time.time()
         raw_action = self.vla.predict_action(**inputs)
         return raw_action
 
-    # Action layout: [left_arm(7), right_arm(7), base(2)]
-    LEFT_GRIPPER_COL = 6
-    RIGHT_GRIPPER_COL = 13
-    GRIPPER_CLOSED = -0.01
+    # Action layout: [left_arm(7), right_arm(7), head(2),
+    # left_gripper(1), right_gripper(1)]
+    LEFT_GRIPPER_COL = 16
+    RIGHT_GRIPPER_COL = 17
+    GRIPPER_CLOSED = 0.0
 
     def _postprocess_actions(self, raw_action):
         """Denormalize and snap near-closed grippers to fully closed."""
@@ -245,10 +281,10 @@ class AlohaInferenceRunner(BaseInferenceRunner):
                                     self.GRIPPER_CLOSED, actions[:, col])
         return actions
 
-    def _execute_actions(self, actions, rate):
-        """Execute dual-arm actions (sync or async).
+    def _execute_actions(self, actions: np.ndarray, rate):
+        """Execute a chunk of dual-arm robot actions.
 
-        In async mode, skips steps that elapsed during inference.
+        In async mode, skips elapsed steps and executes in background thread.
         """
         if self.disable_puppet_arm:
             return
@@ -264,12 +300,17 @@ class AlohaInferenceRunner(BaseInferenceRunner):
             if self.execute_horizon is not None:
                 actions = actions[:self.execute_horizon]
 
+        head_trajectory = actions[:,
+                                  14:16] if self.enable_head_control else None
+
         self.ros_operator.execute_trajectory(
-            actions[:, :7],
-            actions[:, 7:14],
+            left_arm_trajectory=actions[:, :7],
+            right_arm_trajectory=actions[:, 7:14],
+            left_gripper_trajectory=actions[:, 16],
+            right_gripper_trajectory=actions[:, 17],
+            head_trajectory=head_trajectory,
             dt=self.dt,
-            async_exec=self.async_execution,
-            base_velocity=actions[:, 14:16] if self.use_robot_base else None)
+            async_exec=self.async_execution)
 
         if self.async_execution and self.execute_horizon is not None:
             time.sleep(self.execute_horizon * self.dt)
@@ -279,11 +320,11 @@ class AlohaInferenceRunner(BaseInferenceRunner):
         from ..utils import initialize_overwatch
 
         overwatch = initialize_overwatch(__name__)
-        overwatch.info('Cleaning up AlohaInferenceRunner')
+        overwatch.info('Cleaning up Tron2InferenceRunner')
 
         if hasattr(self.ros_operator, 'stop_trajectory'):
             self.ros_operator.stop_trajectory()
 
         super().cleanup()
 
-        overwatch.info('AlohaInferenceRunner cleanup completed')
+        overwatch.info('Tron2InferenceRunner cleanup completed')
