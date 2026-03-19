@@ -248,6 +248,7 @@ class ProcessParquetInputs():
                     inputs[key] = data[key]
         images = list()
         img_masks = list()
+        timestamps = data.get('frame_timestamps', [data['timestamp']])
         for video_key in self.video_keys:
             episode_chunk = data['episode_index'] // data['info'][
                 'chunks_size']  # noqa: E501
@@ -259,11 +260,19 @@ class ProcessParquetInputs():
                     episode_index=data['episode_index']))
             assert os.path.exists(
                 video_path), f'Video file not found: {video_path}'
-            frame = self.decode_video_frames_torchvision(
-                video_path, [data['timestamp']],
-                0.1)[0]  # Convert to HWC format
-            images.append(frame.numpy())
-            img_masks.append(True)
+            # Load all requested timestamps at once (supports temporal window)
+            unique_ts = sorted(set(timestamps))
+            frames_tensor = self.decode_video_frames_torchvision(
+                video_path, unique_ts, 0.1)
+            ts_to_frame = {
+                ts: frames_tensor[i]
+                for i, ts in enumerate(unique_ts)
+            }
+            for ts in timestamps:
+                nearest = min(unique_ts, key=lambda x: abs(x - ts))
+                images.append(ts_to_frame[nearest].numpy())
+            for _ in timestamps:
+                img_masks.append(True)
         # Add padding images with zero values and False masks
         if self.num_padding_imgs > 0 and len(images) > 0:
             padding_img = np.zeros_like(images[0])
@@ -275,6 +284,8 @@ class ProcessParquetInputs():
         inputs['task_description'] = data.get('task_description', '')
         if self.embodiment_id is not None:
             inputs['embodiment_ids'] = np.array(self.embodiment_id)
+        if 'frame_masks' in data:
+            inputs['frame_masks'] = data['frame_masks']
 
         return inputs
 

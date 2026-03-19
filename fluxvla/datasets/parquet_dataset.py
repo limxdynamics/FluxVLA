@@ -33,7 +33,8 @@ class ParquetDataset(Dataset):
                  action_key: str = 'observation.state',
                  use_delta: bool = False,
                  statistic_name: str = 'private',
-                 window_start_idx: int = 1) -> None:
+                 window_start_idx: int = 1,
+                 frame_window_size: int = 1) -> None:
         """Initialize the Parquet dataset.
 
         Args:
@@ -125,6 +126,7 @@ class ParquetDataset(Dataset):
         self.use_delta = use_delta
         self.statistic_name = statistic_name
         self.window_start_idx = window_start_idx
+        self.frame_window_size = frame_window_size
         for transform in transforms:
             self.transforms.append(build_transform_from_cfg(transform))
 
@@ -211,6 +213,25 @@ class ParquetDataset(Dataset):
                     actions.append(data[self.action_key])
                 action_masks.append(0)
             window_idx += 1
+        # Collect forward-looking frame timestamps for video models
+        if self.frame_window_size > 1:
+            frame_timestamps = [data['timestamp']]
+            frame_masks = [1]
+            for fi in range(1, self.frame_window_size):
+                future_idx = index + fi
+                if (future_idx < len(self.dataset)
+                        and self.dataset[future_idx]['episode_index']
+                        == data['episode_index'] and
+                        self._get_dataset_index(future_idx) == dataset_idx):
+                    frame_timestamps.append(
+                        self.dataset[future_idx]['timestamp'])
+                    frame_masks.append(1)
+                else:
+                    frame_timestamps.append(frame_timestamps[-1])
+                    frame_masks.append(0)
+            data['frame_timestamps'] = frame_timestamps
+            data['frame_masks'] = np.array(frame_masks, dtype=np.float32)
+
         data['info'] = self.info[dataset_idx]
         data['stats'] = dataset_statistics[self.statistic_name]
         data['actions'] = np.array(actions, dtype=np.float32)

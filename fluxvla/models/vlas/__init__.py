@@ -18,3 +18,8 @@ from .pi0_flowmatching import PI0FlowMatching  # noqa: F401, F403
 from .pi05_flowmatching import PI05FlowMatching  # noqa: F401, F403
 from .pi05_flowmatching_inference import \
     PI05FlowMatchingInference  # noqa: F401, F403
+
+try:
+    from .dreamzero_vla import DreamZeroVLA  # noqa: F401
+except ImportError:
+    pass
