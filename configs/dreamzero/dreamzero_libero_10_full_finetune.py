@@ -57,6 +57,14 @@ model = dict(
     type='DreamZeroVLA',
     num_views=2,
     frame_window_size=_frame_window_size,
+    wan_backbone=dict(
+        type='WanBackbone',
+        text_encoder_path=_text_enc,
+        image_encoder_path=_img_enc,
+        vae_path=_vae_path,
+        tiled=False,
+        skip_pretrained_loading=_skip_pretrained,
+    ),
     vla_head=dict(
         type='DreamZeroHead',
         # ----- action / state dims -----
@@ -87,17 +95,9 @@ model = dict(
         noise_s=0.999,
         # ----- training mode -----
         train_architecture='full',
-        # ----- tokenizer / text encoder -----
-        tokenizer_path=_tokenizer,
-        max_text_len=512,
-        # ----- VAE tiling (off for small images) -----
-        tiled=False,
         # ----- pretrained paths -----
         skip_pretrained_loading=_skip_pretrained,
         wan_model_path=_wan_ckpt,
-        text_encoder_path=_text_enc,
-        image_encoder_path=_img_enc,
-        vae_path=_vae_path,
         use_gradient_checkpointing=True,
     ),
     pretrained_name_or_path=None,
@@ -236,6 +236,15 @@ eval = dict(
                 gripper_key='robot0_gripper_qpos',
                 state_dim=32,
                 out_key='states',
+            ),
+            dict(
+                type='LiberoPromptFromInputs',
+                tokenizer=dict(
+                    type='PretrainedTokenizer',
+                    model_path=_tokenizer,
+                ),
+                max_len=512,
+                use_conversation=False,
             ),
         ],
     ),

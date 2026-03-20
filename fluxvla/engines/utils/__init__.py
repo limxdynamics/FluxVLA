@@ -27,6 +27,7 @@ from .builder import build_transform_from_cfg  # noqa: F401, F403
 from .builder import build_vision_backbone_from_cfg  # noqa: F401, F403
 from .builder import build_vla_from_cfg  # noqa: F401, F403
 from .builder import build_vlm_backbone_from_cfg  # noqa: F401, F403
+from .builder import build_wam_backbone_from_cfg  # noqa: F401, F403
 from .name_map import str_to_dtype  # noqa: F401, F403
 from .overwatch import *  # noqa: F401, F403
 from .registry import Registry  # noqa: F401, F403
@@ -44,5 +45,6 @@ from .root import TRANSFORMS  # noqa: F401, F403
 from .root import VISION_BACKBONES  # noqa: F401, F403
 from .root import VLAS  # noqa: F401, F403
 from .root import VLM_BACKBONES  # noqa: F401, F403
+from .root import WAM_BACKBONES  # noqa: F401, F403
 from .torch_utils import check_bloat16_supported  # noqa: F401, F403
 from .torch_utils import set_seed_everywhere  # noqa: F401, F403

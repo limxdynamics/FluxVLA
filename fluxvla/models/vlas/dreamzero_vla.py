@@ -27,13 +27,8 @@ overwatch = initialize_overwatch(__name__)
 class DreamZeroVLA(BaseVLA):
     """DreamZero World-Action Model.
 
-    Unlike other VLAs in fluxvla, DreamZero manages its own vision and
-    language encoders inside the action head (``DreamZeroHead``).  The
-    backbone slots (``vision_backbone``, ``llm_backbone``, etc.) are
-    intentionally left ``None``.
-
-    The model jointly predicts future video frames *and* robot actions
-    via flow-matching diffusion on a Wan 2.1 DiT backbone.
+    Uses ``WanBackbone`` (wan_backbone) for encoding (T5, CLIP, VAE) and
+    ``DreamZeroHead`` (vla_head) for the DiT diffusion model and flow-matching.
 
     Data contract
     -------------
@@ -48,18 +43,20 @@ class DreamZeroVLA(BaseVLA):
       ``[B, action_horizon, action_dim]`` boolean.
     * ``embodiment_ids`` – ``[B]`` integer (optional, defaults to 0).
 
-    All encoding (T5, CLIP, VAE) happens inside ``DreamZeroHead``.
+    Encoding (T5, CLIP, VAE) is done by ``WanBackbone`` (wan_backbone),
+    then encoded tensors are passed to ``DreamZeroHead`` (vla_head).
     """
 
     def __init__(
         self,
-        vla_head: Dict,
+        wan_backbone: Dict = None,
+        vla_head: Dict = None,
         num_views: int = 2,
         frame_window_size: int = 1,
         pretrained_name_or_path: str = None,
         name_mapping: Dict = None,
         strict_mapping: bool = False,
-        freeze_vision_backbone: bool = True,
+        freeze_wan_backbone: bool = True,
         freeze_llm_backbone: bool = True,
         freeze_vlm_backbone: bool = True,
         freeze_projector: bool = True,
@@ -67,18 +64,19 @@ class DreamZeroVLA(BaseVLA):
         **kwargs,
     ) -> None:
         super().__init__(
+            wan_backbone=wan_backbone,
             vla_head=vla_head,
             pretrained_name_or_path=pretrained_name_or_path,
             name_mapping=name_mapping,
             strict_mapping=strict_mapping,
-            freeze_vision_backbone=freeze_vision_backbone,
+            freeze_wan_backbone=freeze_wan_backbone,
             freeze_llm_backbone=freeze_llm_backbone,
             freeze_vlm_backbone=freeze_vlm_backbone,
             freeze_projector=freeze_projector,
         )
         self.num_views = num_views
         self.frame_window_size = frame_window_size
-        self.all_module_keys = ['vla_head']
+        self.all_module_keys = ['wan_backbone', 'vla_head']
 
     # ------------------------------------------------------------------
     # Data format conversion
@@ -192,11 +190,26 @@ class DreamZeroVLA(BaseVLA):
 
         # Prepare video tensor
         video = self._prepare_video(images)  # [B, C, T, H, W]
+        b, c, t, h, w = video.shape
+
+        # --- Encode with WanBackbone ---
+        self.wan_backbone.set_frozen_modules_to_eval_mode()
+
+        prompt_embs = self.wan_backbone.encode_prompt(
+            lang_tokens.long().to(device),
+            lang_masks.long().to(device))
+
+        latents = self.wan_backbone.encode_video(video)
+
+        first_frame = video[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
+        clip_feas, ys, _ = self.wan_backbone.encode_image(first_frame, t, h, w)
+
+        latents = latents.to(device)
+        clip_feas = clip_feas.to(device)
+        ys = ys.to(device)
+        prompt_embs = prompt_embs.to(device)
 
         # Prepare states [B, num_state_tokens, D]
-        # VAE temporal compression: latent_frames = 1 + (T-1)//4
-        # Non-conditioning latent frames = latent_frames - 1
-        # num_blocks = non_cond_latent_frames // num_frame_per_block
         t_video = video.shape[2]
         latent_frames = 1 + (t_video - 1) // 4
         num_blocks = max(1, (latent_frames - 1) //
@@ -225,13 +238,13 @@ class DreamZeroVLA(BaseVLA):
                 actions.shape[0], dtype=torch.long, device=device)
 
         return self.vla_head(
-            images=video,
-            lang_tokens=lang_tokens,
-            lang_masks=lang_masks,
+            prompt_embs=prompt_embs,
+            latents=latents,
+            clip_feas=clip_feas,
+            ys=ys,
             states=states,
             actions=actions,
             action_masks=action_masks,
-            frame_masks=frame_masks,
             embodiment_ids=embodiment_ids,
         )
 
@@ -272,6 +285,10 @@ class DreamZeroVLA(BaseVLA):
         return cfg
 
     def freeze_backbones(self) -> None:
-        """DreamZero freezing is handled inside DreamZeroHead."""
+        """Freeze WanBackbone (encoders), keep DreamZeroHead trainable."""
+        if self.wan_backbone is not None:
+            self.wan_backbone.requires_grad_(False)
         self.trainable_module_keys = ['vla_head']
-        overwatch.info('[TRAINABLE] =>> DreamZero Head', ctx_level=1)
+        overwatch.info(
+            '[Frozen]    =>> WanBackbone (T5, CLIP, VAE)', ctx_level=1)
+        overwatch.info('[TRAINABLE] =>> DreamZero Head (DiT)', ctx_level=1)

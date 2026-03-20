@@ -35,14 +35,7 @@ def _import_dreamzero_modules():
         FlowMatchScheduler  # noqa: E501
     from fluxvla.models.third_party_models.dreamzero.modules.wan_video_dit_action_casual_chunk import \
         CausalWanModel  # noqa: E501
-    from fluxvla.models.third_party_models.dreamzero.modules.wan_video_image_encoder import \
-        WanImageEncoder  # noqa: E501
-    from fluxvla.models.third_party_models.dreamzero.modules.wan_video_text_encoder import \
-        WanTextEncoder  # noqa: E501
-    from fluxvla.models.third_party_models.dreamzero.modules.wan_video_vae import \
-        WanVideoVAE  # noqa: E501
-    return (CausalWanModel, WanTextEncoder, WanImageEncoder, WanVideoVAE,
-            FlowMatchScheduler)
+    return CausalWanModel, FlowMatchScheduler
 
 
 def _ensure_file(path, hf_filename):
@@ -63,9 +56,9 @@ class DreamZeroHead(nn.Module):
     """DreamZero action head – joint video + action flow matching on the
     Wan 2.1 DiT backbone.
 
-    This head manages its own text encoder (T5 / umt5-xxl), image encoder
-    (CLIP), VAE, and DiT diffusion model.  It is designed to be used with
-    ``DreamZeroVLA`` which passes raw images and text descriptions.
+    This head contains the DiT diffusion model and flow-matching scheduler.
+    Encoding (T5, CLIP, VAE) is handled by ``WanBackbone`` and the encoded
+    tensors are passed in by ``DreamZeroVLA``.
 
     Args:
         action_dim: Actual robot action dimension (e.g. 7 for libero).
@@ -88,15 +81,9 @@ class DreamZeroHead(nn.Module):
             distribution parameters.
         train_architecture: ``"full"`` or ``"lora"``.
         lora_rank / lora_alpha / lora_target_modules: LoRA hyper-params.
-        tokenizer_path: HuggingFace name or local path for T5 tokenizer.
-        max_text_len: Maximum token length for T5 inputs.
-        tiled: Whether to use tiled VAE encoding.
-        skip_pretrained_loading: If True, skip loading *all* pretrained
-            weights (T5, CLIP, VAE, DiT) – useful for unit testing.
+        skip_pretrained_loading: If True, skip loading DiT pretrained
+            weights – useful for unit testing.
         wan_model_path: Path to Wan 2.1 checkpoint directory.
-        text_encoder_path: Path to T5 encoder weights (``.pth``).
-        image_encoder_path: Path to CLIP weights (``.pth``).
-        vae_path: Path to VAE weights (``.pth``).
     """
 
     def __init__(
@@ -127,26 +114,15 @@ class DreamZeroHead(nn.Module):
         lora_rank: int = 4,
         lora_alpha: int = 4,
         lora_target_modules: str = 'q,k,v,o,ffn.0,ffn.2',
-        tokenizer_path: str = 'google/umt5-xxl',
-        max_text_len: int = 512,
-        tiled: bool = False,
-        tile_size_height: int = 34,
-        tile_size_width: int = 34,
-        tile_stride_height: int = 18,
-        tile_stride_width: int = 16,
         skip_pretrained_loading: bool = False,
         wan_model_path: Optional[str] = None,
-        text_encoder_path: Optional[str] = None,
-        image_encoder_path: Optional[str] = None,
-        vae_path: Optional[str] = None,
         use_gradient_checkpointing: bool = True,
         *args,
         **kwargs,
     ):
         super().__init__()
 
-        (CausalWanModel, WanTextEncoder, WanImageEncoder, WanVideoVAE,
-         FlowMatchScheduler) = _import_dreamzero_modules()
+        CausalWanModel, FlowMatchScheduler = _import_dreamzero_modules()
 
         self.action_dim = action_dim
         self.max_action_dim = max_action_dim
@@ -154,23 +130,13 @@ class DreamZeroHead(nn.Module):
         self.max_state_dim = max_state_dim
         self.num_frames = num_frames
         self.num_frame_per_block = num_frame_per_block
-        self.tiled = tiled
-        self.tile_size_height = tile_size_height
-        self.tile_size_width = tile_size_width
-        self.tile_stride_height = tile_stride_height
-        self.tile_stride_width = tile_stride_width
         self.noise_s = noise_s
         self.train_architecture = train_architecture
         self.skip_pretrained_loading = skip_pretrained_loading
         self.num_action_per_block = num_action_per_block
         self.num_state_per_block = num_state_per_block
 
-        # ----- build sub-models -----
-        self.text_encoder = WanTextEncoder(
-            text_encoder_pretrained_path=text_encoder_path)
-        self.image_encoder = WanImageEncoder(
-            image_encoder_pretrained_path=image_encoder_path)
-        self.vae = WanVideoVAE(vae_pretrained_path=vae_path)
+        # ----- build DiT model -----
         self.model = CausalWanModel(
             diffusion_model_pretrained_path=wan_model_path,
             model_type='i2v',
@@ -199,11 +165,9 @@ class DreamZeroHead(nn.Module):
 
         # ----- load pretrained weights -----
         if not skip_pretrained_loading:
-            self._load_pretrained_weights(text_encoder_path,
-                                          image_encoder_path, vae_path,
-                                          wan_model_path)
+            self._load_pretrained_weights(wan_model_path)
 
-        # ----- freeze encoders, set trainable -----
+        # ----- set trainable -----
         self._setup_trainable(train_architecture, lora_rank, lora_alpha,
                               lora_target_modules)
 
@@ -215,36 +179,8 @@ class DreamZeroHead(nn.Module):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _load_pretrained_weights(self, text_enc_path, img_enc_path, vae_path,
-                                 dit_path):
-        """Load pretrained weights for T5, CLIP, VAE, and DiT."""
-        try:
-            path = _ensure_file(text_enc_path,
-                                'models_t5_umt5-xxl-enc-bf16.pth')
-            self.text_encoder.load_state_dict(
-                torch.load(path, map_location='cpu'))
-            logger.info('Loaded T5 text encoder weights.')
-        except Exception as e:
-            logger.warning('Could not load T5 weights: %s', e)
-
-        try:
-            path = _ensure_file(
-                img_enc_path,
-                'models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth')
-            self.image_encoder.model.load_state_dict(
-                torch.load(path, map_location='cpu'), strict=False)
-            logger.info('Loaded CLIP image encoder weights.')
-        except Exception as e:
-            logger.warning('Could not load CLIP weights: %s', e)
-
-        try:
-            path = _ensure_file(vae_path, 'Wan2.1_VAE.pth')
-            self.vae.model.load_state_dict(
-                torch.load(path, map_location='cpu'))
-            logger.info('Loaded VAE weights.')
-        except Exception as e:
-            logger.warning('Could not load VAE weights: %s', e)
-
+    def _load_pretrained_weights(self, dit_path):
+        """Load pretrained weights for DiT."""
         if dit_path is not None and os.path.isdir(dit_path):
             self._load_dit_weights(dit_path)
 
@@ -278,10 +214,6 @@ class DreamZeroHead(nn.Module):
 
     def _setup_trainable(self, architecture, lora_rank, lora_alpha,
                          lora_target_modules):
-        self.text_encoder.requires_grad_(False)
-        self.image_encoder.requires_grad_(False)
-        self.vae.requires_grad_(False)
-
         if architecture == 'lora':
             from peft import LoraConfig, get_peft_model
             for p in self.model.parameters():
@@ -300,80 +232,15 @@ class DreamZeroHead(nn.Module):
             self.model.action_decoder.requires_grad_(True)
         # For "full" training, everything in self.model stays trainable.
 
-    def set_frozen_modules_to_eval_mode(self):
-        if self.training:
-            self.text_encoder.eval()
-            self.image_encoder.eval()
-            self.vae.eval()
-
-    # ------------------------------------------------------------------
-    # Encoding helpers
-    # ------------------------------------------------------------------
-    def encode_prompt(self, input_ids, attention_mask):
-        seq_lens = attention_mask.gt(0).sum(dim=1).long()
-        prompt_emb = self.text_encoder(input_ids, attention_mask)
-        prompt_emb = prompt_emb.clone().to(dtype=torch.bfloat16)
-        for i, v in enumerate(seq_lens):
-            prompt_emb[:, v:] = 0
-        return prompt_emb
-
-    def encode_video(self, input_video):
-        vae_dev = next(self.vae.parameters()).device
-        if self.vae.model.training:
-            self.vae.eval()
-        input_video = input_video.to(device=vae_dev, dtype=torch.bfloat16)
-        with torch.no_grad():
-            latents = self.vae.encode(
-                input_video,
-                tiled=self.tiled,
-                tile_size=(self.tile_size_height, self.tile_size_width),
-                tile_stride=(self.tile_stride_height, self.tile_stride_width))
-        return latents
-
-    def encode_image(self, image, num_frames, height, width):
-        device = image.device
-        with torch.amp.autocast(
-                dtype=torch.bfloat16, device_type=torch.device(device).type):
-            batch_size = image.shape[0]
-            clip_context = self.image_encoder.encode_image(image)
-            msk = torch.ones(
-                batch_size, num_frames, height // 8, width // 8, device=device)
-            msk[:, 1:] = 0
-            msk = torch.concat([
-                torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1),
-                msk[:, 1:],
-            ],
-                               dim=1)
-            msk = msk.view(batch_size, msk.shape[1] // 4, 4, height // 8,
-                           width // 8)
-            msk = msk.transpose(1, 2)
-            image_input = image.transpose(1, 2)
-            image_zeros = torch.zeros(
-                batch_size,
-                3,
-                num_frames - 1,
-                height,
-                width,
-                dtype=torch.bfloat16,
-                device=device)
-            input_video = torch.concat([image_input, image_zeros], dim=2)
-            input_video = input_video.to(
-                device=next(self.vae.parameters()).device,
-                dtype=torch.bfloat16)
-            with torch.no_grad():
-                y = self.vae.encode(input_video)
-            new_image = y[:, :, 0:1]
-            y = torch.concat([msk, y], dim=1)
-        return clip_context, y, new_image
-
     # ------------------------------------------------------------------
     # Training forward
     # ------------------------------------------------------------------
     def forward(
         self,
-        images: torch.Tensor,
-        lang_tokens: torch.Tensor,
-        lang_masks: torch.Tensor,
+        prompt_embs: torch.Tensor,
+        latents: torch.Tensor,
+        clip_feas: torch.Tensor,
+        ys: torch.Tensor,
         states: torch.Tensor,
         actions: torch.Tensor,
         action_masks: torch.Tensor,
@@ -383,9 +250,11 @@ class DreamZeroHead(nn.Module):
         """Training forward pass with flow-matching loss.
 
         Args:
-            images: Video frames ``[B, C, T, H, W]`` normalised to [-1, 1].
-            lang_tokens: ``[B, max_text_len]`` tokenized text ids.
-            lang_masks: ``[B, max_text_len]`` attention mask (bool / int).
+            prompt_embs: ``[B, seq_len, D]`` T5 text embeddings.
+            latents: ``[B, C, T_lat, H_lat, W_lat]`` VAE-encoded video.
+            clip_feas: ``[B, D_clip]`` CLIP image features.
+            ys: ``[B, C_y, T_lat, H_lat, W_lat]`` conditioning input
+                (mask + VAE-encoded first frame).
             states: ``[B, num_state_tokens, state_dim]``.
             actions: ``[B, action_horizon, action_dim]`` in **[-1,1]**.
             action_masks: ``[B, action_horizon, action_dim]`` boolean.
@@ -394,30 +263,9 @@ class DreamZeroHead(nn.Module):
         Returns:
             dict with ``loss``, ``dynamics_loss``, ``action_loss``.
         """
-        self.set_frozen_modules_to_eval_mode()
         device = actions.device
 
-        # Video is already normalised to [-1, 1] by SimpleNormalizeImages
-        videos = images
-        b, c, t, h, w = videos.shape
-
-        # --- 2. Encode text with T5 ---
-        prompt_embs = self.encode_prompt(lang_tokens.long().to(device),
-                                         lang_masks.long().to(device))
-
-        # --- 3. Encode video with VAE ---
-        latents = self.encode_video(videos)
-
-        # --- 4. Encode conditioning image with CLIP ---
-        first_frame = videos[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
-        clip_feas, ys, _ = self.encode_image(first_frame, t, h, w)
-
-        latents = latents.to(device)
-        clip_feas = clip_feas.to(device)
-        ys = ys.to(device)
-        prompt_embs = prompt_embs.to(device)
-
-        # --- 5. Flow-matching noise ---
+        # --- Flow-matching noise ---
         noise = torch.randn_like(latents)
         noise = noise.transpose(1, 2)
         latents = latents.transpose(1, 2)
@@ -473,7 +321,7 @@ class DreamZeroHead(nn.Module):
         training_target_action = self.scheduler.training_target(
             actions, noise_action, timestep_action)
 
-        # --- 6. DiT forward ---
+        # --- DiT forward ---
         with torch.amp.autocast(
                 dtype=torch.bfloat16, device_type=torch.device(device).type):
             video_noise_pred, action_noise_pred = self.model(
@@ -490,7 +338,7 @@ class DreamZeroHead(nn.Module):
                 clean_x=latents.transpose(1, 2),
             )
 
-            # --- 7. Compute losses ---
+            # --- Compute losses ---
             dynamics_loss = F.mse_loss(
                 video_noise_pred.float(),
                 training_target.float(),
@@ -527,8 +375,10 @@ class DreamZeroHead(nn.Module):
     # ------------------------------------------------------------------
     def predict_action(
         self,
-        images: torch.Tensor,
-        task_description: list,
+        prompt_embs: torch.Tensor,
+        latents: torch.Tensor,
+        clip_feas: torch.Tensor,
+        ys: torch.Tensor,
         states: torch.Tensor,
         embodiment_ids: torch.Tensor,
         **kwargs,
@@ -542,9 +392,8 @@ class DreamZeroHead(nn.Module):
     # FSDP / DDP helpers
     # ------------------------------------------------------------------
     def get_fsdp_wrapping_policy(self) -> Callable:
-        (CausalWanModel, _, _, _, _) = _import_dreamzero_modules()
-        # Only wrap the trainable DiT; frozen encoders (T5, CLIP, VAE)
-        # must NOT be wrapped — FSDP flattens params which breaks Conv3d.
+        CausalWanModel, _ = _import_dreamzero_modules()
+        # Only wrap the trainable DiT.
         return partial(
             _module_wrap_policy,
             module_classes={CausalWanModel},

@@ -27,7 +27,8 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from fluxvla.engines import (build_head_from_cfg, build_llm_backbone_from_cfg,
                              build_projector_from_cfg,
                              build_vision_backbone_from_cfg,
-                             build_vlm_backbone_from_cfg, initialize_overwatch)
+                             build_vlm_backbone_from_cfg,
+                             build_wam_backbone_from_cfg, initialize_overwatch)
 
 overwatch = initialize_overwatch(__name__)
 
@@ -39,12 +40,14 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
                  vision_backbone: str = None,
                  llm_backbone: str = None,
                  vlm_backbone: str = None,
+                 wan_backbone: str = None,
                  projector: str = None,
                  vla_head: str = None,
                  enable_mixed_precision_training: bool = True,
                  freeze_vision_backbone=True,
                  freeze_llm_backbone=True,
                  freeze_vlm_backbone=True,
+                 freeze_wan_backbone=True,
                  freeze_projector=False,
                  vision_backbone_fp32: bool = False,
                  unfreeze_last_layer: bool = False,
@@ -67,6 +70,11 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
             self.vlm_backbone = build_vlm_backbone_from_cfg(vlm_backbone)
         else:
             self.vlm_backbone = None
+        if wan_backbone is not None:
+            self.wan_backbone = build_wam_backbone_from_cfg(
+                copy.deepcopy(wan_backbone))
+        else:
+            self.wan_backbone = None
         if projector is not None:
             self.projector = build_projector_from_cfg(projector)
         else:
@@ -79,6 +87,7 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
         self.freeze_vision_backbone = freeze_vision_backbone
         self.freeze_llm_backbone = freeze_llm_backbone
         self.freeze_vlm_backbone = freeze_vlm_backbone
+        self.freeze_wan_backbone = freeze_wan_backbone
         self.freeze_projector = freeze_projector
         self.vision_backbone_fp32 = vision_backbone_fp32
         self.unfreeze_last_layer = unfreeze_last_layer
@@ -108,6 +117,8 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
             self.llm_backbone.requires_grad_(not self.freeze_llm_backbone)
         if self.vlm_backbone is not None:
             self.vlm_backbone.requires_grad_(not self.freeze_vlm_backbone)
+        if self.wan_backbone is not None:
+            self.wan_backbone.requires_grad_(not self.freeze_wan_backbone)
         if self.projector is not None:
             self.projector.requires_grad_(not self.freeze_projector)
 
@@ -121,6 +132,8 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
             self.trainable_module_keys.append('projector')
         if not self.freeze_vlm_backbone:
             self.trainable_module_keys.append('vlm_backbone')
+        if not self.freeze_wan_backbone:
+            self.trainable_module_keys.append('wan_backbone')
 
         # Update Trackers
         self.vision_backbone_requires_grad = not self.freeze_vision_backbone
@@ -143,6 +156,11 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
                 overwatch.info('[Frozen]    🥶 =>> VLM Backbone', ctx_level=1)
             else:
                 overwatch.info('[TRAINABLE] 🔥 =>> VLM Backbone', ctx_level=1)
+        if self.wan_backbone is not None:
+            if self.freeze_wan_backbone:
+                overwatch.info('[Frozen]    🥶 =>> Wan Backbone', ctx_level=1)
+            else:
+                overwatch.info('[TRAINABLE] 🔥 =>> Wan Backbone', ctx_level=1)
         if self.projector is not None:
             if self.freeze_projector:
                 overwatch.info('[Frozen]    🥶 =>> Projector', ctx_level=1)

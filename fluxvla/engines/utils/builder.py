@@ -293,6 +293,15 @@ def build_head_from_cfg(
     return build_from_cfg(cfg, HEADS, default_args)
 
 
+def build_wam_backbone_from_cfg(
+    cfg: Union[dict, ConfigDict, Config],
+    default_args: Optional[Union[dict, 'ConfigDict', 'Config']] = None
+) -> 'nn.Module':
+    """Build a Wam backbone from config dict(s)."""
+    from .root import WAM_BACKBONES
+    return build_from_cfg(cfg, WAM_BACKBONES, default_args)
+
+
 def build_vlm_backbone_from_cfg(
     cfg: Union[dict, ConfigDict, Config],
     default_args: Optional[Union[dict, 'ConfigDict', 'Config']] = None

@@ -146,6 +146,7 @@ class LiberoEvalRunner:
         self.vla.freeze_llm_backbone = True
         self.vla.freeze_projector = True
         self.vla.freeze_vlm_backbone = True
+        self.vla.freeze_wan_backbone = True
         self.vla.cuda(self.device_id)
 
     def run(self):
