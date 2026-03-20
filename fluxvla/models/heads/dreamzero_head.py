@@ -20,10 +20,8 @@ from typing import Callable, Dict, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 from torch.distributed.fsdp.wrap import _module_wrap_policy
 from torch.distributions import Beta
-from transformers import AutoTokenizer
 
 from fluxvla.engines import HEADS
 
@@ -196,16 +194,8 @@ class DreamZeroHead(nn.Module):
         self.scheduler = FlowMatchScheduler(
             shift=5, sigma_min=0.0, extra_one_step=True)
 
-        self.normalize_video = torch.nn.Identity()
-        self._build_normalize_video()
-
         # ----- noise distributions -----
         self.beta_dist = Beta(noise_beta_alpha, noise_beta_beta)
-
-        # ----- T5 tokenizer (for encoding task descriptions) -----
-        self._tokenizer_path = tokenizer_path
-        self._max_text_len = max_text_len
-        self._tokenizer = None  # lazy init
 
         # ----- load pretrained weights -----
         if not skip_pretrained_loading:
@@ -225,18 +215,6 @@ class DreamZeroHead(nn.Module):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _build_normalize_video(self):
-        from torchvision.transforms import v2
-        self.normalize_video = v2.Normalize(
-            mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-
-    @property
-    def tokenizer(self):
-        if self._tokenizer is None:
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                self._tokenizer_path)
-        return self._tokenizer
-
     def _load_pretrained_weights(self, text_enc_path, img_enc_path, vae_path,
                                  dit_path):
         """Load pretrained weights for T5, CLIP, VAE, and DiT."""
@@ -388,24 +366,14 @@ class DreamZeroHead(nn.Module):
             y = torch.concat([msk, y], dim=1)
         return clip_context, y, new_image
 
-    def tokenize_text(self, texts):
-        """Tokenize a list of raw text strings with T5."""
-        tok_out = self.tokenizer(
-            texts,
-            return_tensors='pt',
-            padding='max_length',
-            truncation=True,
-            max_length=self._max_text_len,
-        )
-        return tok_out.input_ids, tok_out.attention_mask
-
     # ------------------------------------------------------------------
     # Training forward
     # ------------------------------------------------------------------
     def forward(
         self,
         images: torch.Tensor,
-        task_description: list,
+        lang_tokens: torch.Tensor,
+        lang_masks: torch.Tensor,
         states: torch.Tensor,
         actions: torch.Tensor,
         action_masks: torch.Tensor,
@@ -415,9 +383,9 @@ class DreamZeroHead(nn.Module):
         """Training forward pass with flow-matching loss.
 
         Args:
-            images: Video frames ``[B, C, T, H, W]`` in float [0,1] range
-                or uint8 [0,255].
-            task_description: List of *B* raw text strings.
+            images: Video frames ``[B, C, T, H, W]`` normalised to [-1, 1].
+            lang_tokens: ``[B, max_text_len]`` tokenized text ids.
+            lang_masks: ``[B, max_text_len]`` attention mask (bool / int).
             states: ``[B, num_state_tokens, state_dim]``.
             actions: ``[B, action_horizon, action_dim]`` in **[-1,1]**.
             action_masks: ``[B, action_horizon, action_dim]`` boolean.
@@ -429,23 +397,13 @@ class DreamZeroHead(nn.Module):
         self.set_frozen_modules_to_eval_mode()
         device = actions.device
 
-        # --- 1. Normalise video to [-1, 1] if needed ---
+        # Video is already normalised to [-1, 1] by SimpleNormalizeImages
         videos = images
-        if videos.dtype == torch.uint8:
-            videos = videos.float() / 255.0
-        if videos.max() > 1.0:
-            videos = videos / 255.0
         b, c, t, h, w = videos.shape
-        videos_flat = rearrange(videos, 'b c t h w -> (b t) c h w')
-        videos_flat = self.normalize_video(videos_flat)
-        videos = rearrange(videos_flat, '(b t) c h w -> b c t h w', b=b, t=t)
-        videos = videos.to(dtype=torch.bfloat16)
 
         # --- 2. Encode text with T5 ---
-        text_ids, text_mask = self.tokenize_text(task_description)
-        text_ids = text_ids.to(device)
-        text_mask = text_mask.to(device)
-        prompt_embs = self.encode_prompt(text_ids, text_mask)
+        prompt_embs = self.encode_prompt(lang_tokens.long().to(device),
+                                         lang_masks.long().to(device))
 
         # --- 3. Encode video with VAE ---
         latents = self.encode_video(videos)

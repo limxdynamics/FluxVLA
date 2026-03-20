@@ -139,7 +139,16 @@ train_dataloader = dict(
                     embodiment_id=0,
                 ),
                 dict(type='ParquetPrompter', use_conversation=False),
+                dict(
+                    type='ProcessPrompts',
+                    tokenizer=dict(
+                        type='PretrainedTokenizer',
+                        model_path=_tokenizer,
+                    ),
+                    max_len=512,
+                ),
                 dict(type='ResizeImages', height=128, width=128),
+                dict(type='SimpleNormalizeImages'),
                 dict(
                     type='NormalizeStatesAndActions',
                     action_dim=32,
@@ -175,6 +184,8 @@ runner = dict(
             'action_masks',
             'embodiment_ids',
             'frame_masks',
+            'lang_tokens',
+            'lang_masks',
         ],
         meta_keys=['task_description', 'prompt', 'info', 'stats', 'timestamp'],
     ),

@@ -78,6 +78,7 @@ class DreamZeroVLA(BaseVLA):
         )
         self.num_views = num_views
         self.frame_window_size = frame_window_size
+        self.all_module_keys = ['vla_head']
 
     # ------------------------------------------------------------------
     # Data format conversion
@@ -167,24 +168,22 @@ class DreamZeroVLA(BaseVLA):
     def forward(
         self,
         images: Optional[torch.Tensor] = None,
-        task_description: Optional[List[str]] = None,
+        lang_tokens: Optional[torch.Tensor] = None,
+        lang_masks: Optional[torch.Tensor] = None,
         states: Optional[torch.Tensor] = None,
         actions: Optional[torch.Tensor] = None,
         action_masks: Optional[torch.Tensor] = None,
         frame_masks: Optional[torch.Tensor] = None,
         embodiment_ids: Optional[torch.Tensor] = None,
-        # fluxvla standard keys (unused by DreamZero but accepted)
-        lang_tokens: Optional[torch.Tensor] = None,
-        lang_masks: Optional[torch.Tensor] = None,
         img_masks: Optional[torch.Tensor] = None,
+        # accepted but unused
+        task_description: Optional[List[str]] = None,
         **kwargs,
     ) -> Dict:
-        if task_description is None:
-            task_description = kwargs.get('task_description', None)
-        if task_description is None:
+        if lang_tokens is None:
             raise ValueError(
-                'DreamZeroVLA requires `task_description` (list[str]) '
-                'in the batch or kwargs.')
+                'DreamZeroVLA requires `lang_tokens` and `lang_masks` '
+                'in the batch. Add ProcessPrompts to the transform pipeline.')
 
         device = actions.device
         max_action_dim = self.vla_head.max_action_dim
@@ -227,7 +226,8 @@ class DreamZeroVLA(BaseVLA):
 
         return self.vla_head(
             images=video,
-            task_description=task_description,
+            lang_tokens=lang_tokens,
+            lang_masks=lang_masks,
             states=states,
             actions=actions,
             action_masks=action_masks,
