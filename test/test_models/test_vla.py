@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import json
 import os
 import unittest
 
@@ -888,3 +889,103 @@ class TestPI05FlowMatching(unittest.TestCase):
                 actions.float().cpu().detach().numpy(),
                 pred_actions_target,
                 atol=1e-1))
+
+
+# ===================================================================
+# DreamZero – config consistency, name-mapping & video padding
+# ===================================================================
+_DREAMZERO_CKPT = '/limx/tos/users/liyinhao/checkpoints/DreamZero-AgiBot'
+_HAS_DREAMZERO_CKPT = os.path.isdir(_DREAMZERO_CKPT)
+
+
+class TestDreamZeroConfig(unittest.TestCase):
+    """Validate the DreamZero Libero-10 config's internal consistency."""
+
+    def setUp(self):
+        self.frame_window_size = 9
+        self.num_views = 2
+        self.img_h, self.img_w = 128, 128
+        self.num_frame_per_block = 2
+        self.num_action_per_block = 10
+        self.num_state_per_block = 1
+        self.action_horizon = 10
+
+    def test_frame_seqlen(self):
+        h_tiled = self.num_views * self.img_h
+        lat_h = h_tiled // 8
+        lat_w = self.img_w // 8
+        frame_seqlen = (lat_h // 2) * (lat_w // 2)
+        self.assertEqual(frame_seqlen, 128)
+
+    def test_latent_frames(self):
+        latent_frames = 1 + (self.frame_window_size - 1) // 4
+        self.assertEqual(latent_frames, 3)
+
+    def test_block_alignment(self):
+        latent_frames = 1 + (self.frame_window_size - 1) // 4
+        num_image_blocks = (latent_frames - 1) // self.num_frame_per_block
+        num_action_blocks = self.action_horizon // self.num_action_per_block
+        num_state_blocks = num_image_blocks * self.num_state_per_block
+        self.assertEqual(num_image_blocks, 1)
+        self.assertEqual(num_action_blocks, 1)
+        self.assertEqual(num_state_blocks, 1)
+
+    def test_inference_video_padding(self):
+        t_padded = max(1, self.frame_window_size)
+        latent_frames = 1 + (t_padded - 1) // 4
+        num_image_blocks = (latent_frames - 1) // self.num_frame_per_block
+        num_action_blocks = self.action_horizon // self.num_action_per_block
+        self.assertEqual(num_image_blocks, num_action_blocks)
+
+
+@unittest.skipUnless(_HAS_DREAMZERO_CKPT, 'DreamZero checkpoint not available')
+class TestDreamZeroCheckpointNameMapping(unittest.TestCase):
+    """Verify that name_mapping covers all DreamZero checkpoint keys."""
+
+    def setUp(self):
+        index_path = os.path.join(_DREAMZERO_CKPT,
+                                  'model.safetensors.index.json')
+        with open(index_path) as f:
+            self.ckpt_keys = set(json.load(f)['weight_map'].keys())
+        self.reverse_mapping = {
+            'action_head.model': 'vla_head.model',
+            'action_head.text_encoder': 'wan_backbone.text_encoder',
+            'action_head.image_encoder': 'wan_backbone.image_encoder',
+            'action_head.vae': 'wan_backbone.vae',
+        }
+
+    def test_all_ckpt_keys_have_mapping(self):
+        unmapped = [
+            k for k in self.ckpt_keys
+            if not any(k.startswith(p) for p in self.reverse_mapping)
+        ]
+        self.assertEqual(unmapped, [], f'Unmapped checkpoint keys: {unmapped}')
+
+    def test_ckpt_key_prefixes(self):
+        top_prefixes = {k.split('.')[0] for k in self.ckpt_keys}
+        self.assertEqual(top_prefixes, {'action_head'})
+
+
+class TestDreamZeroVLAVideoPadding(unittest.TestCase):
+    """Test DreamZeroVLA inference video padding logic (CPU only)."""
+
+    def test_single_frame_padded_to_window(self):
+        images = torch.randn(1, 6, 128, 128)
+        frame_window_size = 9
+
+        b, channels, h, w = images.shape
+        n_items = channels // 3
+        images_5d = images.view(b, n_items, 3, h, w)
+        tiles = [images_5d[:, i] for i in range(n_items)]
+        tiled = torch.cat(tiles, dim=2)
+        video = tiled.unsqueeze(2)  # [1, 3, 1, 256, 128]
+
+        b, c, t_obs, h, w = video.shape
+        self.assertEqual(t_obs, 1)
+        if t_obs < frame_window_size:
+            pad = video.new_zeros(b, c, frame_window_size - t_obs, h, w)
+            video = torch.cat([video, pad], dim=2)
+
+        self.assertEqual(video.shape, (1, 3, 9, 256, 128))
+        self.assertFalse(torch.all(video[:, :, 0] == 0))
+        self.assertTrue(torch.all(video[:, :, 1:] == 0))

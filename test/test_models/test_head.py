@@ -1,0 +1,130 @@
+# Copyright 2026 Limx Dynamics
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import torch
+
+
+# ===================================================================
+# DreamZeroHead – tiny DiT forward & predict_action
+# ===================================================================
+@unittest.skipUnless(torch.cuda.is_available(), 'CUDA not available')
+class TestDreamZeroHeadTiny(unittest.TestCase):
+    """Test DreamZeroHead forward and predict_action with a tiny DiT."""
+
+    @classmethod
+    def setUpClass(cls):
+        from fluxvla.models.heads import DreamZeroHead
+        cls.head = DreamZeroHead(
+            action_dim=7,
+            max_action_dim=32,
+            action_horizon=10,
+            max_state_dim=64,
+            num_frames=9,
+            num_frame_per_block=2,
+            num_action_per_block=10,
+            num_state_per_block=1,
+            frame_seqlen=128,
+            hidden_size=32,
+            input_embedding_dim=1536,
+            dit_dim=64,
+            dit_ffn_dim=128,
+            dit_num_heads=4,
+            dit_num_layers=2,
+            dit_freq_dim=64,
+            dit_in_dim=36,
+            dit_out_dim=16,
+            max_num_embodiments=1,
+            skip_pretrained_loading=True,
+            wan_model_path=None,
+            use_gradient_checkpointing=False,
+        ).cuda().bfloat16()
+
+    def _make_inputs(self, batch_size=2):
+        """Create fake encoded inputs.
+
+        Head predict_action expects latents as [B, T_lat, C, H_lat, W_lat].
+        Head forward expects latents as [B, C, T_lat, H_lat, W_lat].
+        ys must match latents spatial dims [B, C_y, T_lat, H_lat, W_lat].
+        """
+        device = 'cuda'
+        dtype = torch.bfloat16
+        T_lat, C_lat, H_lat, W_lat = 3, 16, 32, 16
+        latents = torch.randn(
+            batch_size, T_lat, C_lat, H_lat, W_lat, device=device, dtype=dtype)
+        prompt_embs = torch.randn(
+            batch_size, 512, 4096, device=device, dtype=dtype)
+        clip_feas = torch.randn(
+            batch_size, 1, 1280, device=device, dtype=dtype)
+        ys = torch.randn(
+            batch_size, 20, T_lat, H_lat, W_lat, device=device, dtype=dtype)
+        states = torch.randn(batch_size, 1, 64, device=device, dtype=dtype)
+        embodiment_ids = torch.zeros(
+            batch_size, dtype=torch.long, device=device)
+        return dict(
+            prompt_embs=prompt_embs,
+            latents=latents,
+            clip_feas=clip_feas,
+            ys=ys,
+            states=states,
+            embodiment_ids=embodiment_ids,
+        )
+
+    def test_forward_produces_loss(self):
+        """Training forward should return a dict with 'loss' key."""
+        inputs = self._make_inputs()
+        actions = torch.randn(2, 10, 32, device='cuda', dtype=torch.bfloat16)
+        action_masks = torch.ones(2, 10, 32, dtype=torch.bool, device='cuda')
+        action_masks[:, :, 7:] = False
+
+        latents_bctHW = inputs['latents'].transpose(1, 2)
+        with torch.amp.autocast(dtype=torch.bfloat16, device_type='cuda'):
+            out = self.head(
+                prompt_embs=inputs['prompt_embs'],
+                latents=latents_bctHW,
+                clip_feas=inputs['clip_feas'],
+                ys=inputs['ys'],
+                states=inputs['states'],
+                actions=actions,
+                action_masks=action_masks,
+                embodiment_ids=inputs['embodiment_ids'],
+            )
+        self.assertIn('loss', out)
+        self.assertFalse(torch.isnan(out['loss']), 'Loss should not be NaN')
+
+    def test_predict_action_shape(self):
+        """predict_action should return [B, action_horizon, max_action_dim]."""
+        inputs = self._make_inputs()
+        with torch.no_grad():
+            actions = self.head.predict_action(num_inference_steps=2, **inputs)
+        self.assertEqual(actions.shape, (2, 10, 32))
+        self.assertFalse(
+            torch.isnan(actions).any(),
+            'Predicted actions should not contain NaN')
+
+    def test_predict_action_deterministic_with_seed(self):
+        """Same seed should give same output."""
+        inputs = self._make_inputs(batch_size=1)
+        results = []
+        for _ in range(2):
+            torch.manual_seed(42)
+            with torch.no_grad():
+                a = self.head.predict_action(num_inference_steps=2, **inputs)
+            results.append(a.clone())
+        torch.testing.assert_close(results[0], results[1])
+
+
+if __name__ == '__main__':
+    unittest.main()
