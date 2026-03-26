@@ -198,6 +198,7 @@ runner = dict(
     enable_gradient_checkpointing=True,
     enable_mixed_precision_training=True,
     mixed_precision_dtype='bf16',
+    sharding_strategy='full-shard',
     change_key_name=False,
 )
 

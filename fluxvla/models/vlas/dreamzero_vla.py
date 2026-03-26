@@ -322,7 +322,37 @@ class DreamZeroVLA(BaseVLA):
     # BaseVLA abstract method implementations
     # ------------------------------------------------------------------
     def get_fsdp_wrapping_policy(self) -> Callable:
-        return self.vla_head.get_fsdp_wrapping_policy()
+        from functools import partial
+        from importlib import import_module
+
+        from torch.distributed.fsdp.wrap import _module_wrap_policy
+
+        # DiT blocks (trainable)
+        _chunk = import_module(
+            'fluxvla.models.third_party_models.dreamzero.modules.'
+            'wan_video_dit_action_casual_chunk')
+        CausalWanAttentionBlock = _chunk.CausalWanAttentionBlock
+
+        # T5 text encoder blocks (frozen, 24 layers)
+        _text_enc = import_module(
+            'fluxvla.models.third_party_models.dreamzero.modules.'
+            'wan_video_text_encoder')
+        T5SelfAttention = _text_enc.T5SelfAttention
+
+        # CLIP ViT-Huge image encoder blocks (frozen, 32 layers)
+        _img_enc = import_module(
+            'fluxvla.models.third_party_models.dreamzero.modules.'
+            'wan_video_image_encoder')
+        CLIPAttentionBlock = _img_enc.AttentionBlock
+
+        return partial(
+            _module_wrap_policy,
+            module_classes={
+                CausalWanAttentionBlock,
+                T5SelfAttention,
+                CLIPAttentionBlock,
+            },
+        )
 
     @property
     def config(self):
