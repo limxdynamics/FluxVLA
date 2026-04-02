@@ -896,6 +896,10 @@ class TestPI05FlowMatching(unittest.TestCase):
 # ===================================================================
 _DREAMZERO_CKPT = '/limx/tos/users/liyinhao/checkpoints/DreamZero-AgiBot'
 _HAS_DREAMZERO_CKPT = os.path.isdir(_DREAMZERO_CKPT)
+_DREAMZERO_FORWARD_IO_DIR = 'test/data/models/vlas/dreamzero/forward_io'
+_DREAMZERO_REF_FORWARD_IO_DIR = os.environ.get(
+    'DREAMZERO_REF_FORWARD_IO_DIR',
+    '/root/projects/dreamzero/test/data/models/vlas/dreamzero/forward_io')
 
 
 class TestDreamZeroConfig(unittest.TestCase):
@@ -949,9 +953,9 @@ class TestDreamZeroCheckpointNameMapping(unittest.TestCase):
             self.ckpt_keys = set(json.load(f)['weight_map'].keys())
         self.reverse_mapping = {
             'action_head.model': 'vla_head.model',
-            'action_head.text_encoder': 'wan_backbone.text_encoder',
-            'action_head.image_encoder': 'wan_backbone.image_encoder',
-            'action_head.vae': 'wan_backbone.vae',
+            'action_head.text_encoder': 'wam_backbone.text_encoder',
+            'action_head.image_encoder': 'wam_backbone.image_encoder',
+            'action_head.vae': 'wam_backbone.vae',
         }
 
     def test_all_ckpt_keys_have_mapping(self):
@@ -989,3 +993,139 @@ class TestDreamZeroVLAVideoPadding(unittest.TestCase):
         self.assertEqual(video.shape, (1, 3, 9, 256, 128))
         self.assertFalse(torch.all(video[:, :, 0] == 0))
         self.assertTrue(torch.all(video[:, :, 1:] == 0))
+
+
+@unittest.skipUnless(
+    torch.cuda.is_available() and _HAS_DREAMZERO_CKPT,
+    'DreamZero checkpoint not available or CUDA is not available')
+class TestDreamZeroForwardConsistency(unittest.TestCase):
+    """Compare DreamZero forward outputs with reference implementation IO."""
+
+    def setUp(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        self.cfg = dict(
+            type='DreamZeroVLA',
+            num_views=2,
+            frame_window_size=9,
+            pretrained_name_or_path=_DREAMZERO_CKPT,
+            wam_backbone=dict(
+                type='WanBackbone',
+                text_encoder_path=None,
+                image_encoder_path=None,
+                vae_path=None,
+                tiled=False,
+                skip_pretrained_loading=True,
+            ),
+            vla_head=dict(
+                type='DreamZeroHead',
+                action_dim=7,
+                max_action_dim=32,
+                action_horizon=10,
+                max_state_dim=64,
+                num_frames=9,
+                num_frame_per_block=2,
+                num_action_per_block=10,
+                num_state_per_block=1,
+                frame_seqlen=128,
+                hidden_size=1024,
+                input_embedding_dim=1536,
+                dit_dim=5120,
+                dit_ffn_dim=13824,
+                dit_num_heads=40,
+                dit_num_layers=40,
+                dit_freq_dim=256,
+                dit_in_dim=36,
+                dit_out_dim=16,
+                max_num_embodiments=32,
+                noise_beta_alpha=1.5,
+                noise_beta_beta=1.0,
+                noise_s=0.999,
+                num_inference_steps=16,
+                train_architecture='full',
+                skip_pretrained_loading=True,
+                wan_model_path=None,
+                use_gradient_checkpointing=True,
+            ),
+            name_mapping={
+                'vla_head.model': 'action_head.model',
+                'wam_backbone.text_encoder': 'action_head.text_encoder',
+                'wam_backbone.image_encoder': 'action_head.image_encoder',
+                'wam_backbone.vae': 'action_head.vae',
+            },
+            strict_mapping=False,
+            freeze_wam_backbone=True,
+            freeze_llm_backbone=True,
+            freeze_vlm_backbone=True,
+            freeze_projector=True,
+        )
+
+        set_seed_everywhere(0)
+        self.vla = build_vla_from_cfg(self.cfg).bfloat16().cuda()
+        self.vla.from_pretrained()
+        self.vla.eval()
+
+    def _load_tensor(self, root, name):
+        return np.load(os.path.join(root, f'{name}.npy'), allow_pickle=True)
+
+    def test_forward(self):
+        if not os.path.isdir(_DREAMZERO_FORWARD_IO_DIR):
+            self.skipTest(
+                f'DreamZero forward_io dir not found: {_DREAMZERO_FORWARD_IO_DIR}'  # noqa: E501
+            )
+
+        images = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'images')).cuda().to(torch.bfloat16)
+        lang_tokens = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'lang_tokens')).cuda().long()
+        lang_masks = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'lang_masks')).cuda().long()
+        states = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'states')).cuda().to(torch.bfloat16)
+        actions = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'actions')).cuda().to(torch.bfloat16)
+        action_masks = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'action_masks')).cuda().bool()
+        embodiment_ids = torch.from_numpy(
+            self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                              'embodiment_ids')).cuda().long()
+
+        loss_ref = self._load_tensor(_DREAMZERO_FORWARD_IO_DIR, 'loss')
+        dynamics_loss_ref = self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                                              'dynamics_loss')
+        action_loss_ref = self._load_tensor(_DREAMZERO_FORWARD_IO_DIR,
+                                            'action_loss')
+
+        set_seed_everywhere(0)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                output = self.vla.forward(
+                    images=images,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    states=states,
+                    actions=actions,
+                    action_masks=action_masks,
+                    embodiment_ids=embodiment_ids,
+                )
+
+        self.assertTrue(
+            np.allclose(
+                output['loss'].float().cpu().numpy(), loss_ref, atol=1e-3))
+        self.assertTrue(
+            np.allclose(
+                output['dynamics_loss'].float().cpu().numpy(),
+                dynamics_loss_ref,
+                atol=1e-3))
+        self.assertTrue(
+            np.allclose(
+                output['action_loss'].float().cpu().numpy(),
+                action_loss_ref,
+                atol=1e-3))

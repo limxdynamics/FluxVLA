@@ -48,7 +48,7 @@ model = dict(
     frame_window_size=_frame_window_size,
     pretrained_name_or_path=  # noqa: E251
     _ckpt_root + '/DreamZero-AgiBot',
-    wan_backbone=dict(
+    wam_backbone=dict(
         type='WanBackbone',
         text_encoder_path=None,
         image_encoder_path=None,
@@ -94,9 +94,9 @@ model = dict(
     ),
     name_mapping={
         'vla_head.model': 'action_head.model',
-        'wan_backbone.text_encoder': 'action_head.text_encoder',
-        'wan_backbone.image_encoder': 'action_head.image_encoder',
-        'wan_backbone.vae': 'action_head.vae',
+        'wam_backbone.text_encoder': 'action_head.text_encoder',
+        'wam_backbone.image_encoder': 'action_head.image_encoder',
+        'wam_backbone.vae': 'action_head.vae',
     },
 )
 

@@ -202,11 +202,12 @@ class DreamZeroVLA(BaseVLA):
         latents = self.wam_backbone.encode_video(video)
 
         first_frame = video[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
-        clip_feas, ys, _ = self.wam_backbone.encode_image(first_frame, t, h, w)
+        clip_feas, image_cond, _ = self.wam_backbone.encode_image(
+            first_frame, t, h, w)
 
         latents = latents.to(device)
         clip_feas = clip_feas.to(device)
-        ys = ys.to(device)
+        image_cond = image_cond.to(device)
         prompt_embs = prompt_embs.to(device)
 
         # Prepare states [B, num_state_tokens, D]
@@ -241,7 +242,7 @@ class DreamZeroVLA(BaseVLA):
             prompt_embs=prompt_embs,
             latents=latents,
             clip_feas=clip_feas,
-            ys=ys,
+            ys=image_cond,
             states=states,
             actions=actions,
             action_masks=action_masks,
@@ -285,11 +286,12 @@ class DreamZeroVLA(BaseVLA):
 
         b, c, t, h, w = video.shape
         first_frame = video[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
-        clip_feas, ys, _ = self.wam_backbone.encode_image(first_frame, t, h, w)
+        clip_feas, image_cond, _ = self.wam_backbone.encode_image(
+            first_frame, t, h, w)
 
         latents = latents.to(device)
         clip_feas = clip_feas.to(device)
-        ys = ys.to(device)
+        image_cond = image_cond.to(device)
         prompt_embs = prompt_embs.to(device)
 
         # Prepare states [B, num_state_tokens, D]
@@ -313,7 +315,7 @@ class DreamZeroVLA(BaseVLA):
             prompt_embs=prompt_embs,
             latents=latents,
             clip_feas=clip_feas,
-            ys=ys,
+            ys=image_cond,
             states=states,
             embodiment_ids=embodiment_ids,
         )
