@@ -1,0 +1,75 @@
+# clang-format configuration for C++/CUDA code
+---
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+
+# Access modifier indentation
+AccessModifierOffset: -1
+
+# Function declarations and definitions
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Pointer and reference alignment
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Braces
+BreakBeforeBraces: Attach
+Cpp11BracedListStyle: true
+
+# Argument alignment
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: true
+
+# Spaces
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Comments
+ReflowComments: true
+
+# Include sorting
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  # CUDA headers
+  - Regex: '^<cuda.*\.h>'
+    Priority: 2
+  # C++ system headers
+  - Regex: '^<.*>'
+    Priority: 3
+  # PyTorch/ATen headers
+  - Regex: '^<(torch|ATen|c10)\/.*>'
+    Priority: 1
+  # Local headers
+  - Regex: '.*'
+    Priority: 4
+
+# Indentation
+IndentCaseLabels: false
+IndentPPDirectives: AfterHash
+
+# Line breaking
+AlwaysBreakAfterReturnType: None
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: true
+BinPackParameters: true
+
+# CUDA specific
+# Support CUDA-specific syntax
+# Note: __global__, __device__, __host__ and other keywords are recognized correctly

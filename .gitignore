@@ -1,0 +1,68 @@
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.webp
+
+# Ignore video files
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Ignore checkpoint files
+*.ckpt
+*.pth
+*.h5
+*.model
+*.weights
+
+# Ignore other common binary files
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Ignore temporary files
+*.tmp
+*.log
+*.bak
+*.swp
+*.DS_Store
+*.pyc
+Thumbs.db
+
+# Ignore node_modules and dependencies
+node_modules/
+vendor/
+
+# Ignore build and output directories
+dist/
+build/
+out/
+*.egg-info/
+
+# Ignore work directories
+work_dirs/
+work_dirs
+
+# Ignore checkpoints folder contents but keep the folder
+checkpoints/*
+!checkpoints/.gitkeep
+
+# Ignore datasets folder contents but keep the folder
+datasets/*
+!datasets/.gitkeep
+
+# Ignore vscode directories
+.vscode/
+
+# Ignore local experiment directories
+src/

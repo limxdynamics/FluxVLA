@@ -1,0 +1,62 @@
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/PyCQA/flake8
+    rev: 5.0.4
+    hooks:
+      - id: flake8
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.11.5
+    hooks:
+      - id: isort
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+  - repo: https://github.com/pre-commit/mirrors-yapf
+    rev: v0.32.0
+    hooks:
+      - id: yapf
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+      - id: double-quote-string-fixer
+      - id: check-merge-conflict
+      - id: fix-encoding-pragma
+        args: ["--remove"]
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.1
+    hooks:
+      - id: codespell
+        exclude: 'fluxvla/models/third_party_models/eagle2_hg_model/'
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.9
+    hooks:
+      - id: mdformat
+        args: [ "--number" ]
+        additional_dependencies:
+          - mdformat-openmmlab
+          - mdformat_frontmatter
+          - linkify-it-py
+  # C++/CUDA code formatting
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.4
+    hooks:
+      - id: clang-format
+        types_or: [c++, c, cuda]
+        args: ['-style=file', '-i']
+
+  # C++/CUDA code style linting
+  - repo: https://github.com/cpplint/cpplint
+    rev: 1.6.1
+    hooks:
+      - id: cpplint
+        args: ['--filter=-whitespace/line_length,-build/include_subdir,-build/header_guard,-legal/copyright']
+        types_or: [c++, c, cuda]
