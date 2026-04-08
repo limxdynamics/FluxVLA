@@ -43,6 +43,7 @@ def create_sinusoidal_pos_embedding(
     min_period: float,
     max_period: float,
     device='cpu',
+    dtype: torch.dtype = torch.float32,
 ) -> Tensor:
     """Create sinusoidal positional embeddings.
 
@@ -58,7 +59,7 @@ def create_sinusoidal_pos_embedding(
         raise ValueError(f'dimension ({dimension}) must be divisible by 2')
 
     fraction = torch.linspace(
-        0.0, 1.0, dimension // 2, dtype=torch.float32, device=device)
+        0.0, 1.0, dimension // 2, dtype=dtype, device=device)
     period = min_period * (max_period / min_period)**fraction
 
     scaling_factor = 1.0 / period * 2 * math.pi

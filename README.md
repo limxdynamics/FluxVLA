@@ -34,6 +34,7 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 | FluxVLA(Pi)                 |      98.6      |     99.0      |    97.8     |   96±1.0    |     97.85      |
 | FluxVLA(Qwen3VL 0.6B+GR00T) |      98.6      |     99.6      |    95.6     |  92.2±1.8   |     96.50      |
 | FluxVLA(DreamZero)          |      96.8      |     97.4      |  90.8±1.5   |    93.6     |     94.65      |
+| FluxVLA(SmolVLA)            |      87.4      |     93.2      |    92.0     |    63.4     |      84.0      |
 
 ## 📢 Latest News
 
@@ -308,15 +309,17 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 | PI0_base    | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_base)    |
 | PI05_base   | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_base)   |
 | PI05_libero | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_libero) |
+| SmolVLA     | 450M | [🤗 Hugging Face](https://huggingface.co/lerobot/smolvla_base)                             |
 
 </details>
 
 <details>
 <summary><b>Vision-Language Models (VLM)</b></summary>
 
-| Model      | Size | Download link                                                         |
-| ---------- | ---- | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Model      | Size | Download link                                                                        |
+| ---------- | ---- | ------------------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)                |
+| SmolVLM2   | 500M | [🤗 Hugging Face](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) |
 
 </details>
 
