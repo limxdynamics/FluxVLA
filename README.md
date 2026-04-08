@@ -216,7 +216,9 @@ Replace `libero_10_no_noops_lerobotv2.1` with the corresponding folder name of t
 <details>
 <summary><b>Private dataset directory structure</b></summary>
 
-If you train with fluxvla on private datasets, organize your data in the following format:
+If you train with fluxvla on private datasets, you need to convert your raw data (e.g., HDF5 files collected by ALOHA robots) into the LeRobot Dataset v2.1 format. For a step-by-step conversion guide, see [Data Conversion Guide](docs/data_convert.md).
+
+The converted dataset should follow this directory structure:
 
 ```
 ├── data

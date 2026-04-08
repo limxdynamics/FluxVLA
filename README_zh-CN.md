@@ -216,7 +216,9 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 <details>
 <summary><b>私有数据集目录结构</b></summary>
 
-若使用 fluxvla 在私有数据集上训练，请按以下格式组织数据：
+若使用 fluxvla 在私有数据集上训练，需要先将原始数据（如 ALOHA 双臂机器人采集的 HDF5 文件）转换为 LeRobot Dataset v2.1 格式。详细的转换步骤请参考 [数据转换指南](docs/data_convert.md)。
+
+转换后的数据集目录结构如下：
 
 ```
 ├── data
