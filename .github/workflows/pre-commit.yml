@@ -1,0 +1,31 @@
+name: Pre-commit (changed files only)
+
+on:
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Get changed files
+        id: changed
+        run: |
+          files=$(git diff --name-only --diff-filter=ACMR \
+            origin/${{ github.base_ref }}...HEAD | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+
+      - name: Install pre-commit (pinned version)
+        run: pip install pre-commit==4.5.1
+
+      - name: Run pre-commit on changed files
+        if: steps.changed.outputs.files != ''
+        run: pre-commit run --files ${{ steps.changed.outputs.files }}

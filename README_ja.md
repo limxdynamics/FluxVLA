@@ -216,7 +216,9 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 <details>
 <summary><b>プライベートデータセットのディレクトリ構造</b></summary>
 
-fluxvla をプライベートデータセットで学習する場合、次の形式でデータを整理してください：
+fluxvla をプライベートデータセットで学習する場合、まず生データ（例：ALOHA ロボットで収集した HDF5 ファイル）を LeRobot Dataset v2.1 形式に変換する必要があります。変換手順の詳細は [データ変換ガイド](docs/data_convert.md) をご覧ください。
+
+変換後のデータセットのディレクトリ構造は次のとおりです：
 
 ```
 ├── data
