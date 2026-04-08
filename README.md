@@ -26,6 +26,14 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
   <img src="assets/framework.png" alt="Framework Architecture" width="800">
 </p>
 
+## Performance
+
+| Codebase                    | Libero-Spatial | Libero-Object | Libero-Goal | Libero-Long | Libero-Average |
+| --------------------------- | -------------- | ------------- | ----------- | ----------- | -------------- |
+| FluxVLA(GR00T)              | 96.4           | 93.8          | 93.6        | 83.5±1.5    | 91.8           |
+| FluxVLA(Pi)                 | 99.4           | 99.4          | 98          | 96.8        | 98.4           |
+| FluxVLA(Qwen3VL 0.6B+GR00T) | 98             | 99.2          | 95.2        | 87.2        | 94.9           |
+
 ## Latest News
 
 **\[2026/04/03\]** 🔥 FluxVLA has been open-sourced.
