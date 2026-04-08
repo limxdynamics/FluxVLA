@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Notes: Attribution normalized and reused internal equivalents.
 
+import logging
 import math
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -37,6 +38,34 @@ def find_next_divisible_by_8_numpy(n: np.ndarray) -> np.ndarray:
     return n + amount_to_add
 
 
+def get_safe_dtype(
+    dtype: torch.dtype,
+    device: Union[str, torch.device],
+) -> torch.dtype:
+    """Return *dtype* if the device supports it, else fall back to float32.
+
+    MPS and some Intel XPU devices do not support float64.
+    """
+    if isinstance(device, torch.device):
+        device = device.type
+    if device == 'mps' and dtype == torch.float64:
+        return torch.float32
+    if device == 'xpu' and dtype == torch.float64:
+        if hasattr(torch.xpu, 'get_device_capability'):
+            cap = torch.xpu.get_device_capability()
+            if not cap.get('has_fp64', False):
+                logging.warning(
+                    'Device %s does not support float64, '
+                    'using float32 instead.', device)
+                return torch.float32
+        else:
+            logging.warning(
+                'Device %s capability check failed. '
+                'Assuming no float64 support, using float32.', device)
+            return torch.float32
+    return dtype
+
+
 def create_sinusoidal_pos_embedding(
     time: torch.tensor,
     dimension: int,
@@ -57,8 +86,9 @@ def create_sinusoidal_pos_embedding(
     if dimension % 2 != 0:
         raise ValueError(f'dimension ({dimension}) must be divisible by 2')
 
+    dtype = get_safe_dtype(torch.float64, device)
     fraction = torch.linspace(
-        0.0, 1.0, dimension // 2, dtype=torch.float32, device=device)
+        0.0, 1.0, dimension // 2, dtype=dtype, device=device)
     period = min_period * (max_period / min_period)**fraction
 
     scaling_factor = 1.0 / period * 2 * math.pi

@@ -71,6 +71,7 @@ class LiberoInferenceRunner:
                  task_suite_name: str,
                  dataset: Dict,
                  denormalize_action: Dict,
+                 norm_stats_key: str = None,
                  eval_chunk_size: int = 1,
                  resize_size: int = 224,
                  num_trials_per_task: int = 50,
@@ -127,7 +128,9 @@ class LiberoInferenceRunner:
             f'Dataset statistics file not found at {data_stat_path}!'
         # Load dataset and denormalization action
         denormalize_action['norm_stats'] = data_stat_path
+        self.norm_stats_key = norm_stats_key or f'{task_suite_name}_no_noops'
         dataset['task_suite_name'] = task_suite_name
+        dataset['norm_stats_key'] = self.norm_stats_key
         dataset['norm_stats'] = data_stat_path
         self.dataset = build_dataset_from_cfg(dataset)
         self.denormalize_action = build_transform_from_cfg(denormalize_action)
@@ -282,7 +285,7 @@ class LiberoInferenceRunner:
                 for action in actions:
                     inputs = dict(
                         action=action,
-                        task_suite_name=self.task_suite_name,
+                        norm_stats_key=self.norm_stats_key,
                     )
                     action_denormed = self.denormalize_action(inputs)
                     obs, reward, done, info = env.step(
