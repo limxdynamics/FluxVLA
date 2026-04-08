@@ -1,0 +1,24 @@
+Third-Party Attribution for eagle2_hg_model
+
+Source project:
+- NVIDIA Isaac-GR00T
+- Upstream location: https://github.com/NVIDIA/Isaac-GR00T/tree/n1.5-release/gr00t/model/backbone
+- Upstream ref: n1.5-release
+
+This directory includes non-Python artifacts copied/adapted from upstream model assets/configuration.
+Covered non-Python files:
+- added_tokens.json
+- chat_template.json
+- config.json
+- generation_config.json
+- merges.txt
+- preprocessor_config.json
+- processor_config.json
+- special_tokens_map.json
+- tokenizer_config.json
+- vocab.json
+
+License notes:
+- Please preserve upstream license headers/terms for redistributed files.
+- SPDX identifiers are recorded in source files where applicable.
+- For release/legal review, verify final compatibility with repository distribution policy.

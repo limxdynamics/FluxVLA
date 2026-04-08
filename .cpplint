@@ -1,0 +1,29 @@
+# cpplint configuration file
+# Set maximum line length
+linelength=100
+
+# Filter rules
+# -: exclude rule
+# +: include rule
+filter=-whitespace/line_length
+filter=-build/include_subdir
+filter=-build/header_guard
+filter=-legal/copyright
+filter=-readability/todo
+filter=-runtime/references
+filter=-whitespace/braces
+filter=-whitespace/indent
+filter=-whitespace/comments
+filter=-build/c++11
+
+# Set root directory
+root=fluxvla/ops/cuda
+
+# Include file extensions
+extensions=h,cpp,cu,cuh
+
+# Header guard style
+# 0: no requirement
+# 1: #ifndef HEADER_H_
+# 2: #ifndef PROJECT_PATH_HEADER_H_
+headers=h,cuh
