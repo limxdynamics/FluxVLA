@@ -615,13 +615,13 @@ class PrepareVideoForDreamZero:
             if channels > 3 and channels % 3 == 0:
                 n_items = channels // 3
                 if T > 1 and n_items == V * T:
-                    # [V*T*C, H, W] -> [V, T, 3, H, W] -> [T, 3, V*H, W]
+                    # [V*T*C, H, W] -> [V, T, 3, H, W] -> [3, T, V, H, W]
                     #                                    -> [3, T, V*H, W]
                     images = images.reshape(V, T, 3, h, w)
                     if is_tensor:
                         images = images.permute(2, 1, 0, 3, 4)
                     else:
-                        images = images.transpose(1, 2, 0, 3, 4)
+                        images = images.transpose(2, 1, 0, 3, 4)
                     images = images.reshape(3, T, V * h, w)
                     data[img_key] = images
                     return data
