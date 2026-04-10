@@ -251,6 +251,11 @@ eval = dict(
                 max_len=512,
                 use_conversation=False,
             ),
+            dict(
+                type='PrepareVideoForDreamZero',
+                num_views=2,
+                frame_window_size=1,
+            ),
         ],
     ),
     denormalize_action=dict(
