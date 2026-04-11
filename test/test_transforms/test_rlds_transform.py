@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import unittest
 
 import numpy as np
 
 from fluxvla.engines.utils import build_transform_from_cfg
+
+RLDS_TRANSFORM_DATA_DIR = 'test/data/transforms/rlds_transform'
 
 
 class TestRLDSBatchTransform(unittest.TestCase):
@@ -49,21 +52,22 @@ class TestRLDSBatchTransform(unittest.TestCase):
 
     def test_rlds_batch_transform(self):
         input_data = np.load(
-            'test/data/transforms/rlds_transform/rlds_transform_input.npy',
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'rlds_transform_input.npy'),
             allow_pickle=True).item()
 
         output = self.transform(input_data)
-        imgs_target = np.load('test/data/transforms/rlds_transform/images.npy')
+        imgs_target = np.load(
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'images.npy'))
         img_masks_target = np.load(
-            'test/data/transforms/rlds_transform/img_masks.npy')
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'img_masks.npy'))
         lang_masks_target = np.load(
-            'test/data/transforms/rlds_transform/lang_masks.npy')
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'lang_masks.npy'))
         lang_tokens_target = np.load(
-            'test/data/transforms/rlds_transform/lang_tokens.npy')
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'lang_tokens.npy'))
         states_target = np.load(
-            'test/data/transforms/rlds_transform/states.npy')
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'states.npy'))
         actions_target = np.load(
-            'test/data/transforms/rlds_transform/actions.npy')
+            os.path.join(RLDS_TRANSFORM_DATA_DIR, 'actions.npy'))
         self.assertTrue(
             np.allclose(output['images'][:, :10, :10], imgs_target))
         self.assertTrue(np.allclose(output['img_masks'], img_masks_target))

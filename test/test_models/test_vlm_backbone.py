@@ -23,6 +23,8 @@ import torch
 from fluxvla.engines import build_vlm_backbone_from_cfg
 
 QWEN2_5_VL_CKPT_PATH = './checkpoints/Qwen2.5-VL-3B-Instruct'
+PALIGEMMA_DATA_DIR = 'test/data/models/vlm_backbones/paligemma'
+QWEN_VL_DATA_DIR = 'test/data/models/vlm_backbones/qwen_vl'
 
 
 class TestPaligemmaBackbone(unittest.TestCase):
@@ -96,19 +98,18 @@ class TestPaligemmaBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_paligemma_backbone_forward(self):
         images = np.load(
-            './test/data/models/vlm_backbones/paligemma/images.npy',
-            allow_pickle=True)
+            os.path.join(PALIGEMMA_DATA_DIR, 'images.npy'), allow_pickle=True)
         images = torch.from_numpy(images).cuda().reshape(2, 6, 224, 224)
         img_masks = np.load(
-            './test/data/models/vlm_backbones/paligemma/img_masks.npy',
+            os.path.join(PALIGEMMA_DATA_DIR, 'img_masks.npy'),
             allow_pickle=True)
         img_masks = torch.from_numpy(img_masks).cuda()
         lang_tokens = np.load(
-            './test/data/models/vlm_backbones/paligemma/lang_tokens.npy',
+            os.path.join(PALIGEMMA_DATA_DIR, 'lang_tokens.npy'),
             allow_pickle=True)
         lang_tokens = torch.from_numpy(lang_tokens).cuda()
         lang_masks = np.load(
-            './test/data/models/vlm_backbones/paligemma/lang_masks.npy',
+            os.path.join(PALIGEMMA_DATA_DIR, 'lang_masks.npy'),
             allow_pickle=True)
         lang_masks = torch.from_numpy(lang_masks).cuda()
         with torch.no_grad():
@@ -119,13 +120,13 @@ class TestPaligemmaBackbone(unittest.TestCase):
                 lang_tokens=lang_tokens,
                 lang_masks=lang_masks)
             embs_target = np.load(
-                './test/data/models/vlm_backbones/paligemma/embs.npy',
+                os.path.join(PALIGEMMA_DATA_DIR, 'embs.npy'),
                 allow_pickle=True)
             pad_masks_target = np.load(
-                './test/data/models/vlm_backbones/paligemma/pad_masks.npy',
+                os.path.join(PALIGEMMA_DATA_DIR, 'pad_masks.npy'),
                 allow_pickle=True)
             attn_masks_target = np.load(
-                './test/data/models/vlm_backbones/paligemma/attn_masks.npy',
+                os.path.join(PALIGEMMA_DATA_DIR, 'attn_masks.npy'),
                 allow_pickle=True)
 
         self.assertTrue(
@@ -221,23 +222,21 @@ class TestQWenVLBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_qwenvl_backbone_forward(self):
         images = np.load(
-            './test/data/models/vlm_backbones/qwen_vl/images.npy',
-            allow_pickle=True)
+            os.path.join(QWEN_VL_DATA_DIR, 'images.npy'), allow_pickle=True)
         images = torch.from_numpy(images).cuda()
         lang_tokens = np.load(
-            './test/data/models/vlm_backbones/qwen_vl/lang_tokens.npy',
+            os.path.join(QWEN_VL_DATA_DIR, 'lang_tokens.npy'),
             allow_pickle=True)
         lang_tokens = torch.from_numpy(lang_tokens).cuda()
         lang_masks = np.load(
-            './test/data/models/vlm_backbones/qwen_vl/lang_masks.npy',
+            os.path.join(QWEN_VL_DATA_DIR, 'lang_masks.npy'),
             allow_pickle=True)
         lang_masks = torch.from_numpy(lang_masks).cuda()
         img_masks = np.load(
-            './test/data/models/vlm_backbones/qwen_vl/img_masks.npy',
-            allow_pickle=True)
+            os.path.join(QWEN_VL_DATA_DIR, 'img_masks.npy'), allow_pickle=True)
         img_masks = torch.from_numpy(img_masks).cuda()
         image_grid_thw = np.load(
-            './test/data/models/vlm_backbones/qwen_vl/image_grid_thw.npy',
+            os.path.join(QWEN_VL_DATA_DIR, 'image_grid_thw.npy'),
             allow_pickle=True)
         image_grid_thw = torch.from_numpy(image_grid_thw).cuda()
         with torch.no_grad():
@@ -249,10 +248,10 @@ class TestQWenVLBackbone(unittest.TestCase):
                 lang_tokens=lang_tokens,
                 lang_masks=lang_masks)
             embs_target = np.load(
-                'test/data/models/vlm_backbones/qwen_vl/last_hidden_state.npy',
+                os.path.join(QWEN_VL_DATA_DIR, 'last_hidden_state.npy'),
                 allow_pickle=True)
             pad_masks_target = np.load(
-                './test/data/models/vlm_backbones/qwen_vl/pad_masks.npy',
+                os.path.join(QWEN_VL_DATA_DIR, 'pad_masks.npy'),
                 allow_pickle=True)
 
         self.assertTrue(

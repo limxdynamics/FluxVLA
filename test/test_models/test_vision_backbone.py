@@ -24,6 +24,7 @@ from fluxvla.engines import build_vision_backbone_from_cfg
 
 DINO_CKPT_PATH = './checkpoints/vit_large_patch14_reg4_dinov2.lvd142m/model.safetensors'  # noqa: E501
 SIGLIP_CKPT_PATH = './checkpoints/ViT-SO400M-14-SigLIP/open_clip_model.safetensors'  # noqa: E501
+VISION_BACKBONE_DATA_DIR = 'test/data/models/vision_backbones'
 
 
 @pytest.mark.skipif(
@@ -54,18 +55,18 @@ class TestHFCausalVisionBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_siglip_vit_forward(self):
         input_dino = torch.from_numpy(
-            np.load(
-                'test/data/models/vision_backbones/input_dino.npy')).cuda().to(
-                    torch.bfloat16)
+            np.load(os.path.join(VISION_BACKBONE_DATA_DIR,
+                                 'input_dino.npy'))).cuda().to(torch.bfloat16)
 
         input_siglip = torch.from_numpy(
-            np.load('test/data/models/vision_backbones/input_siglip.npy')
-        ).cuda().to(torch.bfloat16)
+            np.load(
+                os.path.join(VISION_BACKBONE_DATA_DIR,
+                             'input_siglip.npy'))).cuda().to(torch.bfloat16)
         pixel_values = torch.cat([input_dino, input_siglip], dim=1)
         output = self.siglip_vit(pixel_values).float()
         expected_output = torch.from_numpy(
             np.load(
-                'test/data/models/vision_backbones/output_dinosiglipvit.npy')
-        ).cuda()
+                os.path.join(VISION_BACKBONE_DATA_DIR,
+                             'output_dinosiglipvit.npy'))).cuda()
         assert torch.allclose(
             output[:, ::10, ::10], expected_output, rtol=1e-3, atol=1e-1)

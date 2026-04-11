@@ -23,6 +23,9 @@ import torch
 from fluxvla.engines import build_llm_backbone_from_cfg
 
 LLAMA2_CKPT_PATH = './checkpoints/Llama-2-7b-hf'
+LLAMA_DATA_DIR = 'test/data/models/llm_backbones/llama'
+GEMMA_DATA_DIR = 'test/data/models/llm_backbones/gemma'
+QWEN_DATA_DIR = 'test/data/models/llm_backbones/qwen'
 
 
 @pytest.mark.skipif(
@@ -56,17 +59,15 @@ class TestLLaMaLLMBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_llama_backbone_forward(self):
         attention_mask = np.load(
-            './test/data/models/llm_backbones/llama/attention_mask.npy',
+            os.path.join(LLAMA_DATA_DIR, 'attention_mask.npy'),
             allow_pickle=True)
         inputs_embeds = np.load(
-            './test/data/models/llm_backbones/llama/inputs_embeds.npy',
+            os.path.join(LLAMA_DATA_DIR, 'inputs_embeds.npy'),
             allow_pickle=True)
         labels = np.load(
-            './test/data/models/llm_backbones/llama/labels.npy',
-            allow_pickle=True)
+            os.path.join(LLAMA_DATA_DIR, 'labels.npy'), allow_pickle=True)
         logits = np.load(
-            './test/data/models/llm_backbones/llama/logits.npy',
-            allow_pickle=True)
+            os.path.join(LLAMA_DATA_DIR, 'logits.npy'), allow_pickle=True)
         inputs_embeds = torch.from_numpy(inputs_embeds).cuda()
         outputs = self.llm_backbone.llm(
             inputs_embeds=inputs_embeds,
@@ -128,8 +129,7 @@ class TestGemmaLLMBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_llama_backbone_forward(self):
         input_ids = np.load(
-            './test/data/models/llm_backbones/gemma/input_ids.npy',
-            allow_pickle=True)
+            os.path.join(GEMMA_DATA_DIR, 'input_ids.npy'), allow_pickle=True)
         input_ids = torch.from_numpy(input_ids).cuda().unsqueeze(0)
         outputs = self.llm_backbone(input_ids=input_ids)
         self.assertEqual(outputs['logits'].shape, (1, 180, 257152))
@@ -175,7 +175,7 @@ class TestQWen2LLMBackbone(unittest.TestCase):
         reason='No GPU available.')
     def test_qwen_backbone_forward(self):
         inputs_embeds = np.load(
-            'test/data/models/llm_backbones/qwen/inputs_embeds.npy',
+            os.path.join(QWEN_DATA_DIR, 'inputs_embeds.npy'),
             allow_pickle=True)
         inputs_embeds = torch.from_numpy(inputs_embeds).cuda()
         outputs = self.llm_backbone(inputs_embeds=inputs_embeds)

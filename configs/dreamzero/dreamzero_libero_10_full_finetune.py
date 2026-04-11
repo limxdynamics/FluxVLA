@@ -172,7 +172,7 @@ train_dataloader = dict(
 
 runner = dict(
     type='FSDPTrainRunner',
-    max_epochs=24,
+    max_epochs=12,
     learning_rate=1e-5,
     weight_decay=1e-5,
     max_grad_norm=1.0,
