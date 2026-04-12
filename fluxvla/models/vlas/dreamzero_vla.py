@@ -144,22 +144,15 @@ class DreamZeroVLA(BaseVLA):
         b, c, t, h, w = video.shape
 
         # --- Encode with WanBackbone ---
-        self.wam_backbone.set_frozen_modules_to_eval_mode()
-
-        prompt_embs = self.wam_backbone.encode_prompt(
-            lang_tokens.long().to(device),
-            lang_masks.long().to(device))
-
-        latents = self.wam_backbone.encode_video(video)
-
-        first_frame = video[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
-        clip_feas, image_cond, _ = self.wam_backbone.encode_image(
-            first_frame, t, h, w)
-
-        latents = latents.to(device)
-        clip_feas = clip_feas.to(device)
-        image_cond = image_cond.to(device)
-        prompt_embs = prompt_embs.to(device)
+        wam_outputs = self.wam_backbone(
+            video=video,
+            input_ids=lang_tokens.long().to(device),
+            attention_mask=lang_masks.long().to(device),
+        )
+        prompt_embs = wam_outputs['prompt_embs']
+        latents = wam_outputs['latents']
+        clip_feas = wam_outputs['clip_feas']
+        image_cond = wam_outputs['image_cond']
 
         # Prepare states [B, num_state_tokens, D]
         t_video = video.shape[2]
@@ -230,21 +223,17 @@ class DreamZeroVLA(BaseVLA):
             video = torch.cat([video, pad], dim=2)
 
         # --- Encode with WanBackbone (same as forward) ---
-        prompt_embs = self.wam_backbone.encode_prompt(
-            lang_tokens.long().to(device),
-            lang_masks.long().to(device))
-
-        latents = self.wam_backbone.encode_video(video)
+        wam_outputs = self.wam_backbone(
+            video=video,
+            input_ids=lang_tokens.long().to(device),
+            attention_mask=lang_masks.long().to(device),
+        )
+        prompt_embs = wam_outputs['prompt_embs']
+        latents = wam_outputs['latents']
+        clip_feas = wam_outputs['clip_feas']
+        image_cond = wam_outputs['image_cond']
 
         b, c, t, h, w = video.shape
-        first_frame = video[:, :, :1].transpose(1, 2)  # [B, 1, C, H, W]
-        clip_feas, image_cond, _ = self.wam_backbone.encode_image(
-            first_frame, t, h, w)
-
-        latents = latents.to(device)
-        clip_feas = clip_feas.to(device)
-        image_cond = image_cond.to(device)
-        prompt_embs = prompt_embs.to(device)
 
         # Prepare states [B, num_state_tokens, D]
         t_video = video.shape[2]

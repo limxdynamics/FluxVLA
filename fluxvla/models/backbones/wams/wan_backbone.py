@@ -192,3 +192,26 @@ class WanBackbone(nn.Module):
             new_image = y[:, :, 0:1]
             y = torch.concat([msk, y], dim=1)
         return clip_context, y, new_image
+
+    def forward(self, video, input_ids, attention_mask):
+        self.set_frozen_modules_to_eval_mode()
+
+        _, _, num_frames, height, width = video.shape
+        first_frame = video[:, :, :1].transpose(1, 2)
+
+        prompt_embs = self.encode_prompt(input_ids, attention_mask)
+        latents = self.encode_video(video)
+        clip_feas, image_cond, new_image = self.encode_image(
+            first_frame, num_frames, height, width)
+
+        device = video.device
+        return dict(
+            prompt_embs=prompt_embs.to(device),
+            latents=latents.to(device),
+            clip_feas=clip_feas.to(device),
+            image_cond=image_cond.to(device),
+            new_image=new_image.to(device),
+        )
+
+
+__all__ = ['WanBackbone']

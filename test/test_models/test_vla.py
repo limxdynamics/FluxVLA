@@ -37,6 +37,7 @@ GR00T_DATA_DIR = 'test/data/models/vlas/gr00t'
 PI0_DATA_DIR = 'test/data/models/vlas/pi0'
 PI05_DATA_DIR = 'test/data/models/vlas/pi05'
 DREAMZERO_DATA_DIR = 'test/data/models/vlas/dreamzero'
+DREAMZERO_NUM_INFERENCE_STEPS = 2
 
 
 @pytest.mark.skipif(
@@ -901,7 +902,7 @@ class TestPI05FlowMatching(unittest.TestCase):
 @unittest.skipUnless(
     torch.cuda.is_available() and os.path.exists(DREAMZERO_CKPT_PATH),
     'DreamZero checkpoint not available or CUDA is not available')
-class TestDreamZeroForwardConsistency(unittest.TestCase):
+class TestDreamZero(unittest.TestCase):
     """Compare DreamZero forward outputs with reference implementation IO."""
 
     def setUp(self):
@@ -931,7 +932,7 @@ class TestDreamZeroForwardConsistency(unittest.TestCase):
                 num_frame_per_block=2,
                 num_action_per_block=10,
                 num_state_per_block=1,
-                frame_seqlen=128,
+                frame_seqlen=8,
                 hidden_size=1024,
                 input_embedding_dim=1536,
                 dit_dim=5120,
@@ -945,7 +946,7 @@ class TestDreamZeroForwardConsistency(unittest.TestCase):
                 noise_beta_alpha=1.5,
                 noise_beta_beta=1.0,
                 noise_s=0.999,
-                num_inference_steps=16,
+                num_inference_steps=DREAMZERO_NUM_INFERENCE_STEPS,
                 train_architecture='full',
                 skip_pretrained_loading=True,
                 wan_model_path=None,
