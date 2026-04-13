@@ -59,6 +59,7 @@ class DreamZeroVLA(BaseVLA):
         freeze_llm_backbone: bool = True,
         freeze_vlm_backbone: bool = True,
         freeze_projector: bool = True,
+        use_cache: bool = False,
         *args,
         **kwargs,
     ) -> None:
@@ -75,6 +76,8 @@ class DreamZeroVLA(BaseVLA):
         )
         self.num_views = num_views
         self.frame_window_size = frame_window_size
+        self.use_cache = use_cache
+        self.vla_head.use_cache = use_cache
         self.all_module_keys = ['wam_backbone', 'vla_head']
 
     def _prepare_states(self, states: torch.Tensor,
@@ -209,17 +212,15 @@ class DreamZeroVLA(BaseVLA):
         device = images.device
         # images: [B, C, T, H, W] (prepared by PrepareVideoForDreamZero)
         video = images
+        use_cache = kwargs.get('use_cache', self.use_cache)
 
-        observed_video_frames = video.shape[2]
-
-        if observed_video_frames <= 1:
-            reset_history = True
-
-        if reset_history:
-            self.vla_head.reset_inference_state()
-
-        observed_video_frames = video.shape[2]
-        observed_latent_frames = 1 + max(0, observed_video_frames - 1) // 4
+        if use_cache:
+            observed_video_frames = video.shape[2]
+            observed_latent_frames = 1 + max(0, observed_video_frames - 1) // 4
+            if observed_video_frames <= 1:
+                reset_history = True
+            if reset_history:
+                self.vla_head.reset_inference_state()
 
         if embodiment_ids is None:
             embodiment_ids = torch.zeros(
@@ -245,8 +246,6 @@ class DreamZeroVLA(BaseVLA):
         clip_feas = wam_outputs['clip_feas']
         image_cond = wam_outputs['image_cond']
 
-        b, c, t, h, w = video.shape
-
         # Prepare states [B, num_state_tokens, D]
         t_video = video.shape[2]
         latent_frames = 1 + (t_video - 1) // 4
@@ -264,16 +263,20 @@ class DreamZeroVLA(BaseVLA):
         # Transpose latents to [B, T_lat, C, H_lat, W_lat] for head
         latents = latents.transpose(1, 2)
 
-        return self.vla_head.predict_action(
+        head_kwargs = dict(
             prompt_embs=prompt_embs,
             latents=latents,
             clip_feas=clip_feas,
             ys=image_cond,
             states=states,
             embodiment_ids=embodiment_ids,
-            observed_latent_frames=observed_latent_frames,
-            reset_history=reset_history,
+            use_cache=use_cache,
         )
+        if use_cache:
+            head_kwargs['observed_latent_frames'] = observed_latent_frames
+            head_kwargs['reset_history'] = reset_history
+
+        return self.vla_head.predict_action(**head_kwargs)
 
     # ------------------------------------------------------------------
     # BaseVLA abstract method implementations

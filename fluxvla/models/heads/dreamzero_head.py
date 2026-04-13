@@ -137,6 +137,7 @@ class DreamZeroHead(nn.Module):
         self.skip_pretrained_loading = skip_pretrained_loading
         self.num_action_per_block = num_action_per_block
         self.num_state_per_block = num_state_per_block
+        self.use_cache = False
 
         # ----- build DiT model -----
         self.model = CausalWanModel(
@@ -465,6 +466,167 @@ class DreamZeroHead(nn.Module):
         )
         self.inference_kv_cache = updated_kv_cache
 
+    def _sample_action_block(
+        self,
+        prompt_embs: torch.Tensor,
+        clip_feas: torch.Tensor,
+        ys: torch.Tensor,
+        states: torch.Tensor,
+        embodiment_ids: torch.Tensor,
+        kv_cache: list[torch.Tensor],
+        current_start_frame: int,
+        denoise_frames: int,
+        latents_dtype: torch.dtype,
+        latents_shape: tuple[int, int, int, int],
+        num_inference_steps: int,
+    ) -> torch.Tensor:
+        from fluxvla.models.third_party_models.dreamzero.modules.flow_unipc_multistep_scheduler import \
+            FlowUniPCMultistepScheduler  # noqa: E501
+
+        device = states.device
+        b = states.shape[0]
+        num_channels, lat_h, lat_w, frame_seqlen = latents_shape
+
+        noisy_latents = torch.randn(
+            b,
+            num_channels,
+            denoise_frames,
+            lat_h,
+            lat_w,
+            device=device,
+            dtype=latents_dtype,
+        )
+        noisy_actions = torch.randn(
+            b,
+            self.action_horizon,
+            self.max_action_dim,
+            device=device,
+            dtype=latents_dtype,
+        )
+
+        sample_scheduler = FlowUniPCMultistepScheduler(
+            num_train_timesteps=self.scheduler.num_train_timesteps,
+            shift=1,
+            use_dynamic_shifting=False,
+        )
+        sample_scheduler_action = FlowUniPCMultistepScheduler(
+            num_train_timesteps=self.scheduler.num_train_timesteps,
+            shift=1,
+            use_dynamic_shifting=False,
+        )
+        sample_scheduler.set_timesteps(
+            num_inference_steps,
+            device=device,
+            shift=5.0,
+        )
+        sample_scheduler_action.set_timesteps(
+            num_inference_steps,
+            device=device,
+            shift=5.0,
+        )
+
+        y_future_start = min(current_start_frame, ys.shape[2])
+        y_future_end = min(current_start_frame + denoise_frames, ys.shape[2])
+        y_future = ys[:, :, y_future_start:y_future_end]
+        if y_future.shape[2] < denoise_frames:
+            y_future = ys[:, :, -denoise_frames:]
+
+        denoise_seq_len = denoise_frames * frame_seqlen
+
+        for step_index in range(len(sample_scheduler.timesteps)):
+            video_timestep = sample_scheduler.timesteps[step_index]
+            action_timestep = sample_scheduler_action.timesteps[step_index]
+
+            t_video = video_timestep.expand(b, denoise_frames)
+            t_action = action_timestep.expand(b, self.action_horizon)
+
+            video_noise_pred, action_noise_pred, _ = self.model(
+                noisy_latents,
+                timestep=t_video,
+                clip_feature=clip_feas,
+                y=y_future,
+                context=prompt_embs,
+                seq_len=denoise_seq_len,
+                state=states.to(torch.bfloat16),
+                embodiment_id=embodiment_ids,
+                action=noisy_actions,
+                timestep_action=t_action,
+                kv_cache=kv_cache,
+                crossattn_cache=None,
+                current_start_frame=current_start_frame,
+            )
+
+            noisy_latents = sample_scheduler.step(
+                model_output=video_noise_pred.float(),
+                timestep=video_timestep,
+                sample=noisy_latents.float(),
+                step_index=step_index,
+                return_dict=False,
+            )[0]
+            noisy_actions = sample_scheduler_action.step(
+                model_output=action_noise_pred.float(),
+                timestep=action_timestep,
+                sample=noisy_actions.float(),
+                step_index=step_index,
+                return_dict=False,
+            )[0]
+
+            noisy_latents = noisy_latents.to(dtype=latents_dtype)
+            noisy_actions = noisy_actions.to(dtype=latents_dtype)
+
+        return noisy_actions
+
+    def _predict_action_stateless(
+        self,
+        prompt_embs: torch.Tensor,
+        latents: torch.Tensor,
+        clip_feas: torch.Tensor,
+        ys: torch.Tensor,
+        states: torch.Tensor,
+        embodiment_ids: torch.Tensor,
+        num_inference_steps: int,
+        observed_latent_frames: int,
+    ) -> torch.Tensor:
+        local_kv_cache = self._create_kv_cache(
+            batch_size=states.shape[0],
+            dtype=latents.dtype,
+            device=states.device,
+        )
+        observed_latents = latents[:, :, :observed_latent_frames]
+        self.inference_kv_cache = local_kv_cache
+        self._append_reference_frames(
+            prompt_embs=prompt_embs,
+            reference_latents=observed_latents[:, :, :1],
+            clip_feas=clip_feas,
+            ys=ys[:, :, :1],
+            start_frame=0,
+        )
+        local_kv_cache = self.inference_kv_cache
+        self.inference_kv_cache = None
+
+        denoise_frames = self.num_frame_per_block
+        if observed_latent_frames <= 1:
+            denoise_frames = 1
+
+        return self._sample_action_block(
+            prompt_embs=prompt_embs,
+            clip_feas=clip_feas,
+            ys=ys,
+            states=states,
+            embodiment_ids=embodiment_ids,
+            kv_cache=local_kv_cache,
+            current_start_frame=1,
+            denoise_frames=denoise_frames,
+            latents_dtype=latents.dtype,
+            latents_shape=(
+                latents.shape[1],
+                latents.shape[3],
+                latents.shape[4],
+                int(latents.shape[3] * latents.shape[4] / 4),
+            ),
+            num_inference_steps=num_inference_steps,
+        )
+
     # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
@@ -482,25 +644,41 @@ class DreamZeroHead(nn.Module):
         **kwargs,
     ) -> torch.Tensor:
         """Joint video+action denoising with persistent causal history."""
-        from fluxvla.models.third_party_models.dreamzero.modules.flow_unipc_multistep_scheduler import \
-            FlowUniPCMultistepScheduler  # noqa: E501
-
-        device = states.device
-
         # Incoming latents are [B, T_lat, C, H_lat, W_lat] from DreamZeroVLA;
         # convert to model-facing [B, C, T_lat, H_lat, W_lat].
         latents = latents.transpose(1, 2)
-        _, num_channels, num_lat_frames, lat_h, lat_w = latents.shape
-        frame_seqlen = int(lat_h * lat_w / 4)
+        _, _, num_lat_frames, lat_h, lat_w = latents.shape
 
         if observed_latent_frames is None:
             observed_latent_frames = num_lat_frames
         observed_latent_frames = max(
             1, min(observed_latent_frames, num_lat_frames))
-        observed_latents = latents[:, :, :observed_latent_frames]
 
         if num_inference_steps is None:
             num_inference_steps = self.num_inference_steps
+
+        use_cache = kwargs.get('use_cache', self.use_cache)
+        if not use_cache:
+            self.reset_inference_state()
+            return self._predict_action_stateless(
+                prompt_embs=prompt_embs,
+                latents=latents,
+                clip_feas=clip_feas,
+                ys=ys,
+                states=states,
+                embodiment_ids=embodiment_ids,
+                num_inference_steps=num_inference_steps,
+                observed_latent_frames=observed_latent_frames,
+            )
+
+        device = states.device
+        observed_latents = latents[:, :, :observed_latent_frames]
+        latents_shape = (
+            latents.shape[1],
+            lat_h,
+            lat_w,
+            int(lat_h * lat_w / 4),
+        )
 
         if reset_history or self._should_reset_inference_state(
                 prompt_embs=prompt_embs, clip_feas=clip_feas, ys=ys):
@@ -514,8 +692,6 @@ class DreamZeroHead(nn.Module):
             self.inference_ys = ys
             self.inference_prompt_embs = prompt_embs
 
-        b = states.shape[0]
-
         if self.current_start_frame == 0:
             self._append_reference_frames(
                 prompt_embs=prompt_embs,
@@ -526,7 +702,7 @@ class DreamZeroHead(nn.Module):
             )
             self.current_start_frame = 1
 
-        if self.current_start_frame != 1 and observed_latent_frames > 1:
+        if (self.current_start_frame != 1 and observed_latent_frames > 1):
             reference_latents = observed_latents[:, :,
                                                  -self.num_frame_per_block:]
             reference_start_frame = max(
@@ -554,98 +730,21 @@ class DreamZeroHead(nn.Module):
         if observed_latent_frames <= 1:
             denoise_frames = 1
 
-        noisy_latents = torch.randn(
-            b,
-            num_channels,
-            denoise_frames,
-            lat_h,
-            lat_w,
-            device=device,
-            dtype=states.dtype,
-        )
-        noisy_actions = torch.randn(
-            b,
-            self.action_horizon,
-            self.max_action_dim,
-            device=device,
-            dtype=states.dtype,
+        noisy_actions = self._sample_action_block(
+            prompt_embs=prompt_embs,
+            clip_feas=self.inference_clip_feas,
+            ys=self.inference_ys,
+            states=states,
+            embodiment_ids=embodiment_ids,
+            kv_cache=self.inference_kv_cache,
+            current_start_frame=self.current_start_frame,
+            denoise_frames=denoise_frames,
+            latents_dtype=latents.dtype,
+            latents_shape=latents_shape,
+            num_inference_steps=num_inference_steps,
         )
 
-        sample_scheduler = FlowUniPCMultistepScheduler(
-            num_train_timesteps=self.scheduler.num_train_timesteps,
-            shift=1,
-            use_dynamic_shifting=False,
-        )
-        sample_scheduler_action = FlowUniPCMultistepScheduler(
-            num_train_timesteps=self.scheduler.num_train_timesteps,
-            shift=1,
-            use_dynamic_shifting=False,
-        )
-        sample_scheduler.set_timesteps(
-            num_inference_steps,
-            device=device,
-            shift=5.0,
-        )
-        sample_scheduler_action.set_timesteps(
-            num_inference_steps,
-            device=device,
-            shift=5.0,
-        )
-
-        y_future_start = min(self.current_start_frame,
-                             self.inference_ys.shape[2])
-        y_future_end = min(
-            self.current_start_frame + denoise_frames,
-            self.inference_ys.shape[2],
-        )
-        y_future = self.inference_ys[:, :, y_future_start:y_future_end]
-        if y_future.shape[2] < denoise_frames:
-            y_future = self.inference_ys[:, :, -denoise_frames:]
-
-        denoise_seq_len = denoise_frames * frame_seqlen
-
-        for step_index in range(len(sample_scheduler.timesteps)):
-            video_timestep = sample_scheduler.timesteps[step_index]
-            action_timestep = sample_scheduler_action.timesteps[step_index]
-
-            t_video = video_timestep.expand(b, denoise_frames)
-            t_action = action_timestep.expand(b, self.action_horizon)
-
-            video_noise_pred, action_noise_pred, _ = self.model(
-                noisy_latents,
-                timestep=t_video,
-                clip_feature=self.inference_clip_feas,
-                y=y_future,
-                context=prompt_embs,
-                seq_len=denoise_seq_len,
-                state=states.to(torch.bfloat16),
-                embodiment_id=embodiment_ids,
-                action=noisy_actions,
-                timestep_action=t_action,
-                kv_cache=self.inference_kv_cache,
-                crossattn_cache=None,
-                current_start_frame=self.current_start_frame,
-            )
-
-            noisy_latents = sample_scheduler.step(
-                model_output=video_noise_pred.float(),
-                timestep=video_timestep,
-                sample=noisy_latents.float(),
-                step_index=step_index,
-                return_dict=False,
-            )[0]
-            noisy_actions = sample_scheduler_action.step(
-                model_output=action_noise_pred.float(),
-                timestep=action_timestep,
-                sample=noisy_actions.float(),
-                step_index=step_index,
-                return_dict=False,
-            )[0]
-
-            noisy_latents = noisy_latents.to(dtype=states.dtype)
-            noisy_actions = noisy_actions.to(dtype=states.dtype)
-
-        self.current_start_frame += self.num_frame_per_block
+        self.current_start_frame += denoise_frames
         return noisy_actions
 
     # ------------------------------------------------------------------

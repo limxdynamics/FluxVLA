@@ -126,10 +126,9 @@ class TestDreamZeroHeadTiny(unittest.TestCase):
             results.append(a.clone())
         torch.testing.assert_close(results[0], results[1])
 
-    def test_predict_action_reset_history_reproduces_first_step(self):
+    def test_predict_action_stateless_by_default(self):
         inputs = self._make_inputs(batch_size=1)
 
-        self.head.reset_inference_state()
         torch.manual_seed(123)
         with torch.no_grad():
             first = self.head.predict_action(num_inference_steps=2, **inputs)
@@ -138,15 +137,43 @@ class TestDreamZeroHeadTiny(unittest.TestCase):
         with torch.no_grad():
             second = self.head.predict_action(num_inference_steps=2, **inputs)
 
+        torch.testing.assert_close(first, second)
+        self.assertIsNone(self.head.inference_kv_cache)
+        self.assertEqual(self.head.current_start_frame, 0)
+
+    def test_predict_action_cache_mode_reuses_history(self):
+        inputs = self._make_inputs(batch_size=1)
+
         self.head.reset_inference_state()
         torch.manual_seed(123)
         with torch.no_grad():
-            reset = self.head.predict_action(num_inference_steps=2, **inputs)
+            first = self.head.predict_action(
+                num_inference_steps=2,
+                use_cache=True,
+                **inputs,
+            )
+
+        torch.manual_seed(123)
+        with torch.no_grad():
+            second = self.head.predict_action(
+                num_inference_steps=2,
+                use_cache=True,
+                **inputs,
+            )
+
+        self.head.reset_inference_state()
+        torch.manual_seed(123)
+        with torch.no_grad():
+            reset = self.head.predict_action(
+                num_inference_steps=2,
+                use_cache=True,
+                **inputs,
+            )
 
         self.assertFalse(torch.allclose(first, second))
         torch.testing.assert_close(first, reset)
 
-    def test_predict_action_single_frame_forces_reset(self):
+    def test_predict_action_cache_mode_single_frame_forces_reset(self):
         inputs = self._make_inputs(batch_size=1)
         single_frame_inputs = dict(inputs)
         single_frame_inputs['latents'] = inputs['latents'][:, :1]
@@ -168,6 +195,7 @@ class TestDreamZeroHeadTiny(unittest.TestCase):
                 num_inference_steps=2,
                 observed_latent_frames=1,
                 reset_history=True,
+                use_cache=True,
                 **single_frame_inputs,
             )
 
