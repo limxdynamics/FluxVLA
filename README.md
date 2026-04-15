@@ -29,12 +29,12 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 ## Performance
 
 | Codebase                    | Libero-Spatial | Libero-Object | Libero-Goal | Libero-Long | Libero-Average |
-| --------------------------- | -------------- | ------------- | ----------- | ----------- | -------------- |
-| FluxVLA(GR00T)              | 96.4           | 93.8          | 93.6        | 83.5±1.5    | 91.8           |
-| FluxVLA(Pi)                 | 99.4           | 99.4          | 98          | 96.8        | 98.4           |
-| FluxVLA(Qwen3VL 0.6B+GR00T) | 98             | 99.2          | 95.2        | 87.2        | 94.9           |
+| --------------------------- | :------------: | :-----------: | :---------: | :---------: | :------------: |
+| FluxVLA(GR00T)              |      96.4      |     93.8      |    93.6     |  83.5±1.5   |      91.8      |
+| FluxVLA(Pi)                 |      99.4      |     99.4      |     98      |    96.8     |      98.4      |
+| FluxVLA(Qwen3VL 0.6B+GR00T) |       98       |     99.2      |    95.2     |    87.2     |      94.9      |
 
-## Latest News
+## 📢 Latest News
 
 **\[2026/04/03\]** 🔥 FluxVLA has been open-sourced.
 
@@ -258,7 +258,7 @@ The converted dataset should follow this directory structure:
 
 </details>
 
-## Checkpoint Preparation
+## 🤗 Checkpoint Preparation
 
 Download the required pretrained checkpoints and place them under `./checkpoints`. Download only the checkpoints you need based on your configuration.
 
@@ -487,7 +487,7 @@ export HF_ENDPOINT="https://hf-mirror.com"
 </details>
 
 <details>
-<summary><b>Q: `conda install av` is very slow at resolving the environment.</b></summary>
+<summary><b>Q: <code>conda install av</code> is very slow at resolving the environment.</b></summary>
 
 <b>A:</b> You can use the `libmamba` solver to speed up dependency resolution:
 
@@ -505,7 +505,7 @@ conda install -c conda-forge av=14.4.0 --solver=libmamba
 </details>
 
 <details>
-<summary><b>Q: When running `pip install -r requirements.txt`, building `egl_probe` fails with `RuntimeError: CMake must be installed`.</b></summary>
+<summary><b>Q: When running <code>pip install -r requirements.txt</code>, building <code>egl_probe</code> fails with <code>RuntimeError: CMake must be installed</code>.</b></summary>
 
 <b>A:</b> `egl_probe` needs CMake to build. Install it via conda (recommended) or apt:
 
@@ -520,7 +520,7 @@ sudo apt install cmake
 </details>
 
 <details>
-<summary><b>Q: `egl_probe` build fails and reports `Compatibility with CMake < 3.5 has been removed from CMake`.</b></summary>
+<summary><b>Q: <code>egl_probe</code> build fails and reports <code>Compatibility with CMake < 3.5 has been removed from CMake</code>.</b></summary>
 
 <b>A:</b> This is usually because your CMake version is too new for the `egl_probe` CMakeLists.txt. Set the following environment variable before installing:
 
@@ -531,7 +531,7 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 pip install -r requirements.txt
 </details>
 
 <details>
-<summary><b>Q: After installation, I get NumPy version errors (e.g., `RuntimeError: Numpy is not available` or version incompatibility warnings).</b></summary>
+<summary><b>Q: After installation, I get NumPy version errors (e.g., <code>RuntimeError: Numpy is not available</code> or version incompatibility warnings).</b></summary>
 
 <b>A:</b> During installation, some dependencies may overwrite the pinned NumPy version. Reinstall the correct version directly:
 
