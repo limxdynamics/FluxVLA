@@ -60,7 +60,8 @@ class WanBackbone(nn.Module):
         image_encoder_path: Path to CLIP weights (``.pth``).
         vae_path: Path to VAE weights (``.pth``).
         tiled: Whether to use tiled VAE encoding.
-        skip_pretrained_loading: If True, skip loading pretrained weights.
+        pretrained_name_or_path: Base path for pretrained weights.
+            ``None`` skips loading.
     """
 
     def __init__(
@@ -73,7 +74,7 @@ class WanBackbone(nn.Module):
         tile_size_width: int = 34,
         tile_stride_height: int = 18,
         tile_stride_width: int = 16,
-        skip_pretrained_loading: bool = False,
+        pretrained_name_or_path: Optional[str] = None,
         *args,
         **kwargs,
     ):
@@ -94,7 +95,7 @@ class WanBackbone(nn.Module):
             image_encoder_pretrained_path=image_encoder_path)
         self.vae = WanVideoVAE(vae_pretrained_path=vae_path)
 
-        if not skip_pretrained_loading:
+        if pretrained_name_or_path is not None:
             self._load_pretrained_weights(text_encoder_path,
                                           image_encoder_path, vae_path)
 

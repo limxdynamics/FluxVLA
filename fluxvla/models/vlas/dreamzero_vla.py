@@ -321,12 +321,3 @@ class DreamZeroVLA(BaseVLA):
         cfg = PretrainedConfig()
         cfg.is_encoder_decoder = False
         return cfg
-
-    def freeze_backbones(self) -> None:
-        """Freeze WanBackbone (encoders), keep DreamZeroHead trainable."""
-        if self.wam_backbone is not None:
-            self.wam_backbone.requires_grad_(False)
-        self.trainable_module_keys = ['vla_head']
-        overwatch.info(
-            '[Frozen]    =>> WanBackbone (T5, CLIP, VAE)', ctx_level=1)
-        overwatch.info('[TRAINABLE] =>> DreamZero Head (DiT)', ctx_level=1)

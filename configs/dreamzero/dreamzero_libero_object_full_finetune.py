@@ -33,7 +33,7 @@
 # Pretrained weights are loaded from pretrained_name_or_path
 # (DreamZero-AgiBot safetensors) with name_mapping to remap
 # checkpoint keys to the fluxvla module structure.
-# Sub-model skip_pretrained_loading=True because weights come
+# Sub-model pretrained_name_or_path=None because weights come
 # from the unified checkpoint, not per-component .pth files.
 # ===================================================================
 
@@ -54,7 +54,6 @@ model = dict(
         image_encoder_path=None,
         vae_path=None,
         tiled=False,
-        skip_pretrained_loading=True,
     ),
     vla_head=dict(
         type='DreamZeroHead',
@@ -88,8 +87,6 @@ model = dict(
         # ----- training mode -----
         train_architecture='full',
         # ----- pretrained paths -----
-        skip_pretrained_loading=True,
-        wan_model_path=None,
         use_gradient_checkpointing=True,
     ),
     name_mapping={

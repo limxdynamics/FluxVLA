@@ -197,7 +197,7 @@ export WANDB_MODE=disabled
 
 </details>
 
-## データ準備
+## 📦 データ準備
 
 <details>
 <summary><b>用意済みのデータをそのまま使う</b></summary>
@@ -261,7 +261,7 @@ fluxvla をプライベートデータセットで学習する場合、まず生
 
 </details>
 
-## チェックポイント準備
+## 🤗 チェックポイント準備
 
 必要な事前学習済みチェックポイントをダウンロードし、`./checkpoints` ディレクトリに配置してください。設定に応じて必要なチェックポイントだけをダウンロードします。
 
@@ -329,7 +329,7 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 
 </details>
 
-## 特徴
+## 🌟 特徴
 
 <details>
 <summary><b>All-in-one：1 つの設定ファイルで全工程を管理</b></summary>
@@ -491,7 +491,7 @@ export HF_ENDPOINT="https://hf-mirror.com"
 </details>
 
 <details>
-<summary><b>Q：`conda install av` の環境解決が非常に遅い。</b></summary>
+<summary><b>Q：<code>conda install av</code> の環境解決が非常に遅い。</b></summary>
 
 <b>A：</b>依存関係の解決を高速化するために `libmamba` ソルバを使えます：
 
@@ -509,7 +509,7 @@ conda install -c conda-forge av=14.4.0 --solver=libmamba
 </details>
 
 <details>
-<summary><b>Q：`pip install -r requirements.txt` 実行時に `egl_probe` のビルドが失敗し、`RuntimeError: CMake must be installed` と表示される。</b></summary>
+<summary><b>Q：<code>pip install -r requirements.txt</code> 実行時に <code>egl_probe</code> のビルドが失敗し、<code>RuntimeError: CMake must be installed</code> と表示される。</b></summary>
 
 <b>A：</b> `egl_probe` はビルドに CMake が必要です。conda（推奨）または apt で CMake をインストールしてください：
 
@@ -524,7 +524,7 @@ sudo apt install cmake
 </details>
 
 <details>
-<summary><b>Q：`egl_probe` のビルドが失敗し、`Compatibility with CMake < 3.5 has been removed from CMake` と表示される。</b></summary>
+<summary><b>Q：<code>egl_probe</code> のビルドが失敗し、<code>Compatibility with CMake < 3.5 has been removed from CMake</code> と表示される。</b></summary>
 
 <b>A：</b> これは通常、あなたの CMake バージョンが `egl_probe` の `CMakeLists.txt` に対して新しすぎることが原因です。インストール前に次の環境変数を設定してください：
 
@@ -535,7 +535,7 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 pip install -r requirements.txt
 </details>
 
 <details>
-<summary><b>Q：インストール後に NumPy バージョンのエラーが出る（例：`RuntimeError: Numpy is not available` またはバージョン互換性警告）。</b></summary>
+<summary><b>Q：インストール後に NumPy バージョンのエラーが出る（例：<code>RuntimeError: Numpy is not available</code> またはバージョン互換性警告）。</b></summary>
 
 <b>A：</b> インストール中に一部の依存関係が固定された NumPy バージョンを書き換えることがあります。正しいバージョンを直接入れ直してください：
 

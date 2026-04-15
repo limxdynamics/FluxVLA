@@ -81,9 +81,8 @@ class DreamZeroHead(nn.Module):
             distribution parameters.
         train_architecture: ``"full"`` or ``"lora"``.
         lora_rank / lora_alpha / lora_target_modules: LoRA hyper-params.
-        skip_pretrained_loading: If True, skip loading DiT pretrained
-            weights – useful for unit testing.
-        wan_model_path: Path to Wan 2.1 checkpoint directory.
+        pretrained_name_or_path: Path to Wan 2.1 checkpoint directory for
+            loading DiT pretrained weights.  ``None`` skips loading.
     """
 
     def __init__(
@@ -115,8 +114,7 @@ class DreamZeroHead(nn.Module):
         lora_rank: int = 4,
         lora_alpha: int = 4,
         lora_target_modules: str = 'q,k,v,o,ffn.0,ffn.2',
-        skip_pretrained_loading: bool = False,
-        wan_model_path: Optional[str] = None,
+        pretrained_name_or_path: Optional[str] = None,
         use_gradient_checkpointing: bool = True,
         *args,
         **kwargs,
@@ -134,14 +132,13 @@ class DreamZeroHead(nn.Module):
         self.noise_s = noise_s
         self.num_inference_steps = num_inference_steps
         self.train_architecture = train_architecture
-        self.skip_pretrained_loading = skip_pretrained_loading
         self.num_action_per_block = num_action_per_block
         self.num_state_per_block = num_state_per_block
         self.use_cache = False
 
         # ----- build DiT model -----
         self.model = CausalWanModel(
-            diffusion_model_pretrained_path=wan_model_path,
+            diffusion_model_pretrained_path=pretrained_name_or_path,
             model_type='i2v',
             frame_seqlen=frame_seqlen,
             dim=dit_dim,
@@ -167,8 +164,8 @@ class DreamZeroHead(nn.Module):
         self.beta_dist = Beta(noise_beta_alpha, noise_beta_beta)
 
         # ----- load pretrained weights -----
-        if not skip_pretrained_loading:
-            self._load_pretrained_weights(wan_model_path)
+        if pretrained_name_or_path is not None:
+            self._load_pretrained_weights(pretrained_name_or_path)
 
         # ----- set trainable -----
         self._setup_trainable(train_architecture, lora_rank, lora_alpha,
