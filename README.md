@@ -37,6 +37,8 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 ## 📢 Latest News
 
+**\[2026/04/15\]** 🔥 DreamZero VLA is now supported.
+
 **\[2026/04/03\]** 🔥 FluxVLA has been open-sourced.
 
 ## 🛠️ Installation
