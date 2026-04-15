@@ -1,4 +1,11 @@
-### Implemented based on Pi0 Action Encoding
+# Copyright (c) 2025 NVIDIA Corporation. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/action_encoder.py
+# Upstream-Ref: main
+# Notes: Implemented based on Pi0 Action Encoding. Attribution normalized; no functional change.
+
 import torch
 import torch.nn as nn
 
@@ -27,9 +34,9 @@ class SinusoidalPositionalEncoding(nn.Module):
 
         half_dim = self.embedding_dim // 2
         # typical log space frequencies for sinusoidal encoding
-        exponent = -torch.arange(half_dim, dtype=torch.float, device=device) * (
-            torch.log(torch.tensor(10000.0)) / half_dim
-        )
+        exponent = -torch.arange(
+            half_dim, dtype=torch.float, device=device) * (
+                torch.log(torch.tensor(10000.0)) / half_dim)
         # Expand timesteps to (B, T, 1) then multiply
         freqs = timesteps.unsqueeze(-1) * exponent.exp()  # (B, T, half_dim)
 
@@ -41,6 +48,7 @@ class SinusoidalPositionalEncoding(nn.Module):
 
 
 class ActionEncoder(nn.Module):
+
     def __init__(self, action_dim, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
@@ -68,7 +76,7 @@ class ActionEncoder(nn.Module):
             timesteps = timesteps.unsqueeze(1).expand(-1, T)
         else:
             raise ValueError(
-                "Expected `timesteps` to have shape (B,) so we can replicate across T."
+                'Expected `timesteps` to have shape (B,) so we can replicate across T.'
             )
 
         # 2) Standard action MLP step for shape => (B, T, w)

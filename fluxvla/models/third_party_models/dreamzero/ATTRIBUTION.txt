@@ -1,0 +1,20 @@
+Third-Party Attribution for dreamzero
+
+Source projects:
+- NVIDIA DreamZero
+  Upstream location: https://github.com/dreamzero0/dreamzero/tree/main/groot/vla/model/dreamzero/modules
+  Upstream ref: main
+  License: Apache-2.0
+
+- Alibaba Wan Video (Wan 2.1)
+  Upstream location: https://github.com/Wan-Video/Wan2.1/tree/main/wan/modules
+  License: Apache-2.0
+
+- Hugging Face Diffusers
+  Upstream location: https://github.com/huggingface/diffusers/blob/v0.31.0/src/diffusers/schedulers/scheduling_unipc_multistep.py
+  License: Apache-2.0
+
+License notes:
+- Please preserve upstream license headers/terms for redistributed files.
+- SPDX identifiers are recorded in source files where applicable.
+- For release/legal review, verify final compatibility with repository distribution policy.

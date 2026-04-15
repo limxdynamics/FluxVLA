@@ -1,6 +1,15 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
-import torch
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/attention.py
+# Upstream-Ref: main
+# Additional-Upstream-URL: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/attention.py
+# SPDX-License-Identifier: Apache-2.0
+# Notes: Attribution normalized; no functional change.
+
 import os
+
+import torch
 
 try:
     import flash_attn_interface
@@ -15,7 +24,6 @@ except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
 import warnings
-
 
 __all__ = [
     'flash_attention',
@@ -93,9 +101,9 @@ def flash_attention(
         )
 
     # Check for TensorRT at runtime, not import time
-    if os.getenv("ENABLE_TENSORRT", "False").lower() == "true":
+    if os.getenv('ENABLE_TENSORRT', 'False').lower() == 'true':
         # use torch.nn.functional.scaled_dot_product_attention for tensorrt export
-        
+
         # The input is (s, n, d), but sdpa needs (b, n, s, d).
         # We add a batch dimension and transpose.
         q = q.unsqueeze(0).transpose(1, 2)
@@ -109,8 +117,13 @@ def flash_attention(
 
         attn_mask = None
         out = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
-        
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            is_causal=causal,
+            dropout_p=dropout_p)
+
         # Transpose back to (b, s, n, d) format.
         out = out.transpose(1, 2).contiguous()
         return out
@@ -197,7 +210,12 @@ def attention(
         v = v.transpose(1, 2).to(dtype)
 
         out = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, attn_mask=attn_mask, is_causal=causal, dropout_p=dropout_p)
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            is_causal=causal,
+            dropout_p=dropout_p)
 
         out = out.transpose(1, 2).contiguous()
         return out

@@ -16,11 +16,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Get changed files
+      - name: Get changed files (excluding third-party vendored code)
         id: changed
         run: |
           files=$(git diff --name-only --diff-filter=ACMR \
-            origin/${{ github.base_ref }}...HEAD | tr '\n' ' ')
+            origin/${{ github.base_ref }}...HEAD \
+            | grep -v '^fluxvla/models/third_party_models/' \
+            | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
 
       - name: Install pre-commit (pinned version)

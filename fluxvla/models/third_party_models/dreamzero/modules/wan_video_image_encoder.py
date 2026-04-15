@@ -1,13 +1,19 @@
-"""
-Concise re-implementation of
-``https://github.com/openai/CLIP'' and
-``https://github.com/mlfoundations/open_clip''.
-"""
+# Copyright (c) 2025 NVIDIA Corporation. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/wan_video_image_encoder.py
+# Upstream-Ref: main
+# Additional-Upstream-URL: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/clip.py
+# Notes: Concise re-implementation of openai/CLIP and mlfoundations/open_clip. Attribution normalized; no functional change.
+
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
+
 from .wan_video_dit import flash_attention
 
 
@@ -105,7 +111,8 @@ class XLMRoberta(nn.Module):
         self.eps = eps
 
         # embeddings
-        self.token_embedding = nn.Embedding(vocab_size, dim, padding_idx=pad_id)
+        self.token_embedding = nn.Embedding(
+            vocab_size, dim, padding_idx=pad_id)
         self.type_embedding = nn.Embedding(type_size, dim)
         self.pos_embedding = nn.Embedding(max_seq_len, dim, padding_idx=pad_id)
         self.dropout = nn.Dropout(dropout)
@@ -199,7 +206,6 @@ def xlm_roberta_large(pretrained=False,
         return model
 
 
-
 def pos_interpolate(pos, seq_len):
     if pos.size(1) == seq_len:
         return pos
@@ -260,7 +266,8 @@ class SelfAttention(nn.Module):
         q, k, v = self.to_qkv(x).chunk(3, dim=-1)
 
         # compute attention
-        x = flash_attention(q, k, v, num_heads=self.num_heads, compatibility_mode=True)
+        x = flash_attention(
+            q, k, v, num_heads=self.num_heads, compatibility_mode=True)
 
         # output
         x = self.proj(x)
@@ -367,11 +374,12 @@ class AttentionPool(nn.Module):
         b, s, c, n, d = *x.size(), self.num_heads, self.head_dim
 
         # compute query, key, value
-        q = self.to_q(self.cls_embedding).view(1, 1, n*d).expand(b, -1, -1)
+        q = self.to_q(self.cls_embedding).view(1, 1, n * d).expand(b, -1, -1)
         k, v = self.to_kv(x).chunk(2, dim=-1)
 
         # compute attention
-        x = flash_attention(q, k, v, num_heads=self.num_heads, compatibility_mode=True)
+        x = flash_attention(
+            q, k, v, num_heads=self.num_heads, compatibility_mode=True)
         x = x.reshape(b, 1, c)
 
         # output
@@ -459,9 +467,13 @@ class VisionTransformer(nn.Module):
         # embeddings
         x = self.patch_embedding(x).flatten(2).permute(0, 2, 1)
         # print("x in forward: ", x[0,0,100:105], x.shape)
-        # print("patch_embedding: ", self.patch_embedding.module.weight[0:10, 0, 0, 3], self.patch_embedding.module.weight.shape)     
+        # print("patch_embedding: ", self.patch_embedding.module.weight[0:10, 0, 0, 3], self.patch_embedding.module.weight.shape)
         if self.pool_type in ('token', 'token_fc'):
-            x = torch.cat([self.cls_embedding.expand(b, -1, -1).to(dtype=x.dtype, device=x.device), x], dim=1)
+            x = torch.cat([
+                self.cls_embedding.expand(b, -1, -1).to(
+                    dtype=x.dtype, device=x.device), x
+            ],
+                          dim=1)
         if interpolation:
             e = pos_interpolate(self.pos_embedding, x.size(1))
         else:
@@ -608,7 +620,8 @@ class CLIP(nn.Module):
                 p for n, p in self.named_parameters()
                 if 'norm' in n or n.endswith('bias')
             ],
-            'weight_decay': 0.0
+            'weight_decay':
+            0.0
         }, {
             'params': [
                 p for n, p in self.named_parameters()
@@ -729,7 +742,8 @@ class XLMRobertaCLIP(nn.Module):
                 p for n, p in self.named_parameters()
                 if 'norm' in n or n.endswith('bias')
             ],
-            'weight_decay': 0.0
+            'weight_decay':
+            0.0
         }, {
             'params': [
                 p for n, p in self.named_parameters()
@@ -778,7 +792,7 @@ def _clip(pretrained=False,
             model = model_cls(**kwargs)
 
     # set device
-    output = (model,)
+    output = (model, )
 
     # init transforms
     if return_transforms:
@@ -796,7 +810,7 @@ def _clip(pretrained=False,
             T.ToTensor(),
             T.Normalize(mean=mean, std=std)
         ])
-        output += (transforms,)
+        output += (transforms, )
 
     # init tokenizer
     if return_tokenizer:
@@ -819,7 +833,7 @@ def _clip(pretrained=False,
         else:
             tokenizer = data.CLIPTokenizer(
                 seq_len=model.text_len, padding=tokenizer_padding)
-        output += (tokenizer,)
+        output += (tokenizer, )
     return output[0] if len(output) == 1 else output
 
 
@@ -855,7 +869,7 @@ def clip_xlm_roberta_vit_h_14(
 
 class WanImageEncoder(torch.nn.Module):
 
-    def __init__(self, image_encoder_pretrained_path: str=None):
+    def __init__(self, image_encoder_pretrained_path: str = None):
         super().__init__()
         # init model
         self.model, self.transforms = clip_xlm_roberta_vit_h_14(
@@ -863,18 +877,15 @@ class WanImageEncoder(torch.nn.Module):
             return_transforms=True,
             return_tokenizer=False,
             dtype=torch.float32,
-            device="cpu")
+            device='cpu')
         self.image_encoder_pretrained_path = image_encoder_pretrained_path
 
     def encode_image(self, videos):
         # preprocess
-        size = (self.model.image_size,) * 2
+        size = (self.model.image_size, ) * 2
         videos = torch.cat([
-            F.interpolate(
-                u,
-                size=size,
-                mode='bicubic',
-                align_corners=False) for u in videos
+            F.interpolate(u, size=size, mode='bicubic', align_corners=False)
+            for u in videos
         ])
         videos = self.transforms.transforms[-1](videos.mul_(0.5).add_(0.5))
 
@@ -885,24 +896,25 @@ class WanImageEncoder(torch.nn.Module):
         # The outputs of torch compile always need to be cloned before being used.
         out = out.clone()
         return out
-        
+
     @staticmethod
     def state_dict_converter():
         return WanImageEncoderStateDictConverter()
-    
-    
+
+
 class WanImageEncoderStateDictConverter:
+
     def __init__(self):
         pass
 
     def from_diffusers(self, state_dict):
         return state_dict
-    
+
     def from_civitai(self, state_dict):
         state_dict_ = {}
         for name, param in state_dict.items():
-            if name.startswith("textual."):
+            if name.startswith('textual.'):
                 continue
-            name = "model." + name
+            name = 'model.' + name
             state_dict_[name] = param
         return state_dict_

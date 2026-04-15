@@ -1,11 +1,19 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/wan2_1_attention.py
+# Upstream-Ref: main
+# Additional-Upstream-URL: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/attention.py
+# SPDX-License-Identifier: Apache-2.0
+# Notes: Attribution normalized; no functional change.
 
 import contextlib
-import torch
-from torch.profiler import profile, ProfilerActivity
+import os
 import time
 from typing import Optional
-import os
+
+import torch
+from torch.profiler import ProfilerActivity, profile
 
 try:
     import flash_attn_interface
@@ -14,7 +22,8 @@ try:
         if not torch.cuda.is_available():
             return False
         device_name = torch.cuda.get_device_name(0).lower()
-        return "h100" in device_name or "hopper" in device_name
+        return 'h100' in device_name or 'hopper' in device_name
+
     FLASH_ATTN_3_AVAILABLE = is_hopper_gpu()
 except ModuleNotFoundError:
     FLASH_ATTN_3_AVAILABLE = False
@@ -27,6 +36,7 @@ except ModuleNotFoundError:
 
 try:
     import transformer_engine
+
     from .cudnn_attention import DotProductAttention
     TRANSFORMER_ENGINE_AVAILABLE = True
 except ModuleNotFoundError:
@@ -148,6 +158,7 @@ def flash_attention(
 
 
 class AttentionModule(torch.nn.Module):
+
     def __init__(
         self,
         num_heads: int,
@@ -163,34 +174,40 @@ class AttentionModule(torch.nn.Module):
     ):
         super().__init__()
         if backend is None:
-            backend = "torch"
+            backend = 'torch'
 
-        if os.getenv("ATTENTION_BACKEND") is not None:
-            backend = os.getenv("ATTENTION_BACKEND")
+        if os.getenv('ATTENTION_BACKEND') is not None:
+            backend = os.getenv('ATTENTION_BACKEND')
         else:
-            backend = "FA2"
+            backend = 'FA2'
 
         # Check for TensorRT at runtime, not import time
-        if os.getenv("ENABLE_TENSORRT", "False").lower() == "true":
-            backend = "torch"
+        if os.getenv('ENABLE_TENSORRT', 'False').lower() == 'true':
+            backend = 'torch'
 
         # Fall back to FA backend if TE is specified but not available
-        if backend == "TE" and not TRANSFORMER_ENGINE_AVAILABLE:
-            print("Warning: Transformer Engine is not available. Falling back to FA2 backend.")
-            backend = "FA2"
+        if backend == 'TE' and not TRANSFORMER_ENGINE_AVAILABLE:
+            print(
+                'Warning: Transformer Engine is not available. Falling back to FA2 backend.'
+            )
+            backend = 'FA2'
 
-        assert backend in ["torch", "FA2", "FA3", "TE", "torch_onnx"]
+        assert backend in ['torch', 'FA2', 'FA3', 'TE', 'torch_onnx']
         self.backend = backend
 
-        if backend == "torch":
-            def _torch_impl(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+        if backend == 'torch':
+
+            def _torch_impl(q: torch.Tensor, k: torch.Tensor,
+                            v: torch.Tensor) -> torch.Tensor:
                 out_dtype = q.dtype
                 q = q.transpose(1, 2).to(dtype)
                 k = k.transpose(1, 2).to(dtype)
                 v = v.transpose(1, 2).to(dtype)
 
                 out = torch.nn.functional.scaled_dot_product_attention(
-                    q, k, v,
+                    q,
+                    k,
+                    v,
                     attn_mask=None,
                     is_causal=causal,
                     dropout_p=dropout_p,
@@ -199,10 +216,13 @@ class AttentionModule(torch.nn.Module):
 
                 out = out.transpose(1, 2).contiguous()
                 return out.to(out_dtype)
+
             self.attn_func = _torch_impl
 
-        elif  backend == "torch_onnx":
-            def _torch_onnx_impl(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+        elif backend == 'torch_onnx':
+
+            def _torch_onnx_impl(q: torch.Tensor, k: torch.Tensor,
+                                 v: torch.Tensor) -> torch.Tensor:
                 out_dtype = q.dtype
                 # use torch.nn.functional.scaled_dot_product_attention for tensorrt export
 
@@ -218,7 +238,9 @@ class AttentionModule(torch.nn.Module):
                     v = v.repeat(q.shape[0], 1, 1, 1)
 
                 out = torch.nn.functional.scaled_dot_product_attention(
-                    q, k, v,
+                    q,
+                    k,
+                    v,
                     attn_mask=None,
                     is_causal=causal,
                     dropout_p=dropout_p,
@@ -228,35 +250,45 @@ class AttentionModule(torch.nn.Module):
                 # Transpose back to (b, s, n, d) format.
                 out = out.transpose(1, 2).contiguous()
                 return out.to(out_dtype)
+
             self.attn_func = _torch_onnx_impl
 
-        elif backend == "TE" and TRANSFORMER_ENGINE_AVAILABLE:
+        elif backend == 'TE' and TRANSFORMER_ENGINE_AVAILABLE:
             self.attn_backend = DotProductAttention(
                 num_attention_heads=num_heads,
                 kv_channels=head_dim,
-                qkv_format="bshd",
-                attn_mask_type="causal" if causal else "no_mask",
+                qkv_format='bshd',
+                attn_mask_type='causal' if causal else 'no_mask',
                 window_size=window_size,
                 attention_dropout=dropout_p,
             )
 
-            def _te_impl(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+            def _te_impl(q: torch.Tensor, k: torch.Tensor,
+                         v: torch.Tensor) -> torch.Tensor:
                 out_dtype = q.dtype
                 return self.attn_backend(
                     query_layer=q.to(dtype),
                     key_layer=k.to(dtype),
                     value_layer=v.to(dtype),
                 ).to(out_dtype)
+
             self.attn_func = _te_impl
 
-        elif backend == "FA2" or backend == "FA3":
+        elif backend == 'FA2' or backend == 'FA3':
+
             def _flash_attn_impl(
-                q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                q_lens: Optional[torch.Tensor], k_lens: Optional[torch.Tensor],
+                q: torch.Tensor,
+                k: torch.Tensor,
+                v: torch.Tensor,
+                q_lens: Optional[torch.Tensor],
+                k_lens: Optional[torch.Tensor],
             ) -> torch.Tensor:
                 return flash_attention(
-                    q=q, k=k, v=v,
-                    q_lens=q_lens, k_lens=k_lens,
+                    q=q,
+                    k=k,
+                    v=v,
+                    q_lens=q_lens,
+                    k_lens=k_lens,
                     dropout_p=dropout_p,
                     softmax_scale=softmax_scale,
                     q_scale=q_scale,
@@ -264,8 +296,9 @@ class AttentionModule(torch.nn.Module):
                     window_size=window_size,
                     deterministic=deterministic,
                     dtype=dtype,
-                    version=3 if backend == "FA3" else 2,
+                    version=3 if backend == 'FA3' else 2,
                 )
+
             self.attn_func = _flash_attn_impl
 
         else:
@@ -279,15 +312,13 @@ class AttentionModule(torch.nn.Module):
         q_lens: Optional[torch.Tensor] = None,
         k_lens: Optional[torch.Tensor] = None,
     ):
-        if (
-            self.backend == "torch" or
-            self.backend == "torch_onnx" or
-            (self.backend == "TE" and TRANSFORMER_ENGINE_AVAILABLE)
-        ):
+        if (self.backend == 'torch' or self.backend == 'torch_onnx'
+                or (self.backend == 'TE' and TRANSFORMER_ENGINE_AVAILABLE)):
             if q_lens is not None or k_lens is not None:
                 warnings.warn(
                     'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
                 )
             return self.attn_func(q, k, v)  # type: ignore[call-arg]
         else:
-            return self.attn_func(q, k, v, q_lens, k_lens)  # type: ignore[call-arg]
+            return self.attn_func(q, k, v, q_lens,
+                                  k_lens)  # type: ignore[call-arg]

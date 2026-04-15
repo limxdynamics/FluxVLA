@@ -1,7 +1,11 @@
 # Copyright (c) 2022-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 # See LICENSE for license information.
-
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/cudnn_attention.py
+# Upstream-Ref: main
+# Notes: Attribution normalized; no functional change.
 """
 Simplified wrapper around TransformerEngine's C++ pytorch backend.
 This supports torch.compile(fullgraph=True).
@@ -17,8 +21,7 @@ from typing import Any, List, Optional, Tuple, Union
 import torch
 import transformer_engine
 
-_TE_VER = tuple(int(x) for x in transformer_engine.__version__.split(".")[:2])
-
+_TE_VER = tuple(int(x) for x in transformer_engine.__version__.split('.')[:2])
 
 try:
     # transformer_engine >= 2.8.0
@@ -28,44 +31,40 @@ except ImportError:
     import transformer_engine.pytorch.dot_product_attention.utils as dpa_utils
 
 import transformer_engine_torch as tex
-from transformer_engine.pytorch.constants import (
-    TE_DType,
-)
+from transformer_engine.pytorch.constants import TE_DType
 from transformer_engine.pytorch.cpp_extensions.fused_attn import (
-    AttnBiasType,
-    AttnMaskType,
-    FusedAttnBackend,
-    QKVLayout,
-)
+    AttnBiasType, AttnMaskType, FusedAttnBackend, QKVLayout)
 
 if _TE_VER >= (2, 8):
     from transformer_engine.pytorch.cpp_extensions.fused_attn import SoftmaxType
 
 from transformer_engine.pytorch.utils import get_cudnn_version
 
-__all__ = ["DotProductAttention"]
+__all__ = ['DotProductAttention']
 
 
 class DotProductAttention(torch.nn.Module):
+
     def __init__(
         self,
         num_attention_heads: int,
         kv_channels: Union[int, Tuple[int, int]],
         num_gqa_groups: Optional[int] = None,
         attention_dropout: float = 0.0,
-        qkv_format: str = "bshd",
-        attn_mask_type: str = "no_mask",
+        qkv_format: str = 'bshd',
+        attn_mask_type: str = 'no_mask',
         window_size: Optional[Tuple[int, int]] = None,
     ) -> None:
         super().__init__()
-        assert qkv_format == "bshd", "Only bshd layout is supported."
+        assert qkv_format == 'bshd', 'Only bshd layout is supported.'
 
         self.qkv_format = qkv_format
         self.attn_mask_type = attn_mask_type
 
-        self.softmax_scale = 1.0 / math.sqrt(kv_channels if isinstance(kv_channels, int) else kv_channels[0])
+        self.softmax_scale = 1.0 / math.sqrt(
+            kv_channels if isinstance(kv_channels, int) else kv_channels[0])
         self.attention_dropout = attention_dropout
-        self.softmax_type = "vanilla"
+        self.softmax_type = 'vanilla'
         self.window_size = dpa_utils.check_set_window_size(attn_mask_type)
 
         self.fused_attention = FusedAttention(
@@ -85,7 +84,7 @@ class DotProductAttention(torch.nn.Module):
         Dot Product Attention Layer.
         """
 
-        qkv_layout = "bshd_bshd_bshd"
+        qkv_layout = 'bshd_bshd_bshd'
         batch_size = query_layer.shape[0]
         device = query_layer.device
 
@@ -116,11 +115,13 @@ class DotProductAttention(torch.nn.Module):
             max_seqlen_kv=max_seqlen_kv,
             attn_mask_type=self.attn_mask_type,
             window_size=self.window_size,
-            fused_attention_backend=FusedAttnBackend["F16_arbitrary_seqlen"],
+            fused_attention_backend=FusedAttnBackend['F16_arbitrary_seqlen'],
         )
 
 
-def prepare_for_saving(*tensors) -> Tuple[list[torch.Tensor | None], list[torch.Tensor | None]]:
+def prepare_for_saving(
+        *tensors
+) -> Tuple[list[torch.Tensor | None], list[torch.Tensor | None]]:
     """Prepare tensors for saving. Needed because save_for_backward accepts only
     torch.Tensor/torch.nn.Parameter types, while we want to be able to save
     the internal TensorBase types too."""
@@ -152,12 +153,13 @@ def restore_from_saved(tensors, saved_tensors) -> Tuple[Any, ...]:
 
 
 class FusedAttention(torch.nn.Module):
+
     def __init__(
         self,
         softmax_scale: float,
         attention_dropout: float = 0.0,
         deterministic: bool = False,
-        softmax_type: str = "vanilla",
+        softmax_type: str = 'vanilla',
     ) -> None:
         super().__init__()
         self.softmax_scale = softmax_scale
@@ -177,11 +179,14 @@ class FusedAttention(torch.nn.Module):
         cu_seqlens_kv_padded: torch.Tensor,
         max_seqlen_q: int,
         max_seqlen_kv: int,
-        attn_mask_type: str = "causal",
-        attention_mask: Optional[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]] = None,
+        attn_mask_type: str = 'causal',
+        attention_mask: Optional[Union[torch.Tensor,
+                                       Tuple[torch.Tensor,
+                                             torch.Tensor]]] = None,
         window_size: Optional[Tuple[int, int]] = None,
-        fused_attention_backend: tex.NVTE_Fused_Attn_Backend = tex.NVTE_Fused_Attn_Backend.NVTE_No_Backend,
-        core_attention_bias_type: str = "no_bias",
+        fused_attention_backend: tex.NVTE_Fused_Attn_Backend = tex.
+        NVTE_Fused_Attn_Backend.NVTE_No_Backend,
+        core_attention_bias_type: str = 'no_bias',
         core_attention_bias: Optional[torch.Tensor] = None,
         fast_zero_fill: bool = True,
         quantizers=None,
@@ -190,7 +195,7 @@ class FusedAttention(torch.nn.Module):
         softmax_scale: float = None,
         attention_dropout: float = 0.0,
         deterministic: bool = False,
-        softmax_type: str = "vanilla",
+        softmax_type: str = 'vanilla',
     ) -> torch.Tensor:
         """fused attention fprop"""
 
@@ -230,7 +235,7 @@ class FusedAttention(torch.nn.Module):
 BACKEND_F16arb_ELTS_PER_THREADS = 16
 
 
-@torch.library.custom_op("groot::fused_attn", mutates_args=())
+@torch.library.custom_op('groot::fused_attn', mutates_args=())
 def fused_attn(
     is_training: bool,
     max_seqlen_q: int,
@@ -250,10 +255,10 @@ def fused_attn(
     attn_scale: Optional[float] = None,
     dropout: float = 0.0,
     fast_zero_fill: bool = True,
-    qkv_layout: str = "sbh3d",
-    attn_bias_type: str = "no_bias",
-    attn_mask_type: str = "padding",
-    softmax_type: str = "vanilla",
+    qkv_layout: str = 'sbh3d',
+    attn_bias_type: str = 'no_bias',
+    attn_mask_type: str = 'padding',
+    softmax_type: str = 'vanilla',
     deterministic: bool = False,
     softmax_offset: torch.Tensor = None,
 ) -> List[torch.Tensor]:
@@ -281,7 +286,7 @@ def fused_attn(
     )
 
     if _TE_VER >= (2, 8):
-        args += (SoftmaxType[softmax_type],)
+        args += (SoftmaxType[softmax_type], )
 
     args += (
         tuple(window_size),
@@ -301,7 +306,7 @@ def fused_attn(
     )
 
     if _TE_VER >= (2, 8):
-        args += (softmax_offset,)
+        args += (softmax_offset, )
 
     args += (
         rng_gen,
@@ -310,11 +315,11 @@ def fused_attn(
 
     if _TE_VER >= (2, 9):
         # return_max_logit
-        args += (False,)
+        args += (False, )
 
     if _TE_VER >= (2, 10):
         # is_cuda_graph
-        args += (False,)
+        args += (False, )
 
     output_tensors = tex.fused_attn_fwd(*args)
     return output_tensors
@@ -340,19 +345,19 @@ def _(
     attn_scale: Optional[float] = None,
     dropout: float = 0.0,
     fast_zero_fill: bool = True,
-    qkv_layout: str = "sbh3d",
-    attn_bias_type: str = "no_bias",
-    attn_mask_type: str = "padding",
-    softmax_type: str = "vanilla",
+    qkv_layout: str = 'sbh3d',
+    attn_bias_type: str = 'no_bias',
+    attn_mask_type: str = 'padding',
+    softmax_type: str = 'vanilla',
     deterministic: bool = False,
     softmax_offset: torch.Tensor = None,
 ) -> List[torch.Tensor]:
     return [
-        q.new_empty(tuple(q.shape[:-1]) + (v.shape[-1],)),
+        q.new_empty(tuple(q.shape[:-1]) + (v.shape[-1], )),
         q.new_empty(
             q.shape[0], q.shape[2], q.shape[1], 1, dtype=torch.float32
         ),  # these are the softmax outputs from cudnn; will always be float32
-        q.new_empty((2,), dtype=torch.int64),
+        q.new_empty((2, ), dtype=torch.int64),
     ]
 
 
@@ -420,11 +425,11 @@ def fused_attn_bwd_setup_context(ctx, inputs, output) -> None:
     ctx.attn_mask_type = attn_mask_type
     ctx.softmax_type = softmax_type
     ctx.window_size = window_size
-    ctx.fused_attention_backend = FusedAttnBackend["F16_arbitrary_seqlen"]
+    ctx.fused_attention_backend = FusedAttnBackend['F16_arbitrary_seqlen']
     ctx.deterministic = deterministic
 
 
-@torch.library.custom_op("groot::fused_attn_bwd_op", mutates_args=())
+@torch.library.custom_op('groot::fused_attn_bwd_op', mutates_args=())
 def fused_attn_bwd_op(
     max_seqlen_q: int,
     max_seqlen_kv: int,
@@ -462,7 +467,7 @@ def fused_attn_bwd_op(
     )
 
     if _TE_VER >= (2, 8):
-        args += (SoftmaxType[softmax_type],)
+        args += (SoftmaxType[softmax_type], )
 
     args += (
         window_size,
@@ -486,7 +491,7 @@ def fused_attn_bwd_op(
 
     if _TE_VER >= (2, 10):
         # is_cuda_graph
-        args += (False,)
+        args += (False, )
 
     dq, dk, dv, *rest = tex.fused_attn_bwd(*args)
     return dq, dk, dv
@@ -542,10 +547,9 @@ def fused_attn_bwd_impl(ctx, grad):
     if not aux_ctx_tensors[0].is_contiguous():
         aux_ctx_tensors[0] = aux_ctx_tensors[0].contiguous()
 
-    with torch.cuda.nvtx.range("FusedAttnFunc.backward"):
-        assert ctx.fused_attention_backend != FusedAttnBackend["No_Backend"], (
-            "Fused attention does not support this input combination."
-        )
+    with torch.cuda.nvtx.range('FusedAttnFunc.backward'):
+        assert ctx.fused_attention_backend != FusedAttnBackend['No_Backend'], (
+            'Fused attention does not support this input combination.')
 
         # get nominal data type of dq, dk, dv
         # FP16/BF16 attention: torch.float16 or torch.bfloat16
@@ -607,4 +611,5 @@ def fused_attn_bwd_impl(ctx, grad):
         return output
 
 
-fused_attn.register_autograd(fused_attn_bwd_impl, setup_context=fused_attn_bwd_setup_context)
+fused_attn.register_autograd(
+    fused_attn_bwd_impl, setup_context=fused_attn_bwd_setup_context)

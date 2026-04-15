@@ -1,17 +1,27 @@
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/wan2_1_submodule.py
+# Upstream-Ref: main
+# Additional-Upstream-URL: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/model.py
+# SPDX-License-Identifier: Apache-2.0
+# Notes: Attribution normalized; no functional change.
+
 import math
+import os
 
 import torch
 import torch.nn as nn
-import os
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.modeling_utils import ModelMixin
 from einops import repeat
+
 from .attention import flash_attention
 
 __all__ = ['WanModel']
 
-ENABLE_TENSORRT = os.getenv("ENABLE_TENSORRT", "False").lower() == "true"
+ENABLE_TENSORRT = os.getenv('ENABLE_TENSORRT', 'False').lower() == 'true'
+
 
 def sinusoidal_embedding_1d(dim: int, position: torch.Tensor) -> torch.Tensor:
     # preprocess
@@ -21,7 +31,10 @@ def sinusoidal_embedding_1d(dim: int, position: torch.Tensor) -> torch.Tensor:
 
     # calculation
     sinusoid = torch.outer(
-        position, torch.pow(10000, -torch.arange(half, dtype=position.dtype, device=position.device).div(half)))
+        position,
+        torch.pow(
+            10000, -torch.arange(
+                half, dtype=position.dtype, device=position.device).div(half)))
     x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
     return x
 
@@ -34,7 +47,9 @@ def rope_params(max_seq_len, dim, theta=10000):
 
 
 # @amp.autocast(enabled=False)
-def rope_params_polar(max_seq_len: int, dim: int, theta: float = 10000) -> torch.Tensor:
+def rope_params_polar(max_seq_len: int,
+                      dim: int,
+                      theta: float = 10000) -> torch.Tensor:
     assert dim % 2 == 0
     freqs = torch.outer(
         torch.arange(max_seq_len),
@@ -43,16 +58,18 @@ def rope_params_polar(max_seq_len: int, dim: int, theta: float = 10000) -> torch
     freqs = torch.polar(torch.ones_like(freqs), freqs)
     return freqs
 
-def rope_params_no_polar(max_seq_len: int, dim: int, theta: float = 10000) -> torch.Tensor:
+
+def rope_params_no_polar(max_seq_len: int,
+                         dim: int,
+                         theta: float = 10000) -> torch.Tensor:
     assert dim % 2 == 0
-    inv_freq = 1.0 / torch.pow(
-        theta,
-        torch.arange(0, dim, 2).to(torch.float32) / dim
-    )
+    inv_freq = 1.0 / torch.pow(theta,
+                               torch.arange(0, dim, 2).to(torch.float32) / dim)
     t = torch.arange(max_seq_len, dtype=inv_freq.dtype)
     freqs = torch.outer(t, inv_freq)
     emb = torch.stack((freqs.cos(), freqs.sin()), dim=-1).flatten(-2)
     return emb
+
 
 def rope_apply(x, grid_sizes, freqs):
     if ENABLE_TENSORRT:
@@ -60,19 +77,20 @@ def rope_apply(x, grid_sizes, freqs):
     else:
         return rope_apply_polar(x, freqs)
 
+
 # @amp.autocast(enabled=False)
 def rope_apply_polar(x: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     B, seq_len, n, _ = x.shape
 
     # precompute multipliers
     x = torch.view_as_complex(
-        x.to(torch.float64).reshape(B, seq_len, n, -1, 2)
-    )
+        x.to(torch.float64).reshape(B, seq_len, n, -1, 2))
 
     # apply rotary embedding
     freqs = freqs.unsqueeze(0)
     x = torch.view_as_real(x * freqs).flatten(3)
     return x
+
 
 def rope_apply_no_polar(x: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     B, seq_len, n, D = x.shape
@@ -89,11 +107,23 @@ def rope_apply_no_polar(x: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     return x_rotated
 
 
-def rope_action_apply(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block=32, num_state_per_block=1):
+def rope_action_apply(x,
+                      freqs,
+                      freqs_action,
+                      freqs_state,
+                      action_register_length,
+                      num_action_per_block=32,
+                      num_state_per_block=1):
     if ENABLE_TENSORRT:
-        return rope_action_apply_no_polar(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block, num_state_per_block)
+        return rope_action_apply_no_polar(x, freqs, freqs_action, freqs_state,
+                                          action_register_length,
+                                          num_action_per_block,
+                                          num_state_per_block)
     else:
-        return rope_action_apply_polar(x, freqs, freqs_action, freqs_state, action_register_length, num_action_per_block, num_state_per_block)
+        return rope_action_apply_polar(x, freqs, freqs_action, freqs_state,
+                                       action_register_length,
+                                       num_action_per_block,
+                                       num_state_per_block)
 
 
 def rope_action_apply_no_polar(
@@ -108,7 +138,8 @@ def rope_action_apply_no_polar(
     B, seq_len, n, D = x.shape
 
     if action_register_length is not None:
-        chunk_size = action_register_length // (num_action_per_block + num_state_per_block)
+        chunk_size = action_register_length // (
+            num_action_per_block + num_state_per_block)
         freqs_1d_action = freqs_action[:chunk_size * num_action_per_block]
         freqs_1d_state = freqs_state[:chunk_size * num_state_per_block]
         freqs = torch.cat([freqs, freqs_1d_action, freqs_1d_state], dim=0)
@@ -140,17 +171,21 @@ def rope_action_apply_polar(
 
     # precompute multipliers
     x = torch.view_as_complex(
-        x.to(torch.float64).reshape(B, seq_len, n, -1, 2)
-    )
+        x.to(torch.float64).reshape(B, seq_len, n, -1, 2))
 
     if action_register_length is not None:
         assert num_action_per_block is not None
         assert num_state_per_block is not None
 
-        chunk_size = action_register_length // (num_action_per_block + num_state_per_block)
+        chunk_size = action_register_length // (
+            num_action_per_block + num_state_per_block)
 
-        freqs_1d_action = freqs_action[:chunk_size * num_action_per_block].view(chunk_size * num_action_per_block, 1, -1)
-        freqs_1d_state = freqs_state[:chunk_size * num_state_per_block].view(chunk_size * num_state_per_block, 1, -1)
+        freqs_1d_action = freqs_action[:chunk_size *
+                                       num_action_per_block].view(
+                                           chunk_size * num_action_per_block,
+                                           1, -1)
+        freqs_1d_state = freqs_state[:chunk_size * num_state_per_block].view(
+            chunk_size * num_state_per_block, 1, -1)
         freqs = torch.cat([freqs, freqs_1d_action, freqs_1d_state], dim=0)
 
     # apply rotary embedding
@@ -256,15 +291,15 @@ class WanT2VCrossAttention(WanSelfAttention):
         q = self.norm_q(self.q(x)).view(b, -1, n, d)
 
         if crossattn_cache is not None:
-            if not crossattn_cache["is_init"]:
-                crossattn_cache["is_init"] = True
+            if not crossattn_cache['is_init']:
+                crossattn_cache['is_init'] = True
                 k = self.norm_k(self.k(context)).view(b, -1, n, d)
                 v = self.v(context).view(b, -1, n, d)
-                crossattn_cache["k"] = k
-                crossattn_cache["v"] = v
+                crossattn_cache['k'] = k
+                crossattn_cache['v'] = v
             else:
-                k = crossattn_cache["k"]
-                v = crossattn_cache["v"]
+                k = crossattn_cache['k']
+                v = crossattn_cache['v']
         else:
             k = self.norm_k(self.k(context)).view(b, -1, n, d)
             v = self.v(context).view(b, -1, n, d)
@@ -333,18 +368,18 @@ class WanI2VCrossAttention(WanSelfAttention):
 
         q = self.norm_q(self.q(x)).view(b, -1, n, d)
 
-        if crossattn_cache is not None: 
-            if not crossattn_cache["is_init"]:
-                crossattn_cache["is_init"] = True
+        if crossattn_cache is not None:
+            if not crossattn_cache['is_init']:
+                crossattn_cache['is_init'] = True
                 k = self.norm_k(self.k(context)).view(b, -1, n, d)
                 v = self.v(context).view(b, -1, n, d)
-                crossattn_cache["k"] = k
-                crossattn_cache["v"] = v
-            else: 
-                k = crossattn_cache["k"]
-                v = crossattn_cache["v"] 
-        else: 
-            # compute query, key, value   
+                crossattn_cache['k'] = k
+                crossattn_cache['v'] = v
+            else:
+                k = crossattn_cache['k']
+                v = crossattn_cache['v']
+        else:
+            # compute query, key, value
             k = self.norm_k(self.k(context)).view(b, -1, n, d)
             v = self.v(context).view(b, -1, n, d)
         x = flash_attention(q, k, v, k_lens=None)
@@ -394,11 +429,8 @@ class WanAttentionBlock(nn.Module):
         self.norm3 = WanLayerNorm(
             dim, eps,
             elementwise_affine=True) if cross_attn_norm else nn.Identity()
-        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](dim,
-                                                                      num_heads,
-                                                                      (-1, -1),
-                                                                      qk_norm,
-                                                                      eps)
+        self.cross_attn = WAN_CROSSATTENTION_CLASSES[cross_attn_type](
+            dim, num_heads, (-1, -1), qk_norm, eps)
         self.norm2 = WanLayerNorm(dim, eps)
         self.ffn = nn.Sequential(
             nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
@@ -432,7 +464,9 @@ class WanAttentionBlock(nn.Module):
 
         # self-attention
         y = self.self_attn(
-            self.norm1(x) * (1 + e[1]) + e[0], seq_lens, grid_sizes,
+            self.norm1(x) * (1 + e[1]) + e[0],
+            seq_lens,
+            grid_sizes,
             freqs,
         )
         # with amp.autocast(dtype=torch.float32):
@@ -482,10 +516,8 @@ class GanAttentionBlock(nn.Module):
             nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
             nn.Linear(ffn_dim, dim))
 
-        self.cross_attn = WanGanCrossAttention(dim, num_heads,
-                                               (-1, -1),
-                                               qk_norm,
-                                               eps)
+        self.cross_attn = WanGanCrossAttention(dim, num_heads, (-1, -1),
+                                               qk_norm, eps)
 
         # modulation
         # self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
@@ -508,6 +540,7 @@ class GanAttentionBlock(nn.Module):
             grid_sizes(Tensor): Shape [B, 3], the second dimension contains (F, H, W)
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
+
         # assert e.dtype == torch.float32
         # with amp.autocast(dtype=torch.float32):
         # e = (self.modulation + e).chunk(6, dim=1)
@@ -578,9 +611,11 @@ class MLPProj(torch.nn.Module):
 
 
 class RegisterTokens(nn.Module):
+
     def __init__(self, num_registers: int, dim: int):
         super().__init__()
-        self.register_tokens = nn.Parameter(torch.randn(num_registers, dim) * 0.02)
+        self.register_tokens = nn.Parameter(
+            torch.randn(num_registers, dim) * 0.02)
         self.rms_norm = WanRMSNorm(dim, eps=1e-6)
 
     def forward(self):
@@ -684,8 +719,8 @@ class WanModel(ModelMixin, ConfigMixin):
 
         self.time_embedding = nn.Sequential(
             nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(dim, dim * 6))
+        self.time_projection = nn.Sequential(nn.SiLU(),
+                                             nn.Linear(dim, dim * 6))
 
         # blocks
         cross_attn_type = 't2v_cross_attn' if model_type == 't2v' else 'i2v_cross_attn'
@@ -761,7 +796,10 @@ class WanModel(ModelMixin, ConfigMixin):
             self.freqs = [freqs_i.to(device) for freqs_i in self.freqs]
 
         if y is not None:
-            x = [torch.cat([u, v.to(dtype=u.dtype)], dim=0) for u, v in zip(x, y)]
+            x = [
+                torch.cat([u, v.to(dtype=u.dtype)], dim=0)
+                for u, v in zip(x, y)
+            ]
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
@@ -805,8 +843,10 @@ class WanModel(ModelMixin, ConfigMixin):
             context_lens=context_lens)
 
         def create_custom_forward(module):
+
             def custom_forward(*inputs, **kwargs):
                 return module(*inputs, **kwargs)
+
             return custom_forward
 
         # TODO: Tune the number of blocks for feature extraction
@@ -817,7 +857,7 @@ class WanModel(ModelMixin, ConfigMixin):
             assert cls_pred_branch is not None
 
             final_x = []
-            registers = repeat(register_tokens(), "n d -> b n d", b=x.shape[0])
+            registers = repeat(register_tokens(), 'n d -> b n d', b=x.shape[0])
             # x = torch.cat([registers, x], dim=1)
 
         gan_idx = 0
@@ -825,21 +865,24 @@ class WanModel(ModelMixin, ConfigMixin):
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
-                    x, **kwargs,
+                    x,
+                    **kwargs,
                     use_reentrant=False,
                 )
             else:
                 x = block(x, **kwargs)
 
             if classify_mode and ii in [13, 21, 29]:
-                gan_token = registers[:, gan_idx: gan_idx + 1]
+                gan_token = registers[:, gan_idx:gan_idx + 1]
                 final_x.append(gan_ca_blocks[gan_idx](x, gan_token))
                 gan_idx += 1
 
         if classify_mode:
             final_x = torch.cat(final_x, dim=1)
             if concat_time_embeddings:
-                final_x = cls_pred_branch(torch.cat([final_x, 10 * e[:, None, :]], dim=1).view(final_x.shape[0], -1))
+                final_x = cls_pred_branch(
+                    torch.cat([final_x, 10 * e[:, None, :]],
+                              dim=1).view(final_x.shape[0], -1))
             else:
                 final_x = cls_pred_branch(final_x.view(final_x.shape[0], -1))
 

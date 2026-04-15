@@ -1,3 +1,12 @@
+# Copyright (c) 2025 NVIDIA Corporation. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Origin: Source
+# Upstream-URL: https://github.com/dreamzero0/dreamzero/blob/main/groot/vla/model/dreamzero/modules/wan_video_text_encoder.py
+# Upstream-Ref: main
+# Additional-Upstream-URL: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/t5.py
+# Notes: Attribution normalized; no functional change.
+
 import math
 
 import torch
@@ -190,6 +199,7 @@ class T5RelativeEmbedding(nn.Module):
         rel_buckets += torch.where(rel_pos < max_exact, rel_pos, rel_pos_large)
         return rel_buckets
 
+
 def init_weights(m):
     if isinstance(m, T5LayerNorm):
         nn.init.ones_(m.weight)
@@ -219,7 +229,7 @@ class WanTextEncoder(torch.nn.Module):
                  num_buckets=32,
                  shared_pos=False,
                  dropout=0.1,
-                 text_encoder_pretrained_path: str=None):
+                 text_encoder_pretrained_path: str = None):
         super(WanTextEncoder, self).__init__()
         self.dim = dim
         self.dim_attn = dim_attn
@@ -263,18 +273,19 @@ class WanTextEncoder(torch.nn.Module):
         x = self.norm(x)
         x = self.dropout(x)
         return x
-    
+
     @staticmethod
     def state_dict_converter():
         return WanTextEncoderStateDictConverter()
-    
-    
+
+
 class WanTextEncoderStateDictConverter:
+
     def __init__(self):
         pass
 
     def from_diffusers(self, state_dict):
         return state_dict
-    
+
     def from_civitai(self, state_dict):
         return state_dict
