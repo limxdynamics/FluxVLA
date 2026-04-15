@@ -79,8 +79,6 @@ class DreamZeroHead(nn.Module):
         frame_seqlen: Spatial sequence length per latent frame.
         noise_beta_alpha / noise_beta_beta / noise_s: Flow matching noise
             distribution parameters.
-        train_architecture: ``"full"`` or ``"lora"``.
-        lora_rank / lora_alpha / lora_target_modules: LoRA hyper-params.
         pretrained_name_or_path: Path to Wan 2.1 checkpoint directory for
             loading DiT pretrained weights.  ``None`` skips loading.
     """
@@ -110,10 +108,6 @@ class DreamZeroHead(nn.Module):
         noise_beta_beta: float = 1.0,
         noise_s: float = 0.999,
         num_inference_steps: int = 4,
-        train_architecture: str = 'full',
-        lora_rank: int = 4,
-        lora_alpha: int = 4,
-        lora_target_modules: str = 'q,k,v,o,ffn.0,ffn.2',
         pretrained_name_or_path: Optional[str] = None,
         use_gradient_checkpointing: bool = True,
         *args,
@@ -131,7 +125,6 @@ class DreamZeroHead(nn.Module):
         self.num_frame_per_block = num_frame_per_block
         self.noise_s = noise_s
         self.num_inference_steps = num_inference_steps
-        self.train_architecture = train_architecture
         self.num_action_per_block = num_action_per_block
         self.num_state_per_block = num_state_per_block
         self.use_cache = False
@@ -166,10 +159,6 @@ class DreamZeroHead(nn.Module):
         # ----- load pretrained weights -----
         if pretrained_name_or_path is not None:
             self._load_pretrained_weights(pretrained_name_or_path)
-
-        # ----- set trainable -----
-        self._setup_trainable(train_architecture, lora_rank, lora_alpha,
-                              lora_target_modules)
 
         if use_gradient_checkpointing:
             self.model.enable_gradient_checkpointing()
@@ -212,26 +201,6 @@ class DreamZeroHead(nn.Module):
         if unexpected:
             logger.info('DiT unexpected keys: %s', unexpected)
         logger.info('Loaded DiT weights from %s', dit_dir)
-
-    def _setup_trainable(self, architecture, lora_rank, lora_alpha,
-                         lora_target_modules):
-        if architecture == 'lora':
-            from peft import LoraConfig, get_peft_model
-            for p in self.model.parameters():
-                p.requires_grad = False
-            lora_config = LoraConfig(
-                r=lora_rank,
-                lora_alpha=lora_alpha,
-                init_lora_weights=True,
-                target_modules=lora_target_modules.split(','),
-            )
-            self.model = get_peft_model(self.model, lora_config)
-            for param in self.model.parameters():
-                param.data = param.to(torch.float32)
-            self.model.state_encoder.requires_grad_(True)
-            self.model.action_encoder.requires_grad_(True)
-            self.model.action_decoder.requires_grad_(True)
-        # For "full" training, everything in self.model stays trainable.
 
     # ------------------------------------------------------------------
     # Training forward
