@@ -455,7 +455,7 @@ export WANDB_MODE=disabled
 
 ```
 export WANDB_MODE=disabled
-bash scripts/train_ali.sh [CONFIG] [WORK_DIR] --cfg-options train_dataloader.per_device_batch_size=[PER_DEVICE_BATCH_SIZE] train_dataloader.batch_size=[GLOBAL_BATCH_SIZE] runner.max_steps=[MAX_STEPS] runner.save_interval=[SAVE_INTERVAL] runner.max_keep_ckpts=[MAX_KEEP_CKPTS] --eval-after-train
+bash scripts/train.sh [CONFIG] [WORK_DIR] --cfg-options train_dataloader.per_device_batch_size=[PER_DEVICE_BATCH_SIZE] train_dataloader.batch_size=[GLOBAL_BATCH_SIZE] runner.max_steps=[MAX_STEPS] runner.save_interval=[SAVE_INTERVAL] runner.max_keep_ckpts=[MAX_KEEP_CKPTS] --eval-after-train
 ```
 
 </details>
@@ -480,7 +480,7 @@ export WANDB_MODE=disabled
 
 ```
 export WANDB_MODE=disabled
-bash scripts/train_ali.sh [CONFIG] [WORK_DIR] \
+bash scripts/train.sh [CONFIG] [WORK_DIR] \
   --resume-from [CHECKPOINT_PATH] \
   --cfg-options train_dataloader.per_device_batch_size=[PER_DEVICE_BATCH_SIZE] runner.max_steps=[MAX_STEPS]
 ```
@@ -492,7 +492,7 @@ bash scripts/train_ali.sh [CONFIG] [WORK_DIR] \
 
 ```
 export WANDB_MODE=disabled
-bash scripts/eval_ali.sh [CONFIG] [CKPT_PATH] --cfg-options [CFG_OPTIONS]
+bash scripts/eval.sh [CONFIG] [CKPT_PATH] --cfg-options [CFG_OPTIONS]
 ```
 
 </details>
