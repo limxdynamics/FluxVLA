@@ -167,6 +167,37 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
+    """Manual scaled dot-product attention (reference implementation).
+
+    Explicitly materializes the full attention-weights matrix, so peak
+    memory is O(B * H * L_q * L_k). Kept as a correctness/debug baseline
+    and for environments where SDPA / Flash-Attn are unavailable. For
+    training, prefer `sdpa_attention_forward`.
+
+    Args:
+        module: The parent attention module. Only
+            `module.num_key_value_groups` and `module.training` are read.
+        query: Tensor of shape (B, H, L_q, D).
+        key: Tensor of shape (B, H_kv, L_k, D).
+        value: Tensor of shape (B, H_kv, L_k, D).
+        attention_mask: Optional additive mask of shape
+            (B, 1, L_q, L_k_padded). Values should be 0 (attend) or
+            -inf / a large negative number (mask). If provided, only the
+            first `L_k` columns are used.
+        scaling: Multiplier applied to QK^T before softmax (typically
+            `1 / sqrt(head_dim)`).
+        dropout: Attention dropout probability; only applied when
+            `module.training` is True.
+        **kwargs: Unused, kept for interface compatibility with other
+            attention backends.
+
+    Returns:
+        A tuple `(attn_output, attn_weights)`:
+            attn_output: Tensor of shape (B, L_q, H, D) — note the final
+                head/seq transpose to match the caller's reshape contract.
+            attn_weights: Full attention matrix of shape
+                (B, H, L_q, L_k), useful for debugging / visualization.
+    """
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -195,6 +226,44 @@ def sdpa_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
+    """Attention via `torch.nn.functional.scaled_dot_product_attention`.
+
+    PyTorch's SDPA dispatches at runtime to the fastest available backend
+    (Flash-Attn 2 when the inputs satisfy its constraints, otherwise
+    memory-efficient / xformers-style attention, otherwise the math
+    fallback). Peak memory is O(N) instead of O(N^2), so this is the
+    recommended backend for both training and inference of PI0/PI0.5.
+
+    Notes:
+        - For the Flash-Attn backend, `query`/`key`/`value` must be fp16
+          or bf16 and `attn_mask` must be None or a pure causal mask.
+        - When `attention_mask` is an arbitrary additive 4D mask (as in
+          PI0's block attention), SDPA falls back to the memory-efficient
+          backend, which is still O(N) and well-optimized.
+        - `attention_mask` should match the compute dtype (e.g. bf16) to
+          avoid forcing a fallback to the slower math backend.
+
+    Args:
+        module: Parent attention module (reads `num_key_value_groups`
+            and `training`).
+        query: Tensor of shape (B, H, L_q, D).
+        key: Tensor of shape (B, H_kv, L_k, D).
+        value: Tensor of shape (B, H_kv, L_k, D).
+        attention_mask: Optional additive mask of shape
+            (B, 1, L_q, L_k_padded). Only the first `L_k` columns are
+            used. Pass None for causal or unmasked attention.
+        scaling: Softmax scale (typically `1 / sqrt(head_dim)`), passed
+            through as SDPA's `scale` argument.
+        dropout: Dropout probability; only applied when `module.training`
+            is True.
+        **kwargs: Unused, kept for interface compatibility.
+
+    Returns:
+        A tuple `(attn_output, None)`:
+            attn_output: Tensor of shape (B, L_q, H, D). The second
+                element is always None because SDPA does not expose the
+                attention weights.
+    """
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
