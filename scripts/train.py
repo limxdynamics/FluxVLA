@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import argparse
+import gc
 import json
 import os
 
 import draccus
 import torch
+import torch.distributed as dist
 import yaml
 from mmengine import Config, DictAction
 
@@ -65,6 +67,43 @@ def parse_args():
     )
     args, unknown = parser.parse_known_args()
     return args, unknown
+
+
+def _sync_distributed():
+    if dist.is_available() and dist.is_initialized():
+        dist.barrier()
+
+
+def _release_training_resources(runner, dataset):
+    """Release training state before building evaluation objects."""
+    overwatch.info('Cleaning up training resources before evaluation.')
+    _sync_distributed()
+
+    if runner is not None and hasattr(runner, 'cleanup'):
+        runner.cleanup()
+
+    if dataset is not None:
+        for method_name in ('cleanup', 'close'):
+            method = getattr(dataset, method_name, None)
+            if callable(method):
+                method()
+                break
+
+    runner = None
+    dataset = None
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        ipc_collect = getattr(torch.cuda, 'ipc_collect', None)
+        if callable(ipc_collect):
+            try:
+                ipc_collect()
+            except RuntimeError:
+                pass
+
+    _sync_distributed()
+    return runner, dataset
 
 
 def train(args, cfg):
@@ -118,7 +157,11 @@ def train(args, cfg):
             overwatch.warning(
                 'No evaluation configuration found. Skipping evaluation.')
             return
-        torch.cuda.empty_cache()
+        runner, dataset = _release_training_resources(runner, dataset)
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        _sync_distributed()
         overwatch.info('Evaluation after training is enabled.')
         assert 'eval' in cfg, 'Evaluation configuration is missing.'
         overwatch.info('Running Evaluation')

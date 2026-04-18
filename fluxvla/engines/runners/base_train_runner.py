@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import math
 import os
 from abc import ABC, abstractmethod
@@ -168,6 +169,7 @@ class BaseTrainRunner(ABC):
         self.optimizer_state_loaded = False
         # Store lr_schedule for step-based scheduler
         self.lr_schedule = lr_schedule
+        self._active_dataloader = None
 
         # Lightweight Validation
         assert (
@@ -232,6 +234,55 @@ class BaseTrainRunner(ABC):
                 converted_batch[key] = value
 
         return converted_batch
+
+    @staticmethod
+    def _shutdown_dataloader(dataloader: Optional[DataLoader]) -> None:
+        """Stop DataLoader workers so they do not overlap with evaluation."""
+        if dataloader is None:
+            return
+
+        iterator = getattr(dataloader, '_iterator', None)
+        shutdown_fn = getattr(iterator, '_shutdown_workers', None)
+        if callable(shutdown_fn):
+            shutdown_fn()
+
+    def cleanup(self) -> None:
+        """Release training resources before launching evaluation."""
+        self._shutdown_dataloader(self._active_dataloader)
+        self._active_dataloader = None
+
+        if self.optimizer is not None:
+            try:
+                self.optimizer.zero_grad(set_to_none=True)
+            except TypeError:
+                self.optimizer.zero_grad()
+
+        if self.vla is not None:
+            try:
+                self.vla.zero_grad(set_to_none=True)
+            except TypeError:
+                self.vla.zero_grad()
+
+        self.optimizer = None
+        self.lr_scheduler = None
+        self.collator = None
+        self.tokenizer = None
+        self.vla = None
+        self._loss_accumulator.clear()
+
+        if hasattr(self, 'recent_losses'):
+            self.recent_losses.clear()
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            ipc_collect = getattr(torch.cuda, 'ipc_collect', None)
+            if callable(ipc_collect):
+                try:
+                    ipc_collect()
+                except RuntimeError:
+                    pass
 
     @abstractmethod
     def save_checkpoint(
@@ -615,11 +666,17 @@ class BaseTrainRunner(ABC):
         # Dispatch to training mode specific loop
         self.vla.train()
         self.optimizer.zero_grad()
+        self._active_dataloader = dataloader
 
-        if self.training_mode == 'step_based':
-            return self._run_step_based(dataloader, sampler)
-        else:
-            return self._run_epoch_based(dataloader, sampler)
+        try:
+            if self.training_mode == 'step_based':
+                return self._run_step_based(dataloader, sampler)
+            else:
+                return self._run_epoch_based(dataloader, sampler)
+        finally:
+            self._shutdown_dataloader(self._active_dataloader)
+            self._active_dataloader = None
+            gc.collect()
 
     def _run_step_based(self, dataloader, sampler) -> str:
         """Step-based training loop. Handles infinite dataloaders."""
