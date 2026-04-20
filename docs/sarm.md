@@ -43,6 +43,15 @@ These configs expect:
 
 Notes:
 
+- SARM annotations are read from the standard LeRobot episodes metadata
+  (`meta/episodes.jsonl` for v2.1, `meta/episodes/*.parquet` for v3.x) as
+  columns named `sparse_subtask_names` / `sparse_subtask_start_frames` /
+  `sparse_subtask_end_frames` and their `dense_*` counterparts. This is the
+  same source used by the official `lerobot.policies.sarm` implementation.
+  Sparse annotations also fall back to unprefixed column names
+  (`subtask_names`, `subtask_start_frames`, `subtask_end_frames`) for
+  backwards compatibility. Separate `sarm_*_annotations.jsonl` files are no
+  longer consulted.
 - The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-32B-Instruct`.
 - `./checkpoints/sarm_dense_smoke` is a preserved smoke-test model directory from the external SARM workflow.
 - FluxVLA's `scripts/infer_sarm_progress.py` expects a FluxVLA training checkpoint file such as `./checkpoints/sarm_dense_only_flux_smoke.pt`.

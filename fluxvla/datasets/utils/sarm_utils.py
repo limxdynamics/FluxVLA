@@ -225,13 +225,33 @@ def normalize_stage_tau(
         resolved_breakpoints[stage + 1] - resolved_breakpoints[stage])
 
 
-def _annotation_candidates(meta_root: Path,
-                           annotation_type: str) -> List[Path]:
-    return [
-        meta_root / f'sarm_{annotation_type}_annotations.jsonl',
-        meta_root / f'{annotation_type}_annotations.jsonl',
-        meta_root / f'annotations_{annotation_type}.jsonl',
-    ]
+def _annotation_prefixes(annotation_type: str) -> List[str]:
+    """Column-name prefixes used to discover SARM annotations on the
+    standard LeRobot episodes metadata (``episodes.jsonl`` /
+    ``meta/episodes/*.parquet``).
+
+    Sparse annotations also fall back to the unprefixed column names to stay
+    backwards compatible with older sparse-only datasets.
+    """
+    prefixes = [f'{annotation_type}_']
+    if annotation_type == 'sparse':
+        prefixes.append('')
+    return prefixes
+
+
+def _extract_annotation_row(record: Dict,
+                            annotation_type: str) -> Optional[Dict]:
+    for prefix in _annotation_prefixes(annotation_type):
+        names = record.get(f'{prefix}subtask_names')
+        start_frames = record.get(f'{prefix}subtask_start_frames')
+        end_frames = record.get(f'{prefix}subtask_end_frames')
+        if names is not None:
+            return {
+                'subtask_names': names,
+                'subtask_start_frames': start_frames,
+                'subtask_end_frames': end_frames,
+            }
+    return None
 
 
 def load_temporal_proportions(
@@ -251,47 +271,33 @@ def load_temporal_proportions(
 
 def load_episode_annotations(meta_root: str | Path,
                              annotation_type: str) -> Dict[int, Dict]:
-    meta_root = Path(meta_root)
-    for candidate in _annotation_candidates(meta_root, annotation_type):
-        if candidate.exists():
-            records = {}
-            with open(candidate, 'r', encoding='utf-8') as handle:
-                for line in handle:
-                    if not line.strip():
-                        continue
-                    record = json.loads(line)
-                    episode_index = int(record['episode_index'])
-                    records[episode_index] = {
-                        'subtask_names': record.get('subtask_names'),
-                        'subtask_start_frames':
-                        record.get('subtask_start_frames'),
-                        'subtask_end_frames': record.get('subtask_end_frames'),
-                    }
-            return records
+    """Load per-episode SARM annotations from the standard LeRobot episodes
+    metadata.
 
+    Supported sources (in priority order):
+
+    * ``meta/episodes.jsonl`` (LeRobotDataset v2.1)
+    * ``meta/episodes/**/*.parquet`` (LeRobotDataset v3.x)
+
+    Both forms store annotations as extra columns on the episodes table, for
+    example ``sparse_subtask_names`` / ``dense_subtask_start_frames`` /
+    ``dense_subtask_end_frames``. This matches how the official LeRobot SARM
+    code (``lerobot.policies.sarm``) reads annotations via
+    ``dataset_meta.episodes.to_pandas()``.
+    """
+    meta_root = Path(meta_root)
     episodes_path = meta_root / 'episodes.jsonl'
     if episodes_path.exists():
-        prefix = f'{annotation_type}_'
-        records = {}
+        records: Dict[int, Dict] = {}
         with open(episodes_path, 'r', encoding='utf-8') as handle:
             for episode_index, line in enumerate(handle):
                 if not line.strip():
                     continue
                 record = json.loads(line)
-                names = record.get(f'{prefix}subtask_names')
-                start_frames = record.get(f'{prefix}subtask_start_frames')
-                end_frames = record.get(f'{prefix}subtask_end_frames')
-                if annotation_type == 'sparse' and names is None:
-                    names = record.get('subtask_names')
-                    start_frames = record.get('subtask_start_frames')
-                    end_frames = record.get('subtask_end_frames')
-                if names is None:
+                annotation = _extract_annotation_row(record, annotation_type)
+                if annotation is None:
                     continue
-                records[episode_index] = {
-                    'subtask_names': names,
-                    'subtask_start_frames': start_frames,
-                    'subtask_end_frames': end_frames,
-                }
+                records[episode_index] = annotation
         return records
 
     episodes_dir = meta_root / 'episodes'
@@ -309,23 +315,12 @@ def load_episode_annotations(meta_root: str | Path,
     episodes_dataset = concatenate_datasets(
         [cast(HFDataset, dataset) for dataset in datasets])
 
-    prefix = f'{annotation_type}_'
     records = {}
     for raw_record in episodes_dataset:
         record = cast(Dict[str, object], raw_record)
-        episode_index = int(cast(int | float | str, record['episode_index']))
-        names = record.get(f'{prefix}subtask_names')
-        start_frames = record.get(f'{prefix}subtask_start_frames')
-        end_frames = record.get(f'{prefix}subtask_end_frames')
-        if annotation_type == 'sparse' and names is None:
-            names = record.get('subtask_names')
-            start_frames = record.get('subtask_start_frames')
-            end_frames = record.get('subtask_end_frames')
-        if names is None:
+        annotation = _extract_annotation_row(record, annotation_type)
+        if annotation is None:
             continue
-        records[episode_index] = {
-            'subtask_names': names,
-            'subtask_start_frames': start_frames,
-            'subtask_end_frames': end_frames,
-        }
+        episode_index = int(cast(int | float | str, record['episode_index']))
+        records[episode_index] = annotation
     return records
