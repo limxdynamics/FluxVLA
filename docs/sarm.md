@@ -59,6 +59,39 @@ Notes:
 - For LeRobot v2.1/v3.x style datasets, `task` can be stored as a task index. FluxVLA resolves it back to task text at read time from `tasks.jsonl` or `tasks.parquet` without modifying dataset files.
 - If your dataset uses a camera key other than `observation.images.image`, override `train_dataloader.dataset.video_keys` and `inference_dataset.video_keys` with `--cfg-options`.
 
+## Annotating a Dataset
+
+SARM training requires per-episode subtask annotations stored on the standard
+LeRobot episodes metadata. FluxVLA ships the official annotation pipeline
+(ported from HuggingFace LeRobot's
+`lerobot/data_processing/sarm_annotations/`) under
+[`tools/sarm_annotate/`](../tools/sarm_annotate/README.md). It runs a local
+Qwen3-VL model on the episode videos and writes the results back as extra
+columns (`sparse_subtask_*`, `dense_subtask_*`) to `meta/episodes.jsonl`
+(v2.1) or `meta/episodes/*.parquet` (v3.x).
+
+Three annotation modes are supported (matching the three SARM configs under
+[`configs/sarm/`](../configs/sarm)):
+
+- `single_stage` — no flags, auto-creates one sparse `"task"` stage per
+  episode.
+- `dense_only` — `--dense-only --dense-subtasks "Do A, Do B, ..."`.
+- `dual` — `--sparse-subtasks "..." --dense-subtasks "..."`.
+
+Example:
+
+```bash
+python tools/sarm_annotate/subtask_annotation.py \
+  --repo-id /path/to/your/lerobot_dataset \
+  --video-key observation.images.image \
+  --dense-only \
+  --dense-subtasks "Move to object, Grasp object, Move to target, Place object"
+```
+
+See [`tools/sarm_annotate/README.md`](../tools/sarm_annotate/README.md) for
+the full set of flags, dependencies (`lerobot>=0.3.4`, `qwen-vl-utils`,
+`transformers`, …), and the distributed per-episode runner.
+
 ## Training
 
 Example training command:
