@@ -103,11 +103,11 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 使用本地 Qwen3-VL 对 episode 视频自动生成标注。支持三种模式：
 
-| 模式           | CLI 用法                                                     | 对应 FluxVLA 配置                         |
-|----------------|--------------------------------------------------------------|-------------------------------------------|
-| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`                | `configs/sarm/sarm_single_stage_*.py`     |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"`           | `configs/sarm/sarm_dense_only_*.py`       |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`             | `configs/sarm/sarm_dual_*.py`             |
+| 模式           | CLI 用法                                           | 对应 FluxVLA 配置                     |
+| -------------- | -------------------------------------------------- | ------------------------------------- |
+| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`      | `configs/sarm/sarm_single_stage_*.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only_*.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual_*.py`         |
 
 ### 依赖（仅 VLM 路线需要）
 
@@ -166,15 +166,15 @@ train_dataloader = dict(
 
 ## 出处与来源
 
-| 本地文件                          | 上游                                                                     | 改动 |
-|-----------------------------------|--------------------------------------------------------------------------|------|
-| `subtask_annotation.py`           | `lerobot/data_processing/sarm_annotations/subtask_annotation.py`         | 仅调整 sibling 模块导入路径。|
-| `subtask_annotation_timing.py`    | `lerobot/data_processing/sarm_annotations/subtask_annotation_timing.py`  | 仅调整导入路径。|
-| `run_vlm_dense_subset.py`         | `lerobot/scripts/run_vlm_dense_subset.py`                                | 仅调整导入路径。|
-| `parse_sparse_episode_info.py`    | `lerobot/parse_sparse_episode_info.py`                                   | 原样移植。|
-| `parse_dense_episode_info.py`     | `lerobot/parse_dense_episode_info.py`                                    | 原样移植。|
-| `fix_sparse_annotations.py`       | `lerobot/fix_sparse_annotations.py`                                      | 原样移植。|
-| `clear_written_annotations.py`    | `lerobot/clear_written_annotations.py`                                   | 原样移植。|
-| `write_manual_stages.py`          | FluxVLA 原生                                                              | 从 JSON/JSONL spec 同时支持 v2.1 与 v3.x 写入。|
+| 本地文件                       | 上游                                                                    | 改动                                            |
+| ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------- |
+| `subtask_annotation.py`        | `lerobot/data_processing/sarm_annotations/subtask_annotation.py`        | 仅调整 sibling 模块导入路径。                   |
+| `subtask_annotation_timing.py` | `lerobot/data_processing/sarm_annotations/subtask_annotation_timing.py` | 仅调整导入路径。                                |
+| `run_vlm_dense_subset.py`      | `lerobot/scripts/run_vlm_dense_subset.py`                               | 仅调整导入路径。                                |
+| `parse_sparse_episode_info.py` | `lerobot/parse_sparse_episode_info.py`                                  | 原样移植。                                      |
+| `parse_dense_episode_info.py`  | `lerobot/parse_dense_episode_info.py`                                   | 原样移植。                                      |
+| `fix_sparse_annotations.py`    | `lerobot/fix_sparse_annotations.py`                                     | 原样移植。                                      |
+| `clear_written_annotations.py` | `lerobot/clear_written_annotations.py`                                  | 原样移植。                                      |
+| `write_manual_stages.py`       | FluxVLA 原生                                                            | 从 JSON/JSONL spec 同时支持 v2.1 与 v3.x 写入。 |
 
 所有上游文件都保留了原始的 Apache 2.0 HuggingFace 版权头。

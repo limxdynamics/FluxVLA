@@ -127,11 +127,11 @@ matching `--default-sparse` / `--default-dense`) is left untouched.
 
 Uses a local Qwen3-VL model to auto-annotate episode videos. Three modes:
 
-| Mode           | CLI invocation                                               | Intended FluxVLA config                 |
-|----------------|--------------------------------------------------------------|-----------------------------------------|
-| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args             | `configs/sarm/sarm_single_stage_*.py`   |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"`           | `configs/sarm/sarm_dense_only_*.py`     |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`             | `configs/sarm/sarm_dual_*.py`           |
+| Mode           | CLI invocation                                     | Intended FluxVLA config               |
+| -------------- | -------------------------------------------------- | ------------------------------------- |
+| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args   | `configs/sarm/sarm_single_stage_*.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only_*.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual_*.py`         |
 
 ### Requirements (VLM path only)
 
@@ -198,16 +198,15 @@ episodes metadata, which is also what `lerobot.policies.sarm` reads.
 
 ## Origin
 
-| Local file                       | Upstream                                                                | Changes |
-|----------------------------------|-------------------------------------------------------------------------|---------|
-| `subtask_annotation.py`          | `lerobot/data_processing/sarm_annotations/subtask_annotation.py`        | Only import paths for sibling module. |
-| `subtask_annotation_timing.py`   | `lerobot/data_processing/sarm_annotations/subtask_annotation_timing.py` | Only import paths. |
-| `run_vlm_dense_subset.py`        | `lerobot/scripts/run_vlm_dense_subset.py`                               | Only import paths. |
-| `parse_sparse_episode_info.py`   | `lerobot/parse_sparse_episode_info.py`                                  | Verbatim. |
-| `parse_dense_episode_info.py`    | `lerobot/parse_dense_episode_info.py`                                   | Verbatim. |
-| `fix_sparse_annotations.py`      | `lerobot/fix_sparse_annotations.py`                                     | Verbatim. |
-| `clear_written_annotations.py`   | `lerobot/clear_written_annotations.py`                                  | Verbatim. |
-| `write_manual_stages.py`         | FluxVLA-native                                                          | Supports both v2.1 and v3.x from a simple JSON/JSONL spec. |
+| Local file                     | Upstream                                                                | Changes                                                    |
+| ------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `subtask_annotation.py`        | `lerobot/data_processing/sarm_annotations/subtask_annotation.py`        | Only import paths for sibling module.                      |
+| `subtask_annotation_timing.py` | `lerobot/data_processing/sarm_annotations/subtask_annotation_timing.py` | Only import paths.                                         |
+| `run_vlm_dense_subset.py`      | `lerobot/scripts/run_vlm_dense_subset.py`                               | Only import paths.                                         |
+| `parse_sparse_episode_info.py` | `lerobot/parse_sparse_episode_info.py`                                  | Verbatim.                                                  |
+| `parse_dense_episode_info.py`  | `lerobot/parse_dense_episode_info.py`                                   | Verbatim.                                                  |
+| `fix_sparse_annotations.py`    | `lerobot/fix_sparse_annotations.py`                                     | Verbatim.                                                  |
+| `clear_written_annotations.py` | `lerobot/clear_written_annotations.py`                                  | Verbatim.                                                  |
+| `write_manual_stages.py`       | FluxVLA-native                                                          | Supports both v2.1 and v3.x from a simple JSON/JSONL spec. |
 
 All upstream files retain their Apache 2.0 HuggingFace headers.
-

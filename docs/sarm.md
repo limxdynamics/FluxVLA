@@ -2,7 +2,7 @@
 
 FluxVLA's integration of [SARM (Stage-Aware Reward Modeling)](https://github.com/xdofai/opensarm) for long-horizon robot manipulation.
 
-> **Paper**: [SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation](https://arxiv.org/abs/2509.25358)  
+> **Paper**: [SARM: Stage-Aware Reward Modeling for Long Horizon Robot Manipulation](https://arxiv.org/abs/2509.25358)
 > **Original Repository**: [https://github.com/xdofai/opensarm](https://github.com/xdofai/opensarm)
 
 ## SARM Checkpoints
@@ -148,11 +148,11 @@ Runs a local Qwen3-VL model on the episode videos and writes the same columns
 back. Requires a GPU (≥16 GB VRAM for the 30B MoE variant) and
 `pip install qwen-vl-utils transformers`. Three modes:
 
-| Mode           | CLI invocation                                               | Intended config                         |
-|----------------|--------------------------------------------------------------|-----------------------------------------|
-| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args             | `configs/sarm/sarm_single_stage_*.py`   |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."`            | `configs/sarm/sarm_dense_only_*.py`     |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`             | `configs/sarm/sarm_dual_*.py`           |
+| Mode           | CLI invocation                                    | Intended config                       |
+| -------------- | ------------------------------------------------- | ------------------------------------- |
+| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args  | `configs/sarm/sarm_single_stage_*.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."` | `configs/sarm/sarm_dense_only_*.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`  | `configs/sarm/sarm_dual_*.py`         |
 
 ```bash
 python tools/sarm_annotate/subtask_annotation.py \
@@ -172,8 +172,7 @@ worker processes.
 - `tools/sarm_annotate/parse_dense_episode_info.py` — same, for dense.
 - `tools/sarm_annotate/fix_sparse_annotations.py` — force single-stage
   `"task"` on a v3.x dataset.
-- `tools/sarm_annotate/clear_written_annotations.py --dataset-root <root>
-  [--apply]` — dry-run / remove all SARM columns + proportions files from a
+- `tools/sarm_annotate/clear_written_annotations.py --dataset-root <root> [--apply]` — dry-run / remove all SARM columns + proportions files from a
   v3.x dataset.
 
 See [`tools/sarm_annotate/README.md`](../tools/sarm_annotate/README.md) for

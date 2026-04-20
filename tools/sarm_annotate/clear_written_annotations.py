@@ -1,38 +1,39 @@
 #!/usr/bin/env python
+# flake8: noqa
+# isort: skip_file
+# yapf: disable
 """Clear annotation fields written into a LeRobot v3 dataset."""
 
 from __future__ import annotations
-
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-
 ANNOTATION_COLUMNS = [
-    "dense_subtask_names",
-    "dense_subtask_start_times",
-    "dense_subtask_end_times",
-    "dense_subtask_start_frames",
-    "dense_subtask_end_frames",
-    "sparse_subtask_names",
-    "sparse_subtask_start_times",
-    "sparse_subtask_end_times",
-    "sparse_subtask_start_frames",
-    "sparse_subtask_end_frames",
-    "subtask_names",
-    "subtask_start_times",
-    "subtask_end_times",
-    "subtask_start_frames",
-    "subtask_end_frames",
+    'dense_subtask_names',
+    'dense_subtask_start_times',
+    'dense_subtask_end_times',
+    'dense_subtask_start_frames',
+    'dense_subtask_end_frames',
+    'sparse_subtask_names',
+    'sparse_subtask_start_times',
+    'sparse_subtask_end_times',
+    'sparse_subtask_start_frames',
+    'sparse_subtask_end_frames',
+    'subtask_names',
+    'subtask_start_times',
+    'subtask_end_times',
+    'subtask_start_frames',
+    'subtask_end_frames',
 ]
 
 DERIVED_FILES = [
-    "meta/temporal_proportions_dense.json",
-    "meta/temporal_proportions_sparse.json",
-    "dense_episode_info.json",
-    "sparse_episode_info.json",
-    "subtask_episode_info.json",
+    'meta/temporal_proportions_dense.json',
+    'meta/temporal_proportions_sparse.json',
+    'dense_episode_info.json',
+    'sparse_episode_info.json',
+    'subtask_episode_info.json',
 ]
 
 
@@ -42,7 +43,8 @@ def has_value(v) -> bool:
     return not (isinstance(v, float) and pd.isna(v))
 
 
-def clear_parquet_annotations(parquet_path: Path, apply: bool) -> tuple[int, int]:
+def clear_parquet_annotations(parquet_path: Path,
+                              apply: bool) -> tuple[int, int]:
     df = pd.read_parquet(parquet_path)
     existing = [c for c in ANNOTATION_COLUMNS if c in df.columns]
     if not existing:
@@ -55,25 +57,28 @@ def clear_parquet_annotations(parquet_path: Path, apply: bool) -> tuple[int, int
     if apply and non_null_cells > 0:
         for col in existing:
             df[col] = pd.Series([None] * len(df), dtype=object)
-        df.to_parquet(parquet_path, engine="pyarrow", compression="snappy")
+        df.to_parquet(parquet_path, engine='pyarrow', compression='snappy')
 
     return len(existing), non_null_cells
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Clear written dense/sparse/subtask annotations.")
-    parser.add_argument("--dataset-root", type=Path, required=True)
+    parser = argparse.ArgumentParser(
+        description='Clear written dense/sparse/subtask annotations.')
+    parser.add_argument('--dataset-root', type=Path, required=True)
     parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Actually write changes. Without this flag, only prints what would be cleared.",
+        '--apply',
+        action='store_true',
+        help=
+        'Actually write changes. Without this flag, only prints what would be cleared.',
     )
     args = parser.parse_args()
 
-    episodes_dir = args.dataset_root / "meta" / "episodes"
-    parquet_files = sorted(episodes_dir.glob("*/*.parquet"))
+    episodes_dir = args.dataset_root / 'meta' / 'episodes'
+    parquet_files = sorted(episodes_dir.glob('*/*.parquet'))
     if not parquet_files:
-        raise FileNotFoundError(f"No episodes parquet found under: {episodes_dir}")
+        raise FileNotFoundError(
+            f"No episodes parquet found under: {episodes_dir}")
 
     total_cols = 0
     total_cells = 0
@@ -95,8 +100,8 @@ def main() -> None:
                 print(f"Would remove: {path}")
 
     if not args.apply:
-        print("Dry-run mode. Add --apply to execute.")
+        print('Dry-run mode. Add --apply to execute.')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -193,7 +193,8 @@ class ProcessParquetInputs():
         for frame in reader:
             current_ts = frame['pts']
             if log_loaded_timestamps:
-                logging.info(f'frame loaded at timestamp={current_ts:.4f}')
+                logging.info(
+                    'frame loaded at timestamp={:.4f}'.format(current_ts))
             loaded_frames.append(frame['data'])
             loaded_ts.append(current_ts)
             if current_ts >= last_ts:
@@ -245,7 +246,7 @@ class ProcessParquetInputs():
         assert 'video_path' in info, "Input data must contain 'video_path' key"
         video_root_path = info['video_path']
         for key in self.parquet_keys:
-            assert key in data, f'Key {key} not found in input data'
+            assert key in data, f'Key {key} not found in input data'  # noqa: E713,E501
             if self.name_mappings is not None and key in self.name_mappings:
                 if isinstance(self.name_mappings[key], str):
                     if isinstance(data[key], list) or isinstance(
@@ -377,7 +378,8 @@ class ProcessLiberoEvalInputs:
         imgs = list()
         for img_key in self.img_keys:
             if img_key not in inputs:
-                raise KeyError(f'Image key `{img_key}` not found in inputs!')
+                raise KeyError(
+                    'Image key {!r} missing from inputs!'.format(img_key))
             imgs.append(get_libero_image(inputs, self.resize_size, img_key))
         replay_img = copy.deepcopy(imgs[0])
         images = list()

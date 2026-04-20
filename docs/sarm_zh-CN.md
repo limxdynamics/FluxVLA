@@ -123,11 +123,11 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 在本机跑 Qwen3-VL，对 episode 视频自动生成相同的列并写回。需要 GPU（30B MoE 版本建议 ≥16 GB 显存）和 `pip install qwen-vl-utils transformers`。支持三种模式：
 
-| 模式           | CLI 用法                                                     | 对应配置                                 |
-|----------------|--------------------------------------------------------------|------------------------------------------|
-| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`                | `configs/sarm/sarm_single_stage_*.py`    |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."`            | `configs/sarm/sarm_dense_only_*.py`      |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`             | `configs/sarm/sarm_dual_*.py`            |
+| 模式           | CLI 用法                                          | 对应配置                              |
+| -------------- | ------------------------------------------------- | ------------------------------------- |
+| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`     | `configs/sarm/sarm_single_stage_*.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."` | `configs/sarm/sarm_dense_only_*.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`  | `configs/sarm/sarm_dual_*.py`         |
 
 ```bash
 python tools/sarm_annotate/subtask_annotation.py \
