@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package fluxvla;
+
+// Raw observation: key-value maps grouped by data type.
+// Images are JPEG-compressed bytes; arrays are numpy .npy bytes.
+message Observation {
+    map<string, bytes>  images  = 1;
+    map<string, bytes>  arrays  = 2;
+    map<string, string> strings = 3;
+}
+
+// predict_action request / response
+message PredictActionRequest {
+    Observation obs     = 1;
+    string unnorm_key   = 2;
+}
+
+message PredictActionResponse {
+    bytes  action_data  = 1;   // numpy .npy serialized action tensor
+    double infer_time   = 2;   // server-side inference time (seconds)
+    string error        = 3;   // non-empty on failure
+}
