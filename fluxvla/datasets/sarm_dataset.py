@@ -58,7 +58,11 @@ class SARMDataset(Dataset):
         self.rewind_probability = rewind_probability
         self.state_key = state_key
         self.training = training
-        self.total_frames = 1 + n_obs_steps + max_rewind_steps
+        # At inference we emit exactly one sample per frame (n_obs_steps + 1
+        # obs frames, no rewind tail) to stay aligned with how gr00t-style
+        # ParquetDataset iterates over a dataset at inference time.
+        rewind_reserve = max_rewind_steps if training else 0
+        self.total_frames = 1 + n_obs_steps + rewind_reserve
 
         self.info = []
         self.tasks = []
