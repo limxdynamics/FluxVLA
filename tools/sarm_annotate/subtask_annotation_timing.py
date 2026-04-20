@@ -74,7 +74,7 @@ def resolve_dataset_spec(dataset_source: str) -> tuple[str, Path | None]:
         info_path = source_path / 'meta' / 'info.json'
         if not info_path.exists():
             raise ValueError(
-                f"Local dataset path does not look like a LeRobot dataset: {source_path}"
+                f'Local dataset path does not look like a LeRobot dataset: {source_path}'
             )
         return source_path.name, source_path
     return dataset_source, None
@@ -88,9 +88,9 @@ def round_timing(value: float | None) -> float | None:
 
 def compute_episode_duration_s(dataset_meta: Any, episode_index: int,
                                video_key: str) -> float:
-    start = float(dataset_meta.episodes[f"videos/{video_key}/from_timestamp"]
+    start = float(dataset_meta.episodes[f'videos/{video_key}/from_timestamp']
                   [episode_index])
-    end = float(dataset_meta.episodes[f"videos/{video_key}/to_timestamp"]
+    end = float(dataset_meta.episodes[f'videos/{video_key}/to_timestamp']
                 [episode_index])
     return end - start
 
@@ -136,11 +136,11 @@ def save_proportions(
         'task': 1.0
     } if is_auto else compute_temporal_proportions(annotations, fps,
                                                    subtask_list)
-    path = dataset_root / 'meta' / f"temporal_proportions_{prefix}.json"
+    path = dataset_root / 'meta' / f'temporal_proportions_{prefix}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as file:
         json.dump(props, file, indent=2, ensure_ascii=False)
-    print(f"Saved {prefix} temporal proportions")
+    print(f'Saved {prefix} temporal proportions')
 
 
 def build_timing_record(episode_index: int) -> dict[str, Any]:
@@ -245,7 +245,7 @@ def save_timing_summary(
     with open(output_path, 'w', encoding='utf-8') as file:
         json.dump(summary, file, indent=2, ensure_ascii=False)
 
-    print(f"Saved timing summary to: {output_path}")
+    print(f'Saved timing summary to: {output_path}')
     if summary['average_total_vlm_time_s'] is not None:
         print(
             f"Weighted average total VLM time per episode: {summary['average_total_vlm_time_s']:.3f}s"
@@ -277,7 +277,7 @@ def worker_process_episodes_timed(
     """Worker for parallel processing across GPUs with episode-level timing."""
     del worker_id
 
-    device = f"cuda:{gpu_id}"
+    device = f'cuda:{gpu_id}'
     dataset = LeRobotDataset(repo_id, root=dataset_root, download_videos=False)
 
     sparse_annotator = (
@@ -447,7 +447,7 @@ def main() -> None:
 
     repo_id, dataset_root = resolve_dataset_spec(args.repo_id)
 
-    print(f"Loading dataset: {args.repo_id}")
+    print(f'Loading dataset: {args.repo_id}')
     dataset = LeRobotDataset(repo_id, root=dataset_root, download_videos=True)
     fps = dataset.fps
 
@@ -457,7 +457,7 @@ def main() -> None:
     video_key = (
         args.video_key if args.video_key in (dataset.meta.video_keys or [])
         else dataset.meta.video_keys[0])
-    print(f"Using camera: {video_key}, FPS: {fps}")
+    print(f'Using camera: {video_key}, FPS: {fps}')
 
     if args.visualize_only:
         print('Visualization-only mode')
@@ -471,7 +471,7 @@ def main() -> None:
             return
 
         print(
-            f"Found {len(sparse_annotations)} sparse, {len(dense_annotations)} dense annotations"
+            f'Found {len(sparse_annotations)} sparse, {len(dense_annotations)} dense annotations'
         )
         visualize_annotations(
             dataset=dataset,
@@ -524,13 +524,13 @@ def main() -> None:
         sampler = random.Random(args.random_seed)
         episode_indices = sorted(sampler.sample(episode_indices, sample_count))
         print(
-            f"Randomly sampled {len(episode_indices)} episodes with seed {args.random_seed}: {episode_indices}"
+            f'Randomly sampled {len(episode_indices)} episodes with seed {args.random_seed}: {episode_indices}'
         )
 
     if not episode_indices:
         print('All episodes already annotated!')
         return
-    print(f"Annotating {len(episode_indices)} episodes")
+    print(f'Annotating {len(episode_indices)} episodes')
 
     gpu_ids = args.gpu_ids or list(
         range(
@@ -556,7 +556,7 @@ def main() -> None:
 
     if need_vlm:
         if args.num_workers > 1:
-            print(f"Parallel processing with {args.num_workers} workers")
+            print(f'Parallel processing with {args.num_workers} workers')
             episodes_per_worker = [[] for _ in range(args.num_workers)]
             for index, episode_idx in enumerate(episode_indices):
                 episodes_per_worker[index %
@@ -603,7 +603,7 @@ def main() -> None:
                                 fps,
                                 prefix='dense')
                     except Exception as err:
-                        raise RuntimeError(f"Worker failed: {err}") from err
+                        raise RuntimeError(f'Worker failed: {err}') from err
         else:
             sparse_annotator = (
                 VideoAnnotator(sparse_subtask_list, args.model, args.device,
@@ -621,7 +621,7 @@ def main() -> None:
 
             for index, episode_idx in enumerate(episode_indices):
                 print(
-                    f"Episode {episode_idx} ({index + 1}/{len(episode_indices)})"
+                    f'Episode {episode_idx} ({index + 1}/{len(episode_indices)})'
                 )
                 record = build_timing_record(episode_idx)
                 record['episode_duration_s'] = compute_episode_duration_s(
@@ -645,7 +645,7 @@ def main() -> None:
                             prefix='sparse')
                     elif sparse_err:
                         record['sparse_error'] = sparse_err
-                        print(f"Sparse failed: {sparse_err}")
+                        print(f'Sparse failed: {sparse_err}')
 
                 if dense_annotator:
                     start_time = time.perf_counter()
@@ -664,7 +664,7 @@ def main() -> None:
                             prefix='dense')
                     elif dense_err:
                         record['dense_error'] = dense_err
-                        print(f"Dense failed: {dense_err}")
+                        print(f'Dense failed: {dense_err}')
 
                 record = finalize_timing_record(record)
                 timing_records.append(record)
@@ -677,7 +677,7 @@ def main() -> None:
                          dense_subtask_list)
 
     print(
-        f"\nComplete! {len(sparse_annotations)} sparse, {len(dense_annotations or {})} dense annotations"
+        f'\nComplete! {len(sparse_annotations)} sparse, {len(dense_annotations or {})} dense annotations'
     )
 
     if need_vlm:
@@ -697,7 +697,7 @@ def main() -> None:
         )
 
     if args.num_visualizations > 0:
-        print(f"\nGenerating {args.num_visualizations} visualizations...")
+        print(f'\nGenerating {args.num_visualizations} visualizations...')
         visualize_type = 'both' if dense_mode else 'sparse'
         visualize_annotations(
             dataset=dataset,
@@ -712,9 +712,9 @@ def main() -> None:
     if args.push_to_hub:
         try:
             dataset.push_to_hub(push_videos=True)
-            print(f"Pushed to {args.output_repo_id or repo_id}")
+            print(f'Pushed to {args.output_repo_id or repo_id}')
         except Exception as err:
-            print(f"Push failed: {err}")
+            print(f'Push failed: {err}')
 
 
 if __name__ == '__main__':

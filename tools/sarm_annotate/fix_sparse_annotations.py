@@ -29,7 +29,7 @@ def fix_temporal_proportions(meta_dir: Path) -> None:
     data = {'task': 1.0}
     out_path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"Wrote {out_path}")
+    print(f'Wrote {out_path}')
 
 
 def _compute_lengths(df: pd.DataFrame) -> pd.Series:
@@ -43,10 +43,10 @@ def _compute_lengths(df: pd.DataFrame) -> pd.Series:
 def fix_episodes(episodes_dir: Path) -> None:
     parquet_files = sorted(episodes_dir.glob('*/*.parquet'))
     if not parquet_files:
-        raise FileNotFoundError(f"No parquet files under {episodes_dir}")
+        raise FileNotFoundError(f'No parquet files under {episodes_dir}')
 
     for p in parquet_files:
-        print(f"Fixing {p}")
+        print(f'Fixing {p}')
         table = pq.read_table(p)
         df = table.to_pandas()
 
@@ -65,7 +65,7 @@ def fix_episodes(episodes_dir: Path) -> None:
         tmp_path = p.with_suffix('.fixed.tmp.parquet')
         df.to_parquet(tmp_path, index=False)
         tmp_path.replace(p)
-        print(f"Rewrote {p}")
+        print(f'Rewrote {p}')
 
 
 def main() -> None:

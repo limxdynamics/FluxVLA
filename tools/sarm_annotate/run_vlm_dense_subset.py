@@ -39,7 +39,7 @@ def resolve_dataset_spec(dataset_source: str) -> tuple[str, Path | None]:
         info_path = source_path / 'meta' / 'info.json'
         if not info_path.exists():
             raise ValueError(
-                f"Local dataset path does not look like a LeRobot dataset: {source_path}"
+                f'Local dataset path does not look like a LeRobot dataset: {source_path}'
             )
         return source_path.name, source_path
     return dataset_source, None
@@ -68,9 +68,9 @@ def round_timing(value: float | None) -> float | None:
 
 def compute_episode_duration_s(dataset_meta: Any, episode_index: int,
                                video_key: str) -> float:
-    start = float(dataset_meta.episodes[f"videos/{video_key}/from_timestamp"]
+    start = float(dataset_meta.episodes[f'videos/{video_key}/from_timestamp']
                   [episode_index])
-    end = float(dataset_meta.episodes[f"videos/{video_key}/to_timestamp"]
+    end = float(dataset_meta.episodes[f'videos/{video_key}/to_timestamp']
                 [episode_index])
     return end - start
 
@@ -185,7 +185,7 @@ def save_timing_summary(
     with open(output_path, 'w', encoding='utf-8') as file:
         json.dump(summary, file, indent=2, ensure_ascii=False)
 
-    print(f"Saved timing summary to: {output_path}")
+    print(f'Saved timing summary to: {output_path}')
     if summary['average_total_vlm_time_s'] is not None:
         print(
             f"Weighted average total VLM time per episode: {summary['average_total_vlm_time_s']:.3f}s"
@@ -210,7 +210,7 @@ def worker_process_dense_episodes(
 ) -> tuple[dict[int, list[dict[str, float | str]]], list[dict[str, Any]]]:
     del worker_id
 
-    device = f"cuda:{gpu_id}"
+    device = f'cuda:{gpu_id}'
     dataset = LeRobotDataset(repo_id, root=dataset_root, download_videos=False)
     dense_annotator = VideoAnnotator(dense_subtask_list, model_name, device,
                                      torch_dtype)
@@ -344,7 +344,7 @@ def main() -> None:
         gpu_ids = args.gpu_ids or list(
             range(min(args.num_workers, torch.cuda.device_count())))
         worker_count = len(gpu_ids)
-        print(f"Parallel processing with {worker_count} workers")
+        print(f'Parallel processing with {worker_count} workers')
 
         episodes_per_worker = [[] for _ in range(worker_count)]
         for index, episode_index in enumerate(selected_episode_indices):
@@ -414,7 +414,7 @@ def main() -> None:
     ]
     if missing_episode_indices:
         raise RuntimeError(
-            f"Dense VLM annotation failed for episodes: {missing_episode_indices}"
+            f'Dense VLM annotation failed for episodes: {missing_episode_indices}'
         )
 
     annotations_payload = {
@@ -431,7 +431,7 @@ def main() -> None:
     }
     with open(output_path, 'w', encoding='utf-8') as file:
         json.dump(annotations_payload, file, indent=2, ensure_ascii=False)
-    print(f"Saved dense annotations to: {output_path}")
+    print(f'Saved dense annotations to: {output_path}')
 
     save_timing_summary(
         output_path=timing_output,
