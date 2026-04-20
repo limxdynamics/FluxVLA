@@ -31,6 +31,25 @@ from .utils import pad_to_dim, parse_image
 
 
 @TRANSFORMS.register_module()
+class PadStates:
+
+    def __init__(self, max_state_dim: int = 32):
+        self.max_state_dim = max_state_dim
+
+    def __call__(self, data: Dict) -> Dict:
+        states = np.asarray(data['states'], dtype=np.float32)
+        current_dim = states.shape[-1]
+        if current_dim >= self.max_state_dim:
+            data['states'] = states[..., :self.max_state_dim]
+            return data
+        padded_shape = (*states.shape[:-1], self.max_state_dim)
+        padded = np.zeros(padded_shape, dtype=np.float32)
+        padded[..., :current_dim] = states
+        data['states'] = padded
+        return data
+
+
+@TRANSFORMS.register_module()
 class ProcessLiberoInputs():
     """Process inputs for Libero dataset.
     This transform processes the inputs from the Libero

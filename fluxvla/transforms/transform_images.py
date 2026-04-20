@@ -69,6 +69,36 @@ class ResizeImages:
 
 
 @TRANSFORMS.register_module()
+class ResizeImageSequence:
+
+    def __init__(self, height: int, width: int, *args, **kwargs):
+        self.height = height
+        self.width = width
+
+    def __call__(self, data: Dict) -> Dict:
+        assert 'images' in data, "Input data must contain 'images' key"
+        images = np.asarray(data['images'])
+        original_shape = images.shape
+        if images.ndim < 4:
+            raise ValueError(
+                'Input image sequence must have at least 4 dimensions')
+        flat_images = images.reshape(-1, original_shape[-3],
+                                     original_shape[-2], original_shape[-1])
+
+        resized_images = []
+        for image in flat_images:
+            resized_images.append(
+                cv2.resize(
+                    image.transpose(1, 2, 0), (self.width, self.height),
+                    interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1))
+
+        data['images'] = np.stack(
+            resized_images, axis=0).reshape(*original_shape[:-2], self.height,
+                                            self.width)
+        return data
+
+
+@TRANSFORMS.register_module()
 class AugImage:
     """Augment images with random transformations including
     rotation, brightness/contrast adjustment, and random cropping.
@@ -218,6 +248,55 @@ class NormalizeImages:
 
         normalized_images = np.concatenate(normalized_images, axis=0)
         data['images'] = normalized_images
+        return data
+
+
+@TRANSFORMS.register_module()
+class NormalizeImageSequence:
+
+    def __init__(self,
+                 means: List,
+                 stds: List,
+                 scale_to_unit_interval: bool = False,
+                 *args,
+                 **kwargs):
+        self.means = np.asarray(means, dtype=np.float32)
+        self.stds = np.asarray(stds, dtype=np.float32)
+        self.scale_to_unit_interval = scale_to_unit_interval
+
+    def __call__(self, data: Dict) -> Dict:
+        assert 'images' in data, "Input data must contain 'images' key"
+        images = np.asarray(data['images'])
+        original_shape = images.shape
+        flat_images = images.reshape(-1, original_shape[-3],
+                                     original_shape[-2],
+                                     original_shape[-1]).astype(np.float32)
+        if self.scale_to_unit_interval:
+            flat_images = flat_images / 255.0
+
+        means = self.means
+        stds = self.stds
+        if means.ndim == 1:
+            means = np.broadcast_to(means[None, :], (flat_images.shape[0], 3))
+        if stds.ndim == 1:
+            stds = np.broadcast_to(stds[None, :], (flat_images.shape[0], 3))
+        if means.shape[0] == 1:
+            means = np.broadcast_to(means, (flat_images.shape[0], 3))
+        if stds.shape[0] == 1:
+            stds = np.broadcast_to(stds, (flat_images.shape[0], 3))
+        if (means.shape[0] != flat_images.shape[0]
+                or stds.shape[0] != flat_images.shape[0]):
+            raise ValueError(
+                'Means/stds must have length 1 or match the number '
+                'of images after flattening.')
+
+        normalized_images = []
+        for idx, image in enumerate(flat_images):
+            normalized_images.append((image - means[idx][:, None, None]) /
+                                     (stds[idx][:, None, None] + 1e-8))
+
+        data['images'] = np.stack(
+            normalized_images, axis=0).reshape(original_shape)
         return data
 
 
