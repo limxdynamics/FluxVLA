@@ -131,7 +131,7 @@ def _load_spec(spec_path: Optional[Path]) -> Dict[int, Dict[str, Any]]:
     if spec_path is None:
         return {}
     if not spec_path.exists():
-        raise FileNotFoundError(f"Spec file not found: {spec_path}")
+        raise FileNotFoundError(f'Spec file not found: {spec_path}')
 
     text = spec_path.read_text(encoding='utf-8').strip()
     if not text:
@@ -172,7 +172,7 @@ def _resolve_block(
         return None
     if isinstance(value, str):
         if value != 'auto':
-            raise ValueError(f"Unsupported stage shorthand: {value!r}")
+            raise ValueError(f'Unsupported stage shorthand: {value!r}')
         if episode_length <= 0:
             return None
         return {
@@ -185,7 +185,7 @@ def _resolve_block(
 
     if not isinstance(value, dict):
         raise ValueError(
-            f"Unsupported stage block type: {type(value).__name__}")
+            f'Unsupported stage block type: {type(value).__name__}')
 
     names = value.get('names')
     starts = value.get('start_frames')
@@ -194,8 +194,8 @@ def _resolve_block(
         raise ValueError(
             "Stage block must contain 'names', 'start_frames', 'end_frames'")
     if not (len(names) == len(starts) == len(ends)):
-        raise ValueError(f"Stage block lengths disagree: names={len(names)}, "
-                         f"starts={len(starts)}, ends={len(ends)}")
+        raise ValueError(f'Stage block lengths disagree: names={len(names)}, '
+                         f'starts={len(starts)}, ends={len(ends)}')
 
     return {
         'names': [str(n) for n in names],
@@ -241,7 +241,7 @@ def _write_proportions(meta_dir: Path, kind: str,
     target = meta_dir / (SPARSE_PROPS if kind == 'sparse' else DENSE_PROPS)
     target.write_text(
         json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f"Wrote {target}")
+    print(f'Wrote {target}')
 
 
 # ---------------------------------------------------------------------------
@@ -264,13 +264,13 @@ def _apply_block_v21(record: Dict[str, Any], kind: str,
                      block: Optional[StagesBlock]) -> None:
     if block is None:
         return
-    record[f"{kind}_subtask_names"] = block['names']
-    record[f"{kind}_subtask_start_frames"] = block['start_frames']
-    record[f"{kind}_subtask_end_frames"] = block['end_frames']
+    record[f'{kind}_subtask_names'] = block['names']
+    record[f'{kind}_subtask_start_frames'] = block['start_frames']
+    record[f'{kind}_subtask_end_frames'] = block['end_frames']
     if block.get('start_times') is not None:
-        record[f"{kind}_subtask_start_times"] = block['start_times']
+        record[f'{kind}_subtask_start_times'] = block['start_times']
     if block.get('end_times') is not None:
-        record[f"{kind}_subtask_end_times"] = block['end_times']
+        record[f'{kind}_subtask_end_times'] = block['end_times']
 
 
 def _rewrite_jsonl(
@@ -314,7 +314,7 @@ def _rewrite_jsonl(
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + '\n')
     tmp_path.replace(jsonl_path)
-    print(f"Rewrote {jsonl_path} ({updated} episodes updated)")
+    print(f'Rewrote {jsonl_path} ({updated} episodes updated)')
     return sparse_acc, dense_acc, updated
 
 
@@ -335,11 +335,11 @@ def _episode_length_v3(row: pd.Series) -> int:
 
 def _apply_block_v3(df: pd.DataFrame, col_prefix: str,
                     blocks: List[Optional[StagesBlock]]) -> None:
-    name_col = f"{col_prefix}_subtask_names"
-    start_col = f"{col_prefix}_subtask_start_frames"
-    end_col = f"{col_prefix}_subtask_end_frames"
-    start_t_col = f"{col_prefix}_subtask_start_times"
-    end_t_col = f"{col_prefix}_subtask_end_times"
+    name_col = f'{col_prefix}_subtask_names'
+    start_col = f'{col_prefix}_subtask_start_frames'
+    end_col = f'{col_prefix}_subtask_end_frames'
+    start_t_col = f'{col_prefix}_subtask_start_times'
+    end_t_col = f'{col_prefix}_subtask_end_times'
 
     df[name_col] = [b['names'] if b else None for b in blocks]
     df[start_col] = [b['start_frames'] if b else None for b in blocks]
@@ -393,7 +393,7 @@ def _rewrite_parquet(
         df.to_parquet(
             tmp_path, index=False, engine='pyarrow', compression='snappy')
         tmp_path.replace(path)
-        print(f"Rewrote {path} ({updated_here} episodes updated)")
+        print(f'Rewrote {path} ({updated_here} episodes updated)')
         total_updated += updated_here
 
     return sparse_acc, dense_acc, total_updated
@@ -437,16 +437,16 @@ def main() -> None:
 
     meta_dir = args.dataset_root / 'meta'
     if not meta_dir.exists():
-        raise FileNotFoundError(f"meta/ not found under {args.dataset_root}")
+        raise FileNotFoundError(f'meta/ not found under {args.dataset_root}')
 
     spec = _load_spec(args.spec)
 
     if spec:
-        print(f"Loaded {len(spec)} spec entries from {args.spec}")
+        print(f'Loaded {len(spec)} spec entries from {args.spec}')
     if args.default_sparse:
-        print(f"Default sparse fallback: {args.default_sparse!r}")
+        print(f'Default sparse fallback: {args.default_sparse!r}')
     if args.default_dense:
-        print(f"Default dense fallback: {args.default_dense!r}")
+        print(f'Default dense fallback: {args.default_dense!r}')
 
     jsonl_path = meta_dir / EPISODES_JSONL
     episodes_dir = meta_dir / EPISODES_DIR
@@ -458,19 +458,19 @@ def main() -> None:
         parquet_files = sorted(episodes_dir.glob('*/*.parquet'))
         if not parquet_files:
             raise FileNotFoundError(
-                f"No episodes parquet under {episodes_dir}")
+                f'No episodes parquet under {episodes_dir}')
         sparse_acc, dense_acc, updated = _rewrite_parquet(
             parquet_files, spec, args.default_sparse, args.default_dense)
     else:
         raise FileNotFoundError(
-            f"Neither {jsonl_path} nor {episodes_dir} exists — not a "
+            f'Neither {jsonl_path} nor {episodes_dir} exists — not a '
             'standard LeRobot dataset?')
 
     if not args.skip_proportions:
         _write_proportions(meta_dir, 'sparse', sparse_acc)
         _write_proportions(meta_dir, 'dense', dense_acc)
 
-    print(f"Done. {updated} episode annotation(s) written.")
+    print(f'Done. {updated} episode annotation(s) written.')
 
 
 if __name__ == '__main__':

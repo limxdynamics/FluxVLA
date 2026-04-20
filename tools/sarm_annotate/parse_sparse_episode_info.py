@@ -18,7 +18,7 @@ def _load_episodes_df(episodes_dir: Path) -> pd.DataFrame:
     parquet_files = sorted(episodes_dir.glob('*/*.parquet'))
     if not parquet_files:
         raise FileNotFoundError(
-            f"No episodes parquet files found in {episodes_dir}")
+            f'No episodes parquet files found in {episodes_dir}')
 
     dfs = []
     for parquet_path in parquet_files:

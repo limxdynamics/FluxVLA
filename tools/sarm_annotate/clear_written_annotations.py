@@ -78,7 +78,7 @@ def main() -> None:
     parquet_files = sorted(episodes_dir.glob('*/*.parquet'))
     if not parquet_files:
         raise FileNotFoundError(
-            f"No episodes parquet found under: {episodes_dir}")
+            f'No episodes parquet found under: {episodes_dir}')
 
     total_cols = 0
     total_cells = 0
@@ -86,18 +86,18 @@ def main() -> None:
         cols, cells = clear_parquet_annotations(parquet_path, apply=args.apply)
         total_cols += cols
         total_cells += cells
-        print(f"{parquet_path}: columns={cols}, non_null_cells={cells}")
+        print(f'{parquet_path}: columns={cols}, non_null_cells={cells}')
 
-    print(f"Total: columns_seen={total_cols}, non_null_cells={total_cells}")
+    print(f'Total: columns_seen={total_cols}, non_null_cells={total_cells}')
 
     for rel in DERIVED_FILES:
         path = args.dataset_root / rel
         if path.exists():
             if args.apply:
                 path.unlink()
-                print(f"Removed: {path}")
+                print(f'Removed: {path}')
             else:
-                print(f"Would remove: {path}")
+                print(f'Would remove: {path}')
 
     if not args.apply:
         print('Dry-run mode. Add --apply to execute.')
