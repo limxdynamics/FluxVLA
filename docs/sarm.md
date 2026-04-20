@@ -61,24 +61,98 @@ Notes:
 
 ## Annotating a Dataset
 
-SARM training requires per-episode subtask annotations stored on the standard
-LeRobot episodes metadata. FluxVLA ships the official annotation pipeline
-(ported from HuggingFace LeRobot's
-`lerobot/data_processing/sarm_annotations/`) under
-[`tools/sarm_annotate/`](../tools/sarm_annotate/README.md). It runs a local
-Qwen3-VL model on the episode videos and writes the results back as extra
-columns (`sparse_subtask_*`, `dense_subtask_*`) to `meta/episodes.jsonl`
-(v2.1) or `meta/episodes/*.parquet` (v3.x).
+SARM training reads per-episode subtask annotations from the standard LeRobot
+episodes metadata (extra list columns on `meta/episodes.jsonl` for v2.1 /
+`meta/episodes/*.parquet` for v3.x — the same format used by
+`lerobot.policies.sarm`). FluxVLA ships two routes to produce them, both under
+[`tools/sarm_annotate/`](../tools/sarm_annotate/README.md); pick whichever
+fits your data.
 
-Three annotation modes are supported (matching the three SARM configs under
-[`configs/sarm/`](../configs/sarm)):
+### Column contract (what FluxVLA reads)
 
-- `single_stage` — no flags, auto-creates one sparse `"task"` stage per
-  episode.
-- `dense_only` — `--dense-only --dense-subtasks "Do A, Do B, ..."`.
-- `dual` — `--sparse-subtasks "..." --dense-subtasks "..."`.
+Every episode row is expected to carry list-valued columns:
 
-Example:
+- `sparse_subtask_names`, `sparse_subtask_start_frames`, `sparse_subtask_end_frames`
+- `dense_subtask_names`, `dense_subtask_start_frames`, `dense_subtask_end_frames`
+- optional: `*_start_times`, `*_end_times`
+
+Frame indices are inclusive and 0-based. Sparse annotations also fall back to
+unprefixed column names (`subtask_names`, `subtask_start_frames`,
+`subtask_end_frames`) for backwards compatibility with older sparse-only
+datasets.
+
+In addition, `meta/temporal_proportions_sparse.json` /
+`meta/temporal_proportions_dense.json` map each subtask name to its average
+temporal share across the dataset. Both tools below write these for you.
+
+### Route 1: manual stages (no GPU) — `write_manual_stages.py`
+
+Use when stage boundaries come from humans, task definitions, or heuristic
+scripts. Works on both v2.1 and v3.x.
+
+**a) Single-stage `"task"` over every episode** — bootstraps
+`single_stage` SARM training without any frame bookkeeping:
+
+```bash
+python tools/sarm_annotate/write_manual_stages.py \
+    --dataset-root /path/to/dataset \
+    --default-sparse auto
+```
+
+**b) Multi-stage sparse + dense** from a per-episode JSON spec:
+
+```bash
+python tools/sarm_annotate/write_manual_stages.py \
+    --dataset-root /path/to/dataset \
+    --spec /path/to/my_stages.json
+```
+
+where `my_stages.json` is:
+
+```json
+[
+  {
+    "episode_index": 0,
+    "sparse": {
+      "names":        ["reach", "grasp", "place"],
+      "start_frames": [0,        60,      150],
+      "end_frames":   [59,      149,      199]
+    },
+    "dense": {
+      "names":        ["move_to_cup","close_gripper","lift","move_to_plate","lower","open_gripper"],
+      "start_frames": [0,   40,  60, 100, 150, 185],
+      "end_frames":   [39,  59,  99, 149, 184, 199]
+    }
+  },
+  { "episode_index": 1, "sparse": "auto", "dense": "auto" }
+]
+```
+
+`"auto"` is shorthand for a single `"task"` stage spanning the whole episode.
+Missing entries / missing `sparse`/`dense` keys are left untouched unless you
+pass `--default-sparse auto` / `--default-dense auto`.
+
+**c) Dense-only with auto sparse fallback** (matches
+`configs/sarm/sarm_dense_only_*.py`):
+
+```bash
+python tools/sarm_annotate/write_manual_stages.py \
+    --dataset-root /path/to/dataset \
+    --spec /path/to/my_dense_stages.json \
+    --default-sparse auto
+```
+
+### Route 2: VLM-based auto-annotation — `subtask_annotation.py`
+
+Runs a local Qwen3-VL model on the episode videos and writes the same columns
+back. Requires a GPU (≥16 GB VRAM for the 30B MoE variant) and
+`pip install qwen-vl-utils transformers`. Three modes:
+
+| Mode           | CLI invocation                                               | Intended config                         |
+|----------------|--------------------------------------------------------------|-----------------------------------------|
+| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args             | `configs/sarm/sarm_single_stage_*.py`   |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."`            | `configs/sarm/sarm_dense_only_*.py`     |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`             | `configs/sarm/sarm_dual_*.py`           |
 
 ```bash
 python tools/sarm_annotate/subtask_annotation.py \
@@ -88,9 +162,22 @@ python tools/sarm_annotate/subtask_annotation.py \
   --dense-subtasks "Move to object, Grasp object, Move to target, Place object"
 ```
 
+For large datasets, `run_vlm_dense_subset.py` parallelises annotation across
+worker processes.
+
+### Inspect / validate / reset
+
+- `tools/sarm_annotate/parse_sparse_episode_info.py` — per-episode
+  `num_sparse_stages` + temporal proportions.
+- `tools/sarm_annotate/parse_dense_episode_info.py` — same, for dense.
+- `tools/sarm_annotate/fix_sparse_annotations.py` — force single-stage
+  `"task"` on a v3.x dataset.
+- `tools/sarm_annotate/clear_written_annotations.py --dataset-root <root>
+  [--apply]` — dry-run / remove all SARM columns + proportions files from a
+  v3.x dataset.
+
 See [`tools/sarm_annotate/README.md`](../tools/sarm_annotate/README.md) for
-the full set of flags, dependencies (`lerobot>=0.3.4`, `qwen-vl-utils`,
-`transformers`, …), and the distributed per-episode runner.
+the full list of scripts and their upstream provenance.
 
 ## Training
 

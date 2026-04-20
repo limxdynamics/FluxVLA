@@ -1,0 +1,21 @@
+[
+  {
+    "episode_index": 0,
+    "sparse": {
+      "names":        ["reach", "grasp", "place"],
+      "start_frames": [0,        60,      150],
+      "end_frames":   [59,      149,      199]
+    },
+    "dense": {
+      "names":        ["move_to_cup", "close_gripper", "lift", "move_to_plate", "lower", "open_gripper"],
+      "start_frames": [0,              40,              60,     100,              150,     185],
+      "end_frames":   [39,             59,              99,     149,              184,     199]
+    }
+  },
+
+  {
+    "episode_index": 1,
+    "sparse": "auto",
+    "dense": "auto"
+  }
+]
