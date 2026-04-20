@@ -1,4 +1,0 @@
-[submodule "src/libero"]
-	path = src/libero
-	url = https://github.com/yinchimaoliang/LIBERO.git
-	branch = master
