@@ -632,4 +632,4 @@ pip install triton==3.2.0
 - RLDS 数据集将废弃并被 Parquet 数据集替代。
 - logger 功能将完整实现。
 - 支持 issacsim。
-- 支持SARM
+- 支持 [SARM](https://github.com/xdofai/opensarm)。详情见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
