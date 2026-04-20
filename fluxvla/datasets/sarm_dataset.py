@@ -15,25 +15,34 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
 import torchvision
-from torch.utils.data import Dataset
 
-from datasets import Dataset as HFDataset
-from datasets import concatenate_datasets, load_dataset
+from fluxvla.datasets.parquet_dataset import ParquetDataset
 from fluxvla.datasets.utils.sarm_utils import (apply_rewind_augmentation,
                                                compute_absolute_indices,
                                                find_stage_and_tau,
                                                load_episode_annotations,
                                                load_temporal_proportions)
-from fluxvla.engines import DATASETS, build_transform_from_cfg
+from fluxvla.engines import DATASETS
 
 
 @DATASETS.register_module()
-class SARMDataset(Dataset):
+class SARMDataset(ParquetDataset):
+    """SARM dataset built on top of :class:`ParquetDataset`.
+
+    It reuses the base class for loading ``info.json``/``tasks.jsonl``/
+    ``episodes.jsonl`` and the concatenated Hugging Face parquet dataset,
+    and layers SARM-specific logic on top:
+
+    * multi-frame observation sequence construction from ``frame_gap``
+    * video decoding via ``torchvision`` from ``videos/<key>/...mp4``
+    * sparse/dense stage-aware target computation
+    * optional rewind augmentation at training time
+    """
 
     def __init__(self,
                  data_root_path: Union[str, List[str]],
@@ -46,10 +55,15 @@ class SARMDataset(Dataset):
                  rewind_probability: float = 0.8,
                  state_key: str = 'observation.state',
                  training: bool = True) -> None:
-        super().__init__()
-        if isinstance(data_root_path, str):
-            data_root_path = [data_root_path]
-        self.data_root_path = data_root_path
+        super().__init__(
+            data_root_path=data_root_path,
+            transforms=transforms,
+            action_window_size=1,
+            action_key=state_key,
+            use_delta=False,
+            statistic_name='sarm',
+            window_start_idx=0,
+        )
         self.video_keys = video_keys
         self.annotation_mode = annotation_mode
         self.n_obs_steps = n_obs_steps
@@ -64,33 +78,31 @@ class SARMDataset(Dataset):
         rewind_reserve = max_rewind_steps if training else 0
         self.total_frames = 1 + n_obs_steps + rewind_reserve
 
-        self.info = []
-        self.tasks = []
-        self.episodes_meta = []
-        datasets = []
-        dataset_sizes = []
-        self.meta_roots = []
-        for root_path in self.data_root_path:
-            meta_root = os.path.join(root_path, 'meta')
-            data_root = os.path.join(root_path, 'data')
-            self.meta_roots.append(meta_root)
-            with open(
-                    os.path.join(meta_root, 'info.json'), 'r',
-                    encoding='utf-8') as handle:
-                self.info.append(json.load(handle))
-            self.tasks.append(self._load_tasks(meta_root))
-            self.episodes_meta.append(self._load_episode_metadata(meta_root))
-            hf_dataset = cast(
-                HFDataset,
-                load_dataset('parquet', data_dir=data_root, split='train'),
-            )
-            datasets.append(hf_dataset)
-            dataset_sizes.append(len(hf_dataset))
-        self.dataset = concatenate_datasets(datasets)
-        self.dataset_cumulative_sizes = np.cumsum([0] + dataset_sizes)
-        self.transforms = [
-            build_transform_from_cfg(transform) for transform in transforms
+        # ParquetDataset base class already loaded ``self.info``,
+        # ``self.tasks`` (as list[list[{task_index, task}]]),
+        # ``self.episodes`` (flat), ``self.dataset`` (HF dataset concatenated
+        # across data roots), ``self.dataset_cumulative_sizes`` and
+        # ``self.transforms``. Convert / re-index them into the forms SARM
+        # expects and prepare SARM-specific annotation caches.
+        self.meta_roots = [
+            os.path.join(path, 'meta') for path in self.data_root_path
         ]
+        self.tasks = [{
+            int(entry['task_index']): str(entry['task'])
+            for entry in dataset_tasks
+        } for dataset_tasks in self.tasks]
+        self.episodes_meta: List[Dict[int, Dict]] = []
+        for meta_root in self.meta_roots:
+            records: Dict[int, Dict] = {}
+            with open(
+                    os.path.join(meta_root, 'episodes.jsonl'),
+                    'r',
+                    encoding='utf-8') as handle:
+                for episode_index, line in enumerate(handle):
+                    if not line.strip():
+                        continue
+                    records[episode_index] = json.loads(line)
+            self.episodes_meta.append(records)
 
         self.episode_ranges = {}
         episode_ids = np.asarray(self.dataset['episode_index'])
@@ -145,63 +157,6 @@ class SARMDataset(Dataset):
             self.dense_annotations[dataset_idx] = load_episode_annotations(
                 meta_root, 'dense')
 
-    def _load_tasks(self, meta_root: str) -> Dict[int, str]:
-        tasks_jsonl_path = os.path.join(meta_root, 'tasks.jsonl')
-        if os.path.exists(tasks_jsonl_path):
-            with open(tasks_jsonl_path, 'r', encoding='utf-8') as handle:
-                entries = [json.loads(line) for line in handle]
-            return {
-                int(entry['task_index']): str(entry['task'])
-                for entry in entries
-            }
-
-        tasks_parquet_path = os.path.join(meta_root, 'tasks.parquet')
-        if os.path.exists(tasks_parquet_path):
-            tasks_dataset = cast(
-                HFDataset,
-                load_dataset(
-                    'parquet', data_files=tasks_parquet_path, split='train'),
-            )
-            return {
-                int(row['task_index']): str(row['task'])
-                for row in tasks_dataset
-            }
-
-        raise FileNotFoundError(
-            'No tasks metadata found under '
-            f'{meta_root}: expected tasks.jsonl or tasks.parquet')
-
-    def _load_episode_metadata(self, meta_root: str) -> Dict[int, Dict]:
-        episodes_dir = os.path.join(meta_root, 'episodes')
-        if os.path.isdir(episodes_dir):
-            parquet_files = sorted(Path(episodes_dir).rglob('*.parquet'))
-            if parquet_files:
-                datasets = [
-                    load_dataset(
-                        'parquet', data_files=str(parquet_file), split='train')
-                    for parquet_file in parquet_files
-                ]
-                episodes_dataset = concatenate_datasets(
-                    [cast(HFDataset, dataset) for dataset in datasets])
-                return {
-                    int(row['episode_index']): dict(row)
-                    for row in episodes_dataset
-                }
-
-        episodes_jsonl_path = os.path.join(meta_root, 'episodes.jsonl')
-        if os.path.exists(episodes_jsonl_path):
-            records = {}
-            with open(episodes_jsonl_path, 'r', encoding='utf-8') as handle:
-                for episode_index, line in enumerate(handle):
-                    if not line.strip():
-                        continue
-                    records[episode_index] = json.loads(line)
-            return records
-
-        raise FileNotFoundError(
-            'No episode metadata found under '
-            f'{meta_root}: expected episodes/ or episodes.jsonl')
-
     def _resolve_task_description(self, dataset_idx: int, data: Dict) -> str:
         raw_task = data.get('task')
         if isinstance(raw_task, str):
@@ -228,14 +183,6 @@ class SARMDataset(Dataset):
 
         raise KeyError('Unable to resolve task description for dataset index '
                        f'{dataset_idx} from keys: {list(data.keys())}')
-
-    def __len__(self) -> int:
-        return len(self.dataset)
-
-    def _get_dataset_index(self, index: int) -> int:
-        return int(
-            np.searchsorted(
-                self.dataset_cumulative_sizes, index, side='right') - 1)
 
     def _decode_video_frames_torchvision(
             self,
