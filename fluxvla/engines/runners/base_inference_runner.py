@@ -71,8 +71,7 @@ class BaseInferenceRunner:
         remote_inference (Dict): Remote inference config.  When provided,
             model loading is skipped and inference is delegated to a ZMQ
             server.  Keys: ``server_host``, ``server_port``, ``timeout_s``,
-            ``serializer``, ``compress``, ``enable_profiling``,
-            ``user_name``.
+            ``serializer``, ``compress``, ``enable_profiling``.
     """
 
     def __init__(self,
@@ -176,7 +175,7 @@ class BaseInferenceRunner:
         Args:
             cfg (Dict): Remote inference config with keys server_host,
                 server_port, timeout_s, serializer, compress,
-                enable_profiling, user_name.
+                enable_profiling.
         """
         import zmq
         import msgpack
@@ -192,7 +191,6 @@ class BaseInferenceRunner:
         self._compress = cfg.get('compress', True)
         self._server_address = f'tcp://{host}:{port}'
         self._enable_profiling = cfg.get('enable_profiling', True)
-        self._user_name = cfg.get('user_name', 'anonymous')
 
         self._zmq_context = zmq.Context()
         self._zmq_socket = self._zmq_context.socket(zmq.REQ)
@@ -284,7 +282,7 @@ class BaseInferenceRunner:
                     f'Cannot reach VLA server at {self._server_address}')
             overwatch.info(
                 f'Remote server OK at {self._server_address}. '
-                f'User: {self._user_name}. Seed set to {self.seed}')
+                f'Seed set to {self.seed}')
         else:
             self.vla.eval()
             if self.enable_mixed_precision:

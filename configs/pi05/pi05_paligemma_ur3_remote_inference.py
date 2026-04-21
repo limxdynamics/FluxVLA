@@ -23,7 +23,6 @@ inference = dict(
         serializer='msgpack',
         compress=True,
         enable_profiling=True,
-        user_name='<YOUR_NAME>',
     ),
     seed=7,
     action_chunk=10,
