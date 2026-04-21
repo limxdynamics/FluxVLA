@@ -30,6 +30,7 @@ def serialize_actions(actions: torch.Tensor) -> bytes:
     np.save(buf, actions.cpu().numpy(), allow_pickle=False)
     return buf.getvalue()
 
+
 @dataclass
 class EndpointHandler:
     handler: Callable
@@ -127,6 +128,7 @@ class PolicyServer:
 
     def close(self):
         self.running = False
+
 
 def create_server(
     vla,

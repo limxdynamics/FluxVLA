@@ -168,7 +168,6 @@ class BaseInferenceRunner:
         self._prev_ctx = None
         self._action_ctx = SimpleNamespace()
 
-
     def _init_zmq_client(self, cfg: Dict):
         """Initialize ZMQ client for remote inference.
 
@@ -178,7 +177,6 @@ class BaseInferenceRunner:
                 enable_profiling.
         """
         import zmq
-        import msgpack
 
         host = cfg.get('server_host', 'localhost')
         port = cfg.get('server_port', 5555)
