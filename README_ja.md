@@ -7,7 +7,7 @@
 <div align="center">
 <a href="https://huggingface.co/limxdynamics/FluxVLAEngine"><img src="https://img.shields.io/badge/HuggingFace-yellow?logo=huggingface&logoColor=white" alt="Hugging Face"></a>
 <a href="https://fluxvla.limxdynamics.com"><img src="https://img.shields.io/badge/Documentation-Purple?color=8A2BE2&logo=readthedocs"></a>
-<a href="https://fluxvla.limxdynamics.com/zh"><img src="https://img.shields.io/badge/中文文档-red?logo=readthedocs"></a>
+<a href="https://fluxvla.limxdynamics.com/zh/"><img src="https://img.shields.io/badge/中文文档-red?logo=readthedocs"></a>
 <a href="https://github.com/limxdynamics/FluxVLA/issues/1"><img src="https://img.shields.io/badge/微信-green?logo=wechat"></a>
 <a href="https://github.com/limxdynamics/FluxVLA/issues/1"><img src="https://img.shields.io/badge/飛書-3370FF?logo=lark&logoColor=white"></a>
 </div>
@@ -30,9 +30,9 @@ FluxVLA Engine は、具現知能（Embodied Intelligence）の実運用を見�
 
 |          Codebase           | Libero-Spatial | Libero-Object | Libero-Goal | Libero-Long | Libero-Average |
 | :-------------------------: | :------------: | :-----------: | :---------: | :---------: | :------------: |
-|       FluxVLA(GR00T)        |      96.4      |     93.8      |    93.6     |  83.5±1.5   |      91.8      |
-|         FluxVLA(Pi)         |      99.4      |     99.4      |     98      |    96.8     |      98.4      |
-| FluxVLA(Qwen3VL 0.6B+GR00T) |       98       |     99.2      |    95.2     |    87.2     |      94.9      |
+|       FluxVLA(GR00T)        |      96.4      |     93.8      |    93.6     |  83.5±1.5   |     91.83      |
+|         FluxVLA(Pi)         |      99.4      |     99.4      |     98      |    96.8     |     98.40      |
+| FluxVLA(Qwen3VL 0.6B+GR00T) |       98       |     99.2      |    95.2     |    87.2     |     94.90      |
 |     FluxVLA(DreamZero)      |      96.8      |     97.4      |    92.8     |    93.6     |     95.15      |
 
 ## 📢 最新情報

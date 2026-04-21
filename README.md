@@ -7,7 +7,7 @@
 <div align="center">
 <a href="https://huggingface.co/limxdynamics/FluxVLAEngine"><img src="https://img.shields.io/badge/HuggingFace-yellow?logo=huggingface&logoColor=white" alt="Hugging Face"></a>
 <a href="https://fluxvla.limxdynamics.com"><img src="https://img.shields.io/badge/Documentation-Purple?color=8A2BE2&logo=readthedocs"></a>
-<a href="https://fluxvla.limxdynamics.com/zh"><img src="https://img.shields.io/badge/中文文档-red?logo=readthedocs"></a>
+<a href="https://fluxvla.limxdynamics.com/zh/"><img src="https://img.shields.io/badge/中文文档-red?logo=readthedocs"></a>
 <a href="https://github.com/limxdynamics/FluxVLA/issues/1"><img src="https://img.shields.io/badge/WeChat-green?logo=wechat"></a>
 <a href="https://github.com/limxdynamics/FluxVLA/issues/1"><img src="https://img.shields.io/badge/Feishu-3370FF?logo=lark&logoColor=white"></a>
 </div>
@@ -30,10 +30,10 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 |          Codebase           | Libero-Spatial | Libero-Object | Libero-Goal | Libero-Long | Libero-Average |
 | :-------------------------: | :------------: | :-----------: | :---------: | :---------: | :------------: |
-|       FluxVLA(GR00T)        |      96.4      |     93.8      |    93.6     |  83.5±1.5   |      91.8      |
-|         FluxVLA(Pi)         |      99.4      |     99.4      |     98      |    96.8     |      98.4      |
-| FluxVLA(Qwen3VL 0.6B+GR00T) |       98       |     99.2      |    95.2     |    87.2     |      94.9      |
-|     FluxVLA(DreamZero)      |      96.8      |     97.4      |    92.8     |    93.6     |     95.15      |
+|       FluxVLA(GR00T)        |      96.2      |     96.8      |    93.4     |  89.4±1.5   |     93.95      |
+|         FluxVLA(Pi)         |      98.6      |     99.0      |    97.8     |   96±1.0    |     97.85      |
+| FluxVLA(Qwen3VL 0.6B+GR00T) |      98.6      |     99.6      |    95.6     |  92.2±1.8   |     96.50      |
+|     FluxVLA(DreamZero)      |      96.8      |     97.4      |  90.8±1.5   |    93.6     |     94.65      |
 
 ## 📢 Latest News
 
