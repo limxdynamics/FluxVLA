@@ -384,3 +384,31 @@ class LiberoPromptFromInputs:
         inputs['lang_tokens'] = np.asarray(token_ids, dtype=np.int64)
         inputs['lang_masks'] = np.asarray(mask, dtype=np.bool_)
         return inputs
+
+
+@TRANSFORMS.register_module()
+class ProcessXVLAPrompts:
+    """Tokenize task description using Florence2's tokenizer for X-VLA."""
+
+    def __init__(self, tokenizer_path: str, max_len: int = 64) -> None:
+        from transformers import PreTrainedTokenizerFast
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(tokenizer_path)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        self.max_len = max_len
+
+    def __call__(self, inputs: Dict) -> Dict:
+        assert 'task_description' in inputs, \
+            "inputs must contain 'task_description'"
+        encoded = self.tokenizer(
+            inputs['task_description'],
+            max_length=self.max_len,
+            padding='max_length',
+            truncation=True,
+            return_tensors=None,
+        )
+        inputs['lang_tokens'] = np.asarray(encoded['input_ids'],
+                                           dtype=np.int64)
+        inputs['lang_masks'] = np.asarray(encoded['attention_mask'],
+                                          dtype=np.int32)
+        return inputs

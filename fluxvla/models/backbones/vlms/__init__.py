@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .eagle import EagleBackbone, EagleInferenceBackbone  # noqa: F401, F403
+from .florence2 import Florence2Backbone  # noqa: F401, F403
 from .paligemma import PaliGemma  # noqa: F401, F403
 from .qwen2_5_vl import QWen2_5VL  # noqa: F401, F403
 

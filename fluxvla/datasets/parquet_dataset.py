@@ -284,7 +284,13 @@ class LiberoParquetEvalDataset:
         # Compose transforms chain (parquet-style) starting from raw inputs
         data: Dict[str, Any] = dict(inputs)
         if self.norm_stats is not None:
-            norm_stats = self.norm_stats[self.task_suite_name + '_no_noops']
+            stats_key = self.task_suite_name + '_no_noops'
+            if stats_key in self.norm_stats:
+                norm_stats = self.norm_stats[stats_key]
+            elif 'private' in self.norm_stats:
+                norm_stats = self.norm_stats['private']
+            else:
+                norm_stats = None
         else:
             norm_stats = None
         data['norm_stats'] = norm_stats

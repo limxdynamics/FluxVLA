@@ -16,7 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, get_worker_info
 
 from fluxvla.engines import (DATASETS, build_dataset_from_cfg,
                              initialize_overwatch)
@@ -61,11 +61,13 @@ class DistributedRepeatingDataset(IterableDataset):
                  name_mappings: Dict = None,
                  shuffle: bool = True,
                  seed: int = 42,
+                 shard_across_ranks: bool = True,
                  statistic_name: str = 'private',
                  dim: Optional[int] = None,
                  dataset_statistics: Optional[Dict] = None) -> None:
         self.shuffle = shuffle
         self.seed = seed
+        self.shard_across_ranks = shard_across_ranks
         self.statistic_name = statistic_name
         self.dim = dim
         # Determine the dataset format and initialize accordingly
@@ -249,11 +251,12 @@ class DistributedRepeatingDataset(IterableDataset):
 
         # Collect statistics from each dataset
         for stat in stats:
+            stat_inner = stat.get('stats', stat)
             for key in static_keys:
-                if key not in stat['stats']:
+                if key not in stat_inner:
                     raise KeyError(f"Key '{key}' not found in dataset.")
 
-                stat_data = stat['stats'][key]
+                stat_data = stat_inner[key]
 
                 # Collect basic statistics
                 dataset_statistics[key]['min'].append(stat_data['min'])
@@ -459,15 +462,30 @@ class DistributedRepeatingDataset(IterableDataset):
 
     def __iter__(self):
         epoch = 0
+        worker_info = get_worker_info()
+        if worker_info is None:
+            worker_id = 0
+            num_workers = 1
+        else:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
         while True:
             # Create indices for the entire virtual concatenated dataset
             indices = np.arange(self.total_len)
             if self.shuffle:
-                rng = np.random.default_rng(self.seed + epoch)
+                rng_seed = self.seed + epoch
+                if not self.shard_across_ranks:
+                    rng_seed += self.rank * 100003
+                rng = np.random.default_rng(rng_seed)
                 rng.shuffle(indices)
 
-            # Distribute the indices across the world size
-            shard = indices[self.rank::self.world_size].tolist()
+            if self.shard_across_ranks:
+                replica_rank = self.rank * num_workers + worker_id
+                replica_world_size = self.world_size * num_workers
+            else:
+                replica_rank = worker_id
+                replica_world_size = num_workers
+            shard = indices[replica_rank::replica_world_size].tolist()
 
             for idx in shard:
                 yield self._get_item_from_global_idx(idx)

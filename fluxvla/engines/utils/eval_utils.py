@@ -101,6 +101,16 @@ def get_libero_image(obs, resize_size, img_key='agentview_image'):
     return img
 
 
+def get_libero_image_no_flip(obs, resize_size, img_key):
+    """Extract image from observations and preprocess without 180 flip."""
+    assert isinstance(resize_size, int) or isinstance(resize_size, tuple)
+    if isinstance(resize_size, int):
+        resize_size = (resize_size, resize_size)
+    img = obs[img_key]
+    img = resize_image(img, resize_size)
+    return img
+
+
 def get_libero_dummy_action():
     """Returns a dummy action for the Libero environment.
 
