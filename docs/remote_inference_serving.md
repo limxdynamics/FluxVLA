@@ -131,10 +131,33 @@ For Aloha, just change ``type='AlohaInferenceRunner'``.
 
 ### Step 4: Run the client (robot)
 
+Option A: Direct launch
+
 ```bash
 python scripts/inference.py \
     --config configs/pi05/pi05_paligemma_ur3_remote_inference.py
 ```
+
+Option B: One-command launch with auto SSH tunnel
+
+```bash
+bash scripts/remote_inference_client.sh \
+    configs/pi05/pi05_paligemma_ur3_remote_inference.py \
+    --ssh-host user@server.example.com \
+    --ssh-port 57705 \
+    --ssh-key ~/.ssh/my_key \
+    --local-port 5555 \
+    --remote-port 3333
+```
+
+The script automatically starts the SSH tunnel, runs inference, and cleans
+up the tunnel on exit.  SSH parameters:
+
+- ``--ssh-host``: SSH destination (user@host), enables auto tunnel
+- ``--ssh-port``: SSH port (default 22)
+- ``--ssh-key``: path to private key file
+- ``--local-port``: local tunnel entry port (default 5555)
+- ``--remote-port``: remote ZMQ server port (default 3333)
 
 This will:
 
