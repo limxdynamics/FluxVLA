@@ -391,6 +391,13 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 </details>
 
 <details>
+<summary><b>Supports SARM workflows</b></summary>
+
+- Supports [SARM](https://github.com/xdofai/opensarm) training, annotation, and progress inference on LeRobot v2.1/v3.x datasets. See [docs/sarm.md](docs/sarm.md) for details.
+
+</details>
+
+<details>
 <summary><b>Supports different training strategies</b></summary>
 
 - Supports FSDP together with DDP, and supports LoRA training mode.
@@ -635,4 +642,3 @@ If you use FluxVLA in your research or projects, please cite it as:
 - RLDS datasets will be deprecated and replaced by Parquet datasets.
 - Full implementation of the logger feature.
 - Support Isaac Sim.
-- Support [SARM](https://github.com/xdofai/opensarm). See [docs/sarm.md](docs/sarm.md) for details.

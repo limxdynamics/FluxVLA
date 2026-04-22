@@ -388,6 +388,13 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 </details>
 
 <details>
+<summary><b>支持 SARM 工作流</b></summary>
+
+- 支持 [SARM](https://github.com/xdofai/opensarm) 的训练、标注与 progress 推理，并兼容 LeRobot v2.1/v3.x 数据集。详情见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+
+</details>
+
+<details>
 <summary><b>支持不同训练策略</b></summary>
 
 - 支持同时使用 FSDP 与 DDP，支持 LoRA 训练模式。
@@ -632,4 +639,3 @@ pip install triton==3.2.0
 - RLDS 数据集将废弃并被 Parquet 数据集替代。
 - logger 功能将完整实现。
 - 支持 issacsim。
-- 支持 [SARM](https://github.com/xdofai/opensarm)。详情见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
