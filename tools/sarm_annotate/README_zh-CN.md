@@ -119,7 +119,7 @@ pip install "lerobot>=0.3.4" qwen-vl-utils transformers torch opencv-python pyda
 
 ### 实用说明
 
-- `--model` 可以传 Hugging Face repo 名、具体 snapshot 目录，或本地 cache 根目录，例如 `./checkpoints/Qwen3-VL-32B-Instruct`；脚本会自动解析到可加载的 `snapshots/*` 目录。
+- `--model` 可以传 Hugging Face repo 名、具体 snapshot 目录，或本地 cache 根目录，例如 `./checkpoints/Qwen3-VL-30B-A3B-Instruct`；脚本会自动解析到可加载的 `snapshots/*` 目录。
 - 如果默认视频解码后端不可用，可显式加 `--video-backend pyav` 或 `--video-backend video_reader`。不传时保持 LeRobot 默认行为。
 - 自动标注会根据模型配置动态选择 Qwen2-VL、Qwen2.5-VL、Qwen3-VL 等兼容类，不要求写死某个 transformers 类名。
 
@@ -129,7 +129,7 @@ pip install "lerobot>=0.3.4" qwen-vl-utils transformers torch opencv-python pyda
 # 本地数据集，dense-only
 python tools/sarm_annotate/subtask_annotation.py \
     --repo-id /path/to/your/lerobot_dataset \
-  --model ./checkpoints/Qwen3-VL-32B-Instruct \
+  --model ./checkpoints/Qwen3-VL-30B-A3B-Instruct \
     --video-key observation.images.image \
   --video-backend pyav \
     --dense-only \
