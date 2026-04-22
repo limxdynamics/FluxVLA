@@ -189,7 +189,7 @@ After either pipeline runs, the dataset is drop-in compatible with the SARM
 configs:
 
 ```python
-# configs/sarm/sarm_dense_only_libero_10.py
+# any dense_only config under configs/sarm/
 train_dataloader = dict(
     dataset=dict(
         type='SARMDataset',

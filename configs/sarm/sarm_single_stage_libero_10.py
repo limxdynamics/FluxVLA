@@ -1,4 +1,5 @@
 clip_pretrained_name_or_path = './checkpoints/clip-vit-base-patch32'
+data_root_path = './datasets/your_sarm_lerobot_dataset'
 
 current_transforms = [
     dict(type='ResizeImageSequence', height=224, width=224),
@@ -27,7 +28,7 @@ current_collator = dict(
 model = dict(
     type='SARMRewardModel',
     annotation_mode='single_stage',
-    data_root_path='./datasets/libero_10_no_noops_lerobotv2.1',
+    data_root_path=data_root_path,
     n_obs_steps=8,
     frame_gap=30,
     max_rewind_steps=4,
@@ -50,7 +51,7 @@ train_dataloader = dict(
     per_device_num_workers=2,
     dataset=dict(
         type='SARMDataset',
-        data_root_path='./datasets/libero_10_no_noops_lerobotv2.1',
+        data_root_path=data_root_path,
         video_keys=['observation.images.image'],
         annotation_mode='single_stage',
         n_obs_steps=8,
@@ -87,7 +88,7 @@ runner = dict(
 
 inference_dataset = dict(
     type='SARMDataset',
-    data_root_path='./datasets/libero_10_no_noops_lerobotv2.1',
+    data_root_path=data_root_path,
     video_keys=['observation.images.image'],
     annotation_mode='single_stage',
     n_obs_steps=8,
