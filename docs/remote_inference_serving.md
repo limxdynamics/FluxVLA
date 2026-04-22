@@ -1,6 +1,16 @@
 # FluxVLA Serving
 
-ZMQ-based VLA model serving for remote robot inference.
+FluxVLA Serving provides a lightweight, high-performance remote inference
+framework that decouples VLA model execution from robot control. A GPU server
+hosts the model behind a ZMQ (ZeroMQ) REP socket, while the robot-side client
+sends observations and receives predicted actions over a simple
+request-reply protocol — requiring only `pyzmq`, `msgpack`, and `numpy` on
+the robot with no GPU or deep-learning stack needed.
+
+Two wire formats are supported (msgpack and protobuf), observations are
+JPEG-compressed on the wire for bandwidth efficiency, and an optional SSH
+tunnel mode allows seamless deployment when the GPU machine sits behind NAT
+or in the cloud.
 
 ## Architecture
 
