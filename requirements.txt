@@ -38,3 +38,4 @@ tqdm-loggable==0.2
 transformers==4.53.2
 types-boto3-s3==1.38.26
 wandb==0.21.0
+websocket-client
