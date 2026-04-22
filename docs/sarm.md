@@ -13,7 +13,7 @@ Recommended local layout:
 
 ```text
 checkpoints/
-├── Qwen3-VL-32B-Instruct
+├── Qwen3-VL-30B-A3B-Instruct
 ├── clip-vit-base-patch32
 ├── sarm_dense_smoke
 └── sarm_dense_only_flux_smoke.pt
@@ -21,7 +21,7 @@ checkpoints/
 
 Reserved local names:
 
-- `./checkpoints/Qwen3-VL-32B-Instruct`: VLM used for external SARM annotation workflows.
+- `./checkpoints/Qwen3-VL-30B-A3B-Instruct`: VLM used for external SARM annotation workflows.
 - `./checkpoints/clip-vit-base-patch32`: CLIP backbone and tokenizer used by FluxVLA SARM configs.
 - `./checkpoints/sarm_dense_smoke`: a tested SARM checkpoint directory produced during smoke validation.
 - `./checkpoints/sarm_dense_only_flux_smoke.pt`: a FluxVLA-native SARM checkpoint file produced by local smoke training.
@@ -52,7 +52,7 @@ Notes:
   (`subtask_names`, `subtask_start_frames`, `subtask_end_frames`) for
   backwards compatibility. Separate `sarm_*_annotations.jsonl` files are no
   longer consulted.
-- The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-32B-Instruct`. If you pass a local Hugging Face cache root instead of a concrete snapshot directory, FluxVLA resolves it automatically to the matching `snapshots/*` entry.
+- The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-30B-A3B-Instruct`. If you pass a local Hugging Face cache root instead of a concrete snapshot directory, FluxVLA resolves it automatically to the matching `snapshots/*` entry.
 - `./checkpoints/sarm_dense_smoke` is a preserved smoke-test model directory from the external SARM workflow.
 - FluxVLA's `scripts/infer_sarm_progress.py` expects a FluxVLA training checkpoint file such as `./checkpoints/sarm_dense_only_flux_smoke.pt`.
 - `scripts/infer_sarm_progress.py` supports `--cfg-options` for dataset overrides and `--max-batches` for quick smoke validation.
