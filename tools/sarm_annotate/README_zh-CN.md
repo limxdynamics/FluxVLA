@@ -159,7 +159,7 @@ python tools/sarm_annotate/subtask_annotation.py \
 任何一条路线跑完后，数据集都直接匹配 SARM 配置：
 
 ```python
-# configs/sarm/sarm_dense_only_libero_10.py
+# any dense_only config under configs/sarm/
 train_dataloader = dict(
     dataset=dict(
         type='SARMDataset',

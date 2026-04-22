@@ -36,6 +36,8 @@ Current SARM configs:
 - `configs/sarm/sarm_dense_only_libero_10.py`
 - `configs/sarm/sarm_dual_libero_10.py`
 
+These files are now starter templates. Their default `data_root_path` is the generic example path `./datasets/your_sarm_lerobot_dataset`, so they no longer assume Libero data by default. Replace it with your own dataset path before training; if your camera key is not `observation.images.image`, update that as well or override it with `--cfg-options`.
+
 These configs expect:
 
 - CLIP backbone and tokenizer at `./checkpoints/clip-vit-base-patch32`
