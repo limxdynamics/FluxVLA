@@ -9,22 +9,21 @@ FluxVLA's integration of [SARM (Stage-Aware Reward Modeling)](https://github.com
 
 For SARM-related workflows, keep all dependent models under `./checkpoints` and reference them with relative paths from config files.
 
+FluxVLA training checkpoints are written to the training output directory instead, typically under the `checkpoints/` subdirectory of the `--work-dir` you pass to `scripts/train.py`, for example `./work_dirs/<run_name>/checkpoints/latest-checkpoint.pt`.
+
 Recommended local layout:
 
 ```text
 checkpoints/
 ├── Qwen3-VL-30B-A3B-Instruct
-├── clip-vit-base-patch32
-├── sarm_dense_smoke
-└── sarm_dense_only_flux_smoke.pt
+└── clip-vit-base-patch32
 ```
 
 Reserved local names:
 
 - `./checkpoints/Qwen3-VL-30B-A3B-Instruct`: VLM used for external SARM annotation workflows.
 - `./checkpoints/clip-vit-base-patch32`: CLIP backbone and tokenizer used by FluxVLA SARM configs.
-- `./checkpoints/sarm_dense_smoke`: a tested SARM checkpoint directory produced during smoke validation.
-- `./checkpoints/sarm_dense_only_flux_smoke.pt`: a FluxVLA-native SARM checkpoint file produced by local smoke training.
+- Training-generated FluxVLA checkpoints live under `--work-dir/checkpoints/` instead of the root `./checkpoints/` directory.
 
 ## SARM Usage
 
@@ -55,8 +54,7 @@ Notes:
   backwards compatibility. Separate `sarm_*_annotations.jsonl` files are no
   longer consulted.
 - The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-30B-A3B-Instruct`. If you pass a local Hugging Face cache root instead of a concrete snapshot directory, FluxVLA resolves it automatically to the matching `snapshots/*` entry.
-- `./checkpoints/sarm_dense_smoke` is a preserved smoke-test model directory from the external SARM workflow.
-- FluxVLA's `scripts/infer_sarm_progress.py` expects a FluxVLA training checkpoint file such as `./checkpoints/sarm_dense_only_flux_smoke.pt`.
+- `scripts/infer_sarm_progress.py` expects a FluxVLA training checkpoint file, typically the `latest-checkpoint.pt` file under your chosen `--work-dir/checkpoints/` directory.
 - `scripts/infer_sarm_progress.py` supports `--cfg-options` for dataset overrides and `--max-batches` for quick smoke validation.
 - For LeRobot v2.1/v3.x style datasets, `task` can be stored as a task index. FluxVLA resolves it back to task text at read time from `tasks.jsonl` or `tasks.parquet` without modifying dataset files.
 - For LeRobot v3.x style datasets, video paths may be described either by `videos/<key>/chunk_index` / `file_index` or equivalent chunk/file columns on episode metadata or parquet rows. FluxVLA accepts those variants without requiring dataset rewrites.
@@ -194,7 +192,7 @@ torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   --cfg-options train_dataloader.per_device_batch_size=1
 ```
 
-Example real-dataset smoke training command:
+Example minimal real-dataset training command:
 
 ```bash
 export WANDB_MODE=disabled
@@ -202,7 +200,7 @@ export HF_ENDPOINT="https://hf-mirror.com"
 torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   scripts/train.py \
   --config configs/sarm/sarm_dense_only_libero_10.py \
-  --work-dir ./tmp/sarm_dense_only_flux_smoke \
+  --work-dir ./work_dirs/sarm_dense_only_your_dataset \
   --cfg-options \
     model.data_root_path=/path/to/your_dataset \
     train_dataloader.dataset.data_root_path=/path/to/your_dataset \
@@ -216,14 +214,6 @@ torchrun --standalone --nnodes 1 --nproc-per-node 1 \
     runner.save_iter_interval=1
 ```
 
-Expose the generated FluxVLA checkpoint under `./checkpoints`:
-
-```bash
-ln -sfn \
-  "$PWD/tmp/sarm_dense_only_flux_smoke/checkpoints/latest-checkpoint.pt" \
-  "$PWD/checkpoints/sarm_dense_only_flux_smoke.pt"
-```
-
 ## Inference
 
 Example offline progress inference command:
@@ -231,19 +221,19 @@ Example offline progress inference command:
 ```bash
 python scripts/infer_sarm_progress.py \
   --config configs/sarm/sarm_dense_only_libero_10.py \
-  --ckpt-path ./checkpoints/sarm_dense_only_flux_smoke.pt \
-  --output-path ./work_dirs/sarm_progress.jsonl \
+  --ckpt-path ./work_dirs/sarm_dense_only_libero_10/checkpoints/latest-checkpoint.pt \
+  --output-path ./work_dirs/sarm_dense_only_libero_10/sarm_progress.jsonl \
   --head-mode dense \
   --batch-size 1
 ```
 
-Example real-dataset smoke inference command:
+Example minimal real-dataset inference command:
 
 ```bash
 python scripts/infer_sarm_progress.py \
   --config configs/sarm/sarm_dense_only_libero_10.py \
-  --ckpt-path ./checkpoints/sarm_dense_only_flux_smoke.pt \
-  --output-path ./tmp/sarm_progress_flux_smoke.jsonl \
+  --ckpt-path ./work_dirs/sarm_dense_only_your_dataset/checkpoints/latest-checkpoint.pt \
+  --output-path ./work_dirs/sarm_dense_only_your_dataset/sarm_progress.jsonl \
   --head-mode dense \
   --batch-size 1 \
   --max-batches 1 \
