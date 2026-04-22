@@ -405,8 +405,8 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 <details>
 <summary><b>评估与推理能力</b></summary>
 
-- 支持多 GPU 评估。
-- 支持在无光追设备上评估 libero。
+- 支持多 GPU 在无光追设备上评估 libero。
+- 支持基于 ZMQ 通信框架的远程推理设施，利用 server/client 架构将模型推理负载装卸到服务器端，适用于算力受限的边缘设备部署。详见 [远程推理服务](docs/remote_inference_serving.md)。
 - 支持 [RTC (Real-Time Chunking)](docs/rtc.md)，提升跨 chunk 轨迹连续性。
 - 支持 GR00T 与 PI0.5 推理加速；详见 [Inference Acceleration](docs/inference_acceleration.md)，包含 Triton 融合核、CUDA Graph 捕获与 CUDA 自定义算子。
 

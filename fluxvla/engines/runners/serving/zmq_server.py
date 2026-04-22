@@ -38,9 +38,33 @@ class EndpointHandler:
 
 
 class PolicyServer:
-    """Generic ZMQ REP server with endpoint routing."""
+    """Generic ZMQ REP server with named endpoint routing.
+
+    Provides a synchronous request-reply event loop over a ZMQ REP socket.
+    Endpoints are registered by name; incoming messages are dispatched to
+    the matching handler.  Two wire formats are supported:
+
+    - msgpack (default): ``{"endpoint": "<name>", "data": {...}}``
+    - protobuf: first byte ``0x01`` triggers the protobuf predict path.
+
+    Built-in endpoints:
+
+    - ping -- health check, returns ``{"status": "ok"}``.
+    - kill -- graceful shutdown.
+
+    Attributes:
+        running: Flag controlling the event loop; set to ``False`` to stop.
+        context: The underlying ``zmq.Context``.
+        socket: The bound ``zmq.REP`` socket.
+    """
 
     def __init__(self, host: str = '*', port: int = 5555):
+        """Create and bind the ZMQ REP socket.
+
+        Args:
+            host: Bind address (``'*'`` for all interfaces).
+            port: TCP port to listen on.
+        """
         self.running = True
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REP)
@@ -54,6 +78,17 @@ class PolicyServer:
                           name: str,
                           handler: Callable,
                           requires_input: bool = True):
+        """Register a named endpoint handler.
+
+        Args:
+            name: Endpoint name used in the ``"endpoint"`` field of
+                incoming msgpack messages.
+            handler: Callable invoked when this endpoint is requested.
+                If *requires_input* is ``True``, the ``"data"`` dict from
+                the request is unpacked as keyword arguments.
+            requires_input: Whether the handler expects input data.
+                ``False`` for no-arg endpoints like ``ping``.
+        """
         self._endpoints[name] = EndpointHandler(handler, requires_input)
 
     def _handle_ping(self) -> dict:
@@ -64,6 +99,13 @@ class PolicyServer:
         return {'status': 'ok', 'message': 'Server shutting down'}
 
     def run(self):
+        """Start the blocking event loop.
+
+        Polls the ZMQ socket every 500 ms. Each incoming message is
+        decoded, dispatched to the registered endpoint handler, and the
+        result is serialized back. The loop exits when ``self.running``
+        becomes ``False`` (via ``kill`` endpoint or ``close()``).
+        """
         addr = self.socket.getsockopt_string(zmq.LAST_ENDPOINT)
         print(f'Server is ready and listening on {addr}')
         poller = zmq.Poller()
@@ -99,6 +141,11 @@ class PolicyServer:
         self.context.term()
 
     def _handle_protobuf_predict(self, message: bytes):
+        """Decode a protobuf ``PredictActionRequest`` and reply.
+
+        Args:
+            message: Raw bytes whose first byte is ``FORMAT_PROTOBUF``.
+        """
         try:
             _, obs, unnorm_key = decode_predict_request(message)
             handler = self._endpoints.get('predict_action')
@@ -127,6 +174,11 @@ class PolicyServer:
                     b'', 0.0, FORMAT_PROTOBUF, error=str(e)))
 
     def close(self):
+        """Signal the event loop to stop.
+
+        The socket is closed and the ZMQ context terminated when the
+        ``run()`` loop finishes its current iteration.
+        """
         self.running = False
 
 
