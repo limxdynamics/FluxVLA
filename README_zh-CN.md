@@ -256,9 +256,21 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 </details>
 
 <details>
+<summary><b>SARM 数据集</b></summary>
+
+FluxVLA 的 SARM 工作流支持标准 LeRobot v2.1 与 v3.x 数据集。除常规 observation / action 字段外，数据集还需要在 episodes 元信息里带有 SARM subtask 标注列。
+
+- SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+- 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README_zh-CN.md](tools/sarm_annotate/README_zh-CN.md)。
+
+</details>
+
+<details>
 <summary><b>私有数据集目录结构</b></summary>
 
 若使用 fluxvla 在私有数据集上训练，需要先将原始数据（如 ALOHA 双臂机器人采集的 HDF5 文件）转换为 LeRobot Dataset v2.1 格式。详细的转换步骤请参考 [数据转换指南](docs/data_convert.md)。
+
+对 SARM 而言，只要补齐所需的 SARM 标注列，FluxVLA 同时兼容 LeRobot v2.1 与 v3.x 数据集。SARM 需要的元信息格式见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
 
 转换后的数据集目录结构如下：
 
@@ -296,6 +308,8 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 下载所需预训练 checkpoint 并放到 `./checkpoints` 目录。请根据配置仅下载你需要的 checkpoint。
 
+如果使用 SARM 工作流，通常至少需要一个 CLIP checkpoint 用于训练 / 推理；如果要用 VLM 自动标注，还需要官方 SARM 使用的 Qwen3-VL checkpoint。详细用法见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+
 <details>
 <summary><b>VLA 模型</b></summary>
 
@@ -315,6 +329,7 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 | 模型       | 大小 | 下载链接                                                              |
 | ---------- | ---- | --------------------------------------------------------------------- |
 | Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>
 
@@ -334,12 +349,15 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 | 模型                | 下载链接                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------ |
+| CLIP ViT-B/32       | [🤗 Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)               |
 | ViT-Large (DINOv2)  | [🤗 Hugging Face](https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m) |
 | ViT-SO400M (SigLIP) | [🤗 Hugging Face](https://huggingface.co/timm/ViT-SO400M-14-SigLIP)                  |
 | SigLIP2             | [🤗 Hugging Face](https://huggingface.co/google/siglip2-base-patch16-224)            |
 | paligemma           | [🤗 Hugging Face](https://huggingface.co/google/paligemma-3b-pt-224)                 |
 
 > **提示**：可使用 `huggingface-cli download <model-name> --local-dir ./checkpoints/<model-name>` 加速下载。
+
+对于内置的 SARM 配置，请将 CLIP 文件放到 `./checkpoints/clip-vit-base-patch32`。如果使用 VLM 自动标注，请将官方 SARM VLM 放到 `./checkpoints/Qwen3-VL-30B-A3B-Instruct`。
 
 </details>
 

@@ -256,9 +256,21 @@ Replace `libero_10_no_noops_lerobotv2.1` with the corresponding folder name of t
 </details>
 
 <details>
+<summary><b>SARM datasets</b></summary>
+
+FluxVLA SARM workflows accept standard LeRobot v2.1 or v3.x datasets. Besides the usual observation / action fields, the dataset must carry SARM subtask annotations in episodes metadata.
+
+- For ready-to-use SARM dataset structure, annotation columns, and progress inference usage, see [docs/sarm.md](docs/sarm.md).
+- For writing manual stages or generating VLM-based annotations, see [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md).
+
+</details>
+
+<details>
 <summary><b>Private dataset directory structure</b></summary>
 
 If you train with fluxvla on private datasets, you need to convert your raw data (e.g., HDF5 files collected by ALOHA robots) into the LeRobot Dataset v2.1 format. For a step-by-step conversion guide, see [Data Conversion Guide](docs/data_convert.md).
+
+For SARM specifically, FluxVLA supports both LeRobot v2.1 and v3.x datasets as long as the required SARM annotation columns are present. The SARM-specific metadata contract is documented in [docs/sarm.md](docs/sarm.md).
 
 The converted dataset should follow this directory structure:
 
@@ -296,6 +308,8 @@ The converted dataset should follow this directory structure:
 
 Download the required pretrained checkpoints and place them under `./checkpoints`. Download only the checkpoints you need based on your configuration.
 
+For SARM workflows, you typically need a CLIP checkpoint for training / inference and optionally a Qwen3-VL checkpoint for VLM-based annotation. Detailed usage is documented in [docs/sarm.md](docs/sarm.md).
+
 <details>
 <summary><b>VLA models</b></summary>
 
@@ -315,6 +329,7 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 | Model      | Size | Download link                                                         |
 | ---------- | ---- | --------------------------------------------------------------------- |
 | Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>
 
@@ -334,12 +349,15 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 
 | Model               | Download link                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------ |
+| CLIP ViT-B/32       | [🤗 Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)               |
 | ViT-Large (DINOv2)  | [🤗 Hugging Face](https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m) |
 | ViT-SO400M (SigLIP) | [🤗 Hugging Face](https://huggingface.co/timm/ViT-SO400M-14-SigLIP)                  |
 | SigLIP2             | [🤗 Hugging Face](https://huggingface.co/google/siglip2-base-patch16-224)            |
 | paligemma           | [🤗 Hugging Face](https://huggingface.co/google/paligemma-3b-pt-224)                 |
 
 > **Tip**: You can speed up downloads with `huggingface-cli download <model-name> --local-dir ./checkpoints/<model-name>`.
+
+For the built-in SARM configs, place the CLIP files under `./checkpoints/clip-vit-base-patch32`. If you use VLM-based SARM annotation, place the official SARM VLM under `./checkpoints/Qwen3-VL-30B-A3B-Instruct`.
 
 </details>
 

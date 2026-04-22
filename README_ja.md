@@ -256,9 +256,21 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 </details>
 
 <details>
+<summary><b>SARM データセット</b></summary>
+
+FluxVLA の SARM ワークフローは、標準的な LeRobot v2.1 / v3.x データセットをサポートします。通常の observation / action フィールドに加えて、episodes メタデータに SARM subtask アノテーション列が必要です。
+
+- SARM データセット構成、アノテーション列の契約、progress 推論の使い方は [docs/sarm.md](docs/sarm.md) を参照してください。
+- 手動 stage 書き込みや VLM ベースの自動アノテーションは [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md) を参照してください。
+
+</details>
+
+<details>
 <summary><b>プライベートデータセットのディレクトリ構造</b></summary>
 
 fluxvla をプライベートデータセットで学習する場合、まず生データ（例：ALOHA ロボットで収集した HDF5 ファイル）を LeRobot Dataset v2.1 形式に変換する必要があります。変換手順の詳細は [データ変換ガイド](docs/data_convert.md) をご覧ください。
+
+SARM については、必要な SARM アノテーション列が含まれていれば、FluxVLA は LeRobot v2.1 と v3.x の両方を扱えます。必要なメタデータ形式は [docs/sarm.md](docs/sarm.md) にまとめています。
 
 変換後のデータセットのディレクトリ構造は次のとおりです：
 
@@ -296,6 +308,8 @@ fluxvla をプライベートデータセットで学習する場合、まず生
 
 必要な事前学習済みチェックポイントをダウンロードし、`./checkpoints` ディレクトリに配置してください。設定に応じて必要なチェックポイントだけをダウンロードします。
 
+SARM ワークフローでは、通常は学習 / 推論用の CLIP チェックポイントが必要です。VLM ベースの自動アノテーションを使う場合は、公式 SARM で使われている Qwen3-VL チェックポイントも必要です。詳細は [docs/sarm.md](docs/sarm.md) を参照してください。
+
 <details>
 <summary><b>VLA モデル</b></summary>
 
@@ -315,6 +329,7 @@ fluxvla をプライベートデータセットで学習する場合、まず生
 | モデル     | サイズ | ダウンロードリンク                                                    |
 | ---------- | ------ | --------------------------------------------------------------------- |
 | Qwen2.5-VL | 3B     | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Qwen3-VL   | 30B    | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>
 
@@ -334,12 +349,15 @@ fluxvla をプライベートデータセットで学習する場合、まず生
 
 | モデル              | ダウンロードリンク                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------ |
+| CLIP ViT-B/32       | [🤗 Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)               |
 | ViT-Large (DINOv2)  | [🤗 Hugging Face](https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m) |
 | ViT-SO400M (SigLIP) | [🤗 Hugging Face](https://huggingface.co/timm/ViT-SO400M-14-SigLIP)                  |
 | SigLIP2             | [🤗 Hugging Face](https://huggingface.co/google/siglip2-base-patch16-224)            |
 | paligemma           | [🤗 Hugging Face](https://huggingface.co/google/paligemma-3b-pt-224)                 |
 
 > **ヒント**：`huggingface-cli download <model-name> --local-dir ./checkpoints/<model-name>` を使うとダウンロードを高速化できます。
+
+組み込みの SARM 設定では、CLIP ファイルを `./checkpoints/clip-vit-base-patch32` に配置してください。VLM ベースの自動アノテーションを使う場合は、公式 SARM VLM を `./checkpoints/Qwen3-VL-30B-A3B-Instruct` に配置してください。
 
 </details>
 
