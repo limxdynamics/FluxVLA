@@ -52,11 +52,12 @@ Notes:
   (`subtask_names`, `subtask_start_frames`, `subtask_end_frames`) for
   backwards compatibility. Separate `sarm_*_annotations.jsonl` files are no
   longer consulted.
-- The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-32B-Instruct`.
+- The external VLM used for annotation should also be placed under `./checkpoints`, for example `./checkpoints/Qwen3-VL-32B-Instruct`. If you pass a local Hugging Face cache root instead of a concrete snapshot directory, FluxVLA resolves it automatically to the matching `snapshots/*` entry.
 - `./checkpoints/sarm_dense_smoke` is a preserved smoke-test model directory from the external SARM workflow.
 - FluxVLA's `scripts/infer_sarm_progress.py` expects a FluxVLA training checkpoint file such as `./checkpoints/sarm_dense_only_flux_smoke.pt`.
 - `scripts/infer_sarm_progress.py` supports `--cfg-options` for dataset overrides and `--max-batches` for quick smoke validation.
 - For LeRobot v2.1/v3.x style datasets, `task` can be stored as a task index. FluxVLA resolves it back to task text at read time from `tasks.jsonl` or `tasks.parquet` without modifying dataset files.
+- For LeRobot v3.x style datasets, video paths may be described either by `videos/<key>/chunk_index` / `file_index` or equivalent chunk/file columns on episode metadata or parquet rows. FluxVLA accepts those variants without requiring dataset rewrites.
 - If your dataset uses a camera key other than `observation.images.image`, override `train_dataloader.dataset.video_keys` and `inference_dataset.video_keys` with `--cfg-options`.
 
 ## Annotating a Dataset

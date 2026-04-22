@@ -19,6 +19,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from fluxvla.engines import TRANSFORMS
+from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 
 @TRANSFORMS.register_module()
@@ -397,7 +398,8 @@ class TokenizeText:
                  text_key: str = 'task_description',
                  output_ids_key: str = 'text_input_ids',
                  output_attention_mask_key: str = 'text_attention_mask'):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        resolved_path = resolve_hf_local_path(model_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(resolved_path)
         self.max_length = max_length
         self.text_key = text_key
         self.output_ids_key = output_ids_key

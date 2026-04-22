@@ -19,6 +19,7 @@ import torch.nn as nn
 from transformers import CLIPModel
 
 from fluxvla.engines import LLM_BACKBONES
+from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 
 class StageTransformer(nn.Module):
@@ -247,6 +248,8 @@ class SARMBackbone(nn.Module):
             raise ValueError('`pretrained_name_or_path` or '
                              '`clip_model_name_or_path` must be provided '
                              'for SARMBackbone.')
+        clip_model_name_or_path = resolve_hf_local_path(
+            clip_model_name_or_path)
         self.pretrained_name_or_path = clip_model_name_or_path
         self.clip_model_name_or_path = clip_model_name_or_path
         self.clip_model = CLIPModel.from_pretrained(clip_model_name_or_path)
