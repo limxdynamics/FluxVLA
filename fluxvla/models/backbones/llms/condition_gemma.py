@@ -123,9 +123,9 @@ class GemmaRMSNorm(nn.Module):
 
         # self.dense.to(dtype=torch.bfloat16).to(dtype=torch.float32)
         modulation = self.dense(cond)
-        # Reshape modulation to broadcast properly:
-        # [batch, 1, features] for [batch, seq, features]
-        if len(x.shape) == 3:  # [batch, seq, features]
+        # [batch, 1, features] for scalar cond;
+        # per-position [batch, seq, features] needs no reshape.
+        if modulation.dim() == 2 and len(x.shape) == 3:
             modulation = modulation.unsqueeze(1)
 
         scale, shift, gate = torch.chunk(modulation, 3, dim=-1)
@@ -1097,8 +1097,10 @@ class GemmaForCausalLM(GemmaPreTrainedModel, GenerationMixin):
             ignored (masked), the loss is only computed for the tokens with
             labels in `[0, ..., config.vocab_size]`.
 
-        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)`,
-            *optional*): Condition for ADARMS.
+        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)` or
+            `(batch_size, sequence_length, cond_dim)`, *optional*):
+            Condition for ADARMS. A batch-level condition is broadcast across
+            the sequence; a per-position condition is applied token-wise.
 
         Example:
 
@@ -1229,8 +1231,10 @@ class GemmaForSequenceClassification(GemmaPreTrainedModel):
             (Mean-Square loss), If `config.num_labels > 1` a classification
             loss is computed (Cross-Entropy).
 
-        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)`,
-            *optional*): Condition for ADARMS.
+        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)` or
+            `(batch_size, sequence_length, cond_dim)`, *optional*):
+            Condition for ADARMS. A batch-level condition is broadcast across
+            the sequence; a per-position condition is applied token-wise.
         """
 
         transformer_outputs: BaseModelOutputWithPast = self.model(
@@ -1349,8 +1353,10 @@ class GemmaForTokenClassification(GemmaPreTrainedModel):
             (Mean-Square loss), If `config.num_labels > 1` a classification
             loss is computed (Cross-Entropy).
 
-        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)`,
-            *optional*): Condition for ADARMS.
+        adarms_cond (`torch.Tensor` of shape `(batch_size, cond_dim)` or
+            `(batch_size, sequence_length, cond_dim)`, *optional*):
+            Condition for ADARMS. A batch-level condition is broadcast across
+            the sequence; a per-position condition is applied token-wise.
         """
 
         outputs: BaseModelOutputWithPast = self.model(

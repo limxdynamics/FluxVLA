@@ -28,6 +28,7 @@ import torch
 def sample_training_delay(batch_size,
                           max_delay,
                           distribution='exponential',
+                          temperature=1.0,
                           device='cpu'):
     """Sample per-batch delay values for training-time RTC.
 
@@ -35,6 +36,9 @@ def sample_training_delay(batch_size,
         batch_size: Number of samples in the batch.
         max_delay: Maximum delay value (exclusive).
         distribution: 'exponential' (favors small delays) or 'uniform'.
+        temperature: Exponential temperature. Only used when
+            distribution='exponential'. 1.0 matches the current behavior;
+            larger values flatten toward uniform.
         device: Torch device.
 
     Returns:
@@ -44,11 +48,14 @@ def sample_training_delay(batch_size,
     if max_delay <= 0:
         return torch.zeros(batch_size, dtype=torch.long, device=device)
 
+    if temperature <= 0:
+        raise ValueError(f'Invalid temperature: {temperature}. Expected > 0.')
+
     if distribution == 'exponential':
         # Reference: PI Kinetix w = exp(arange(max_delay)[::-1])
         weights = torch.exp(
-            torch.arange(max_delay, dtype=torch.float32,
-                         device=device).flip(0))
+            torch.arange(max_delay, dtype=torch.float32, device=device).flip(0)
+            / temperature)
         weights = weights / weights.sum()
         delays = torch.multinomial(
             weights.expand(batch_size, -1), num_samples=1).squeeze(-1)

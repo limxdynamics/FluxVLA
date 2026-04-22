@@ -61,35 +61,9 @@ class PI05FlowMatching(PI0FlowMatching):
     """
 
     def __init__(self, **kwargs):
-        rtc_cfg = kwargs.get('rtc_training_config')
-        if rtc_cfg and rtc_cfg.get('enabled', False):
-            raise ValueError(
-                'PI05FlowMatching does not support training-time RTC. '
-                'Its architecture cannot inject per-position timesteps '
-                'without model modifications. Please disable '
-                'rtc_training_config or use test-time RTC (guidance) '
-                'instead.')
+        assert kwargs.get('state_proj') is None, (
+            'PI05FlowMatching does not use state_proj.')
         super().__init__(**kwargs)
-
-    def predict_action(self,
-                       *args,
-                       rtc_config=None,
-                       prev_actions=None,
-                       prefix_len=0,
-                       **kwargs):
-        if (prev_actions is not None and prefix_len > 0 and rtc_config
-                and rtc_config.get('method', 'prefix') == 'prefix'):
-            raise ValueError(
-                'PI05FlowMatching does not support RTC prefix mode at '
-                'inference. Its embed_suffix only accepts a scalar timestep '
-                'and cannot handle per-position time injection. '
-                "Use method='guidance' for test-time RTC instead.")
-        return super().predict_action(
-            *args,
-            rtc_config=rtc_config,
-            prev_actions=prev_actions,
-            prefix_len=prefix_len,
-            **kwargs)
 
     def embed_suffix(self, states, noisy_actions, timestep):
         """Embed the suffix tokens for the Pi0 head.
@@ -98,30 +72,25 @@ class PI05FlowMatching(PI0FlowMatching):
             state (torch.Tensor): The state tensor of shape (bsize, state_dim).
             noisy_actions (torch.Tensor): The noisy actions tensor of shape
                 (bsize, n_action_steps, action_dim).
-            timestep (torch.Tensor): The timestep tensor of shape (bsize,).
+            timestep (torch.Tensor): The timestep tensor of shape (bsize,)
+                for scalar time, or (bsize, n_action_steps) for per-position
+                time (used in training-time RTC).
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: A tuple
-                containing the embedded suffix tokens, padding masks,
-                and attention masks.
+            Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
+                  torch.Tensor]: A tuple containing the embedded suffix
+                tokens, padding masks, attention masks, and adarms_cond.
         """
         embs = []
         pad_masks = []
         att_masks = []
 
-        # Embed state
         bsize = states.shape[0]
         dtype = states.dtype
         device = states.device
-        if self.state_proj is not None:
-            state_emb = self.state_proj(states)
-            embs.append(state_emb[:, None, :])
-            pad_masks.append(
-                torch.ones(bsize, 1, dtype=torch.bool, device=device))
-            att_masks += [1]
 
         # Set attention masks so that image and language
-        # inputs do not attend to state or actions
+        # inputs do not attend to action tokens
 
         # Embed timestep using sine-cosine positional
         # encoding with sensitivity in the range [0, 1]
@@ -145,7 +114,7 @@ class PI05FlowMatching(PI0FlowMatching):
             bsize, action_time_dim, dtype=torch.bool, device=device)
         pad_masks.append(action_time_mask)
 
-        # Set attention masks so that image, language and state
+        # Set attention masks so that image and language
         # inputs do not attend to action tokens
         att_masks += [1] + ([0] * (self.n_action_steps - 1))
 

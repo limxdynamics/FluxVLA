@@ -30,10 +30,11 @@ model = dict(
             enabled=True,
             max_delay=7,
             distribution='exponential',  # 'exponential' (recommended) or 'uniform'
+            temperature=1.0,  # only used for 'exponential'; larger = flatter
         )))
 ```
 
-**PI0 (PI0FlowMatching)** — add directly under `model`:
+**PI0 / PI0.5 (PI0FlowMatching / PI05FlowMatching)** — add directly under `model`:
 
 ```python
 model = dict(
@@ -42,12 +43,17 @@ model = dict(
         enabled=True,
         max_delay=7,
         distribution='exponential',  # 'exponential' (recommended) or 'uniform'
+        temperature=1.0,  # only used for 'exponential'; larger = flatter
     ))
 ```
 
-> **Note**: PI0.5 (`PI05FlowMatching`) does not support training-time RTC.
-
 Mechanism: for each batch element, sample a delay `d ∈ [0, max_delay)`. The first `d` action steps are set to clean time (known no-noise states) and masked out from the loss.
+
+Delay distribution notes:
+
+- `distribution='uniform'`: all delays in `[0, max_delay)` are equally likely.
+- `distribution='exponential'`: favors small delays.
+- `temperature` only affects `distribution='exponential'`; `temperature=1.0` matches the original RTC behavior. Higher `temperature` increases coverage of larger delays and moves the distribution toward uniform, e.g. `max_delay=13, temperature=3`.
 
 #### Inference-side configuration
 
@@ -79,6 +85,7 @@ model = dict(
             enabled=True,
             max_delay=7,
             distribution='exponential',
+            temperature=1.0,
         )))
 
 # Optional continued finetuning from a pretrained checkpoint
@@ -151,19 +158,11 @@ Using GT as the prefix source keeps the prefix condition controlled and makes di
 Example commands:
 
 ```bash
-# GR00T / PI0 — run all modes (default)
 python scripts/test_rtc.py \
     --config configs/gr00t/gr00t_eagle_3b_aloha_full_finetune.py \
     --checkpoint /path/to/checkpoint.pt \
     --prefix_len 5 \
     --output_dir work_dirs/rtc_test
-
-# PI0.5 — skip prefix mode (unsupported)
-python scripts/test_rtc.py \
-    --config configs/pi05/pi05_paligemma_aloha_full_finetune.py \
-    --checkpoint /path/to/checkpoint.pt \
-    --prefix_len 5 \
-    --modes no_rtc guidance guidance_vjp
 ```
 
 ## Test visualization
@@ -190,7 +189,4 @@ This figure is intended as a qualitative reference for comparing post-prefix tra
 | ------------------------ | ----------------- | ------------- |
 | FlowMatchingHead (GR00T) | ✅                | ✅            |
 | PI0FlowMatching (PI0)    | ✅                | ✅            |
-| PI05FlowMatching (PI0.5) | ❌                | ✅            |
-
-> **Note**: PI0.5 does not support training-time RTC — its architecture
-> cannot inject per-position timesteps without model modifications.
+| PI05FlowMatching (PI0.5) | ✅                | ✅            |

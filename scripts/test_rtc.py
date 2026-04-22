@@ -24,13 +24,6 @@ Usage:
         --checkpoint /path/to/checkpoint.pt \
         --prefix_len 5 \
         --output_dir work_dirs/rtc_test
-
-    # PI0.5 — skip prefix (unsupported), run guidance only
-    python scripts/test_rtc.py \
-        --config configs/pi05/xxx.py \
-        --checkpoint /path/to/checkpoint.pt \
-        --prefix_len 5 \
-        --modes no_rtc guidance guidance_vjp
 """
 
 import argparse
@@ -329,9 +322,7 @@ def main():
     selected RTC modes, and generates per-dimension denoising
     visualizations.
 
-    Use ``--modes`` to choose which modes to run.  Defaults to all
-    four modes; pass a subset for models that do not support certain
-    modes (e.g. PI0.5 does not support ``prefix``).
+    Use ``--modes`` to choose which modes to run.
     """
     parser = argparse.ArgumentParser(description='End-to-end RTC test')
     parser.add_argument(

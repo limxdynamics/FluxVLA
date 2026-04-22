@@ -572,8 +572,7 @@ class PI0FlowMatching(BaseVLA):
         # Below we derive `t` which is passed to embed_suffix as the timestep:
         #   - RTC:     t is (B, T), per-position time (delay positions get
         #              0.0, meaning clean in PI0 convention).
-        #   - vanilla: t keeps (B,), same time for all positions. Must stay
-        #              1-D because PI05 embed_suffix only accepts (B,).
+        #   - vanilla: t keeps (B,), same time for all positions.
         T = actions.shape[1]
         if (self.rtc_training_config
                 and self.rtc_training_config.get('enabled', False)):
@@ -584,6 +583,7 @@ class PI0FlowMatching(BaseVLA):
                 max_delay=self.rtc_training_config.get('max_delay', 5),
                 distribution=self.rtc_training_config.get(
                     'distribution', 'exponential'),
+                temperature=self.rtc_training_config.get('temperature', 1.0),
                 device=actions.device)
             t, action_masks = apply_rtc_time_conditioning(
                 time, action_masks, delays, T, clean_time=0.0)  # (B, T)

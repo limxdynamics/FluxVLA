@@ -299,6 +299,7 @@ class FlowMatchingHead(nn.Module):
                 max_delay=self.rtc_training_config.get('max_delay', 5),
                 distribution=self.rtc_training_config.get(
                     'distribution', 'exponential'),
+                temperature=self.rtc_training_config.get('temperature', 1.0),
                 device=actions.device)
             t, action_masks = apply_rtc_time_conditioning(
                 t_scalar, action_masks, delays, T)  # (B, T)
