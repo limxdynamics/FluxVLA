@@ -350,7 +350,8 @@ class ProcessLiberoEvalInputs:
                  use_pil: bool = True,
                  embodiment_id: int = None,
                  flip_all_views: bool = True,
-                 num_padding_imgs: int = 0) -> None:
+                 num_padding_imgs: int = 0,
+                 defer_resize: bool = False) -> None:
         self.img_keys = img_keys
         self.resize_size = resize_size
         self.center_crop = center_crop
@@ -358,6 +359,7 @@ class ProcessLiberoEvalInputs:
         self.embodiment_id = embodiment_id
         self.flip_all_views = flip_all_views
         self.num_padding_imgs = num_padding_imgs
+        self.defer_resize = defer_resize
 
     def __call__(self, inputs: Dict) -> Dict:
         # Load raw images
@@ -365,7 +367,14 @@ class ProcessLiberoEvalInputs:
         for img_key in self.img_keys:
             if img_key not in inputs:
                 raise KeyError(f'Image key `{img_key}` not found in inputs!')
-            if self.flip_all_views:
+            if self.defer_resize:
+                img = np.asarray(inputs[img_key])
+                if self.flip_all_views or img_key == 'agentview_image':
+                    img = img[::-1, ::-1].copy()
+                else:
+                    img = img.copy()
+                imgs.append(img)
+            elif self.flip_all_views:
                 imgs.append(get_libero_image(inputs, self.resize_size, img_key))
             elif img_key == 'agentview_image':
                 imgs.append(get_libero_image(inputs, self.resize_size, img_key))

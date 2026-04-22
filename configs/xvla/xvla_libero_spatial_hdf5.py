@@ -1,17 +1,91 @@
-import os
+_XVLA_PATH = './checkpoints/X-VLA-Pt'
+_META_PATH = './datasets/libero_spatial_meta.json'
 
-_XVLA_PATH = './pretrained/X-VLA'
-if not os.path.exists(_XVLA_PATH):
-    _XVLA_PATH = '/mnt/data/cpfs/users/yanis/X-VLA/pretrained/X-VLA-Pt'
-_META_PATH = '/mnt/data/cpfs/users/yanis/X-VLA/data/libero_spatial_meta.json'
+_FLORENCE_CONFIG = dict(
+    model_type='florence2',
+    bos_token_id=0,
+    eos_token_id=2,
+    ignore_index=-100,
+    pad_token_id=1,
+    projection_dim=1024,
+    text_config=dict(
+        vocab_size=51289,
+        activation_dropout=0.1,
+        activation_function='gelu',
+        add_bias_logits=False,
+        add_final_layer_norm=False,
+        attention_dropout=0.1,
+        bos_token_id=0,
+        classif_dropout=0.1,
+        classifier_dropout=0.0,
+        d_model=1024,
+        decoder_attention_heads=16,
+        decoder_ffn_dim=4096,
+        decoder_layerdrop=0.0,
+        decoder_layers=12,
+        decoder_start_token_id=2,
+        dropout=0.1,
+        early_stopping=True,
+        encoder_attention_heads=16,
+        encoder_ffn_dim=4096,
+        encoder_layerdrop=0.0,
+        encoder_layers=12,
+        eos_token_id=2,
+        forced_eos_token_id=2,
+        forced_bos_token_id=0,
+        gradient_checkpointing=False,
+        init_std=0.02,
+        is_encoder_decoder=True,
+        label2id=dict(LABEL_0=0, LABEL_1=1, LABEL_2=2),
+        max_position_embeddings=4096,
+        no_repeat_ngram_size=3,
+        normalize_before=False,
+        num_hidden_layers=12,
+        pad_token_id=1,
+        scale_embedding=False,
+        num_beams=3,
+    ),
+    vision_config=dict(
+        model_type='davit',
+        drop_path_rate=0.1,
+        patch_size=[7, 3, 3, 3],
+        patch_stride=[4, 2, 2, 2],
+        patch_padding=[3, 1, 1, 1],
+        patch_prenorm=[False, True, True, True],
+        enable_checkpoint=False,
+        dim_embed=[256, 512, 1024, 2048],
+        num_heads=[8, 16, 32, 64],
+        num_groups=[8, 16, 32, 64],
+        depths=[1, 1, 9, 1],
+        window_size=12,
+        projection_dim=1024,
+        visual_temporal_embedding=dict(
+            type='COSINE',
+            max_temporal_embeddings=100,
+        ),
+        image_pos_embed=dict(
+            type='learned_abs_2d',
+            max_pos_embeddings=50,
+        ),
+        image_feature_source=['spatial_avg_pool', 'temporal_avg_pool'],
+    ),
+    vocab_size=51289,
+    torch_dtype='float32',
+    is_encoder_decoder=True,
+)
 
 model = dict(
     type='XVLAVla',
     pretrained_name_or_path=_XVLA_PATH,
     vlm_backbone=dict(
         type='Florence2Backbone',
+        # Keep vlm_path on the XVLA checkpoint directory. The standalone
+        # Florence checkpoint currently available in X-VLA uses a different
+        # config shape (e.g. text d_model/projection_dim), so swapping to it
+        # would break weight loading for this integration.
         vlm_path=_XVLA_PATH,
         dtype='bf16',
+        vlm_config=_FLORENCE_CONFIG,
     ),
     vla_head=dict(
         type='XVLAFlowMatchingHead',
@@ -108,21 +182,20 @@ eval = dict(
     type='LiberoEvalRunner',
     task_suite_name='libero_spatial',
     model_family='pi0',
+    # Original X-VLA generates 30 actions per server call; payload steps=10 is
+    # the denoising step count, not the rollout action chunk length.
     eval_chunk_size=30,
     resize_size=224,
     num_trials_per_task=50,
     num_steps_wait=10,
     task_horizons=dict(
         libero_spatial=800,
-        libero_object=800,
-        libero_goal=800,
-        libero_10=900,
-        libero_90=800,
     ),
     use_xvla_client_semantics=True,
-    seed=7,
+    seed=42,
     dataset=dict(
         type='LiberoParquetEvalDataset',
+        allow_private_stats_fallback=True,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',
@@ -130,10 +203,12 @@ eval = dict(
                 img_keys=['agentview_image', 'robot0_eye_in_hand_image'],
                 flip_all_views=False,
                 num_padding_imgs=1,
+                defer_resize=True,
             ),
             dict(
                 type='TransformImage',
                 image_resize_strategy='resize-naive',
+                interpolation='bicubic',
                 input_sizes=[[3, 224, 224], [3, 224, 224], [3, 224, 224]],
                 means=[[123.675, 116.28, 103.53],
                        [123.675, 116.28, 103.53],

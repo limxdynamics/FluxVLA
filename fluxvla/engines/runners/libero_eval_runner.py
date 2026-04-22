@@ -26,7 +26,7 @@ import tqdm
 from libero.libero import benchmark
 from safetensors.torch import load_file
 
-from fluxvla.engines.utils import initialize_overwatch
+from fluxvla.engines.utils import initialize_overwatch, rotmat_to_rot6d
 from fluxvla.engines.utils.eval_utils import (get_libero_dummy_action,
                                               get_libero_env,
                                               save_rollout_video)
@@ -148,8 +148,7 @@ class LiberoEvalRunner:
 
     @staticmethod
     def _mat_to_rot6d(rot_mat: np.ndarray) -> np.ndarray:
-        return np.concatenate([rot_mat[:3, 0], rot_mat[:3, 1]],
-                              axis=-1).astype(np.float32)
+        return rotmat_to_rot6d(rot_mat)
 
     @classmethod
     def _build_closed_loop_state(cls, env) -> np.ndarray:
@@ -268,6 +267,8 @@ class LiberoEvalRunner:
 
                 # Initialize LIBERO environment and task description
                 env, task_description = get_libero_env(task, resolution=256)
+                if self.use_xvla_client_semantics:
+                    env.seed(self.seed + trial_id + 100)
                 overwatch.info(f'\nTask: {task_description}')
                 log_file.write(f'\nTask: {task_description}\n')
 
@@ -275,10 +276,10 @@ class LiberoEvalRunner:
                 env.reset()
 
                 # Set initial states
-                obs = env.set_init_state(initial_states[trial_id])
+                init_state_id = trial_id
                 if self.use_xvla_client_semantics:
-                    for robot in env.env.robots:
-                        robot.controller.use_delta = False
+                    init_state_id = trial_id % initial_states.shape[0]
+                obs = env.set_init_state(initial_states[init_state_id])
                 is_new_episode = True
 
                 # Setup
@@ -301,6 +302,13 @@ class LiberoEvalRunner:
                 overwatch.info(f'Starting episode {trial_id+1}...')
 
                 log_file.write(f'Starting episode {trial_id+1}...\n')
+                if self.use_xvla_client_semantics:
+                    for _ in range(self.num_steps_wait):
+                        obs, reward, done, info = env.step(
+                            get_libero_dummy_action())
+                        t += 1
+                    for robot in env.env.robots:
+                        robot.controller.use_delta = False
                 while t < max_steps + self.num_steps_wait:
                     # IMPORTANT: Do nothing for the first
                     # few timesteps

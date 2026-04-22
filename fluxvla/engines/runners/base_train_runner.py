@@ -590,72 +590,7 @@ class BaseTrainRunner(ABC):
                 self.optimizer, num_training_steps, lr_schedule)
 
         elif self.lr_scheduler_type == 'xvla-freeze-warmup':
-            lr = self.learning_rate
-            coef = self.lr_coef
-            wd = weight_decay if weight_decay is not None else 0.0
-
-            vlm_ids, soft_ids, action_ids = set(), set(), set()
-            vlm_params, soft_params, action_params, core_params = [], [], [], []
-
-            for name, param in self.vla.named_parameters():
-                if not param.requires_grad:
-                    continue
-
-                canonical_name = name
-                while canonical_name.startswith('module.'):
-                    canonical_name = canonical_name.removeprefix('module.')
-                while canonical_name.startswith('_fsdp_wrapped_module.'):
-                    canonical_name = canonical_name.removeprefix(
-                        '_fsdp_wrapped_module.')
-                canonical_name = canonical_name.replace(
-                    '._fsdp_wrapped_module.', '.')
-                pid = id(param)
-
-                if canonical_name.startswith('vlm_backbone.'):
-                    if pid not in vlm_ids:
-                        vlm_ids.add(pid)
-                        vlm_params.append(param)
-                elif canonical_name.startswith(
-                        'vla_head.transformer.soft_prompt_hub.'):
-                    if pid not in soft_ids:
-                        soft_ids.add(pid)
-                        soft_params.append(param)
-                elif (canonical_name.startswith(
-                        'vla_head.transformer.action_encoder.')
-                      or canonical_name.startswith(
-                          'vla_head.transformer.action_decoder.')):
-                    if pid not in action_ids:
-                        action_ids.add(pid)
-                        action_params.append(param)
-                else:
-                    core_params.append(param)
-
-            param_groups = [
-                {
-                    'name': 'vlm',
-                    'params': vlm_params,
-                    'lr': lr * coef,
-                    'weight_decay': wd
-                },
-                {
-                    'name': 'transformer_core',
-                    'params': core_params,
-                    'lr': lr,
-                    'weight_decay': wd
-                },
-                {
-                    'name': 'soft_prompts',
-                    'params': soft_params,
-                    'lr': lr * coef,
-                    'weight_decay': wd
-                },
-                {
-                    'name': 'action_heads',
-                    'params': action_params,
-                    'lr': lr,
-                    'weight_decay': wd
-                },
-            ]
+            param_groups = self._build_xvla_param_groups(weight_decay)
             self.optimizer = AdamW(param_groups, betas=self.betas)
             self.lr_scheduler = get_constant_schedule(self.optimizer)
 
@@ -669,6 +604,77 @@ class BaseTrainRunner(ABC):
                 if group.get('name') == 'action_heads':
                     return group['lr']
         return self.lr_scheduler.get_last_lr()[0]
+
+    @staticmethod
+    def _canonicalize_param_name(name: str) -> str:
+        canonical_name = name
+        while canonical_name.startswith('module.'):
+            canonical_name = canonical_name.removeprefix('module.')
+        while canonical_name.startswith('_fsdp_wrapped_module.'):
+            canonical_name = canonical_name.removeprefix(
+                '_fsdp_wrapped_module.')
+        return canonical_name.replace('._fsdp_wrapped_module.', '.')
+
+    def _build_xvla_param_groups(self, weight_decay=None):
+        lr = self.learning_rate
+        coef = self.lr_coef
+        wd = weight_decay if weight_decay is not None else 0.0
+
+        vlm_ids, soft_ids, action_ids = set(), set(), set()
+        vlm_params, soft_params, action_params, core_params = [], [], [], []
+
+        for name, param in self.vla.named_parameters():
+            if not param.requires_grad:
+                continue
+
+            canonical_name = self._canonicalize_param_name(name)
+            pid = id(param)
+
+            if canonical_name.startswith('vlm_backbone.'):
+                if pid not in vlm_ids:
+                    vlm_ids.add(pid)
+                    vlm_params.append(param)
+            elif canonical_name.startswith(
+                    'vla_head.transformer.soft_prompt_hub.'):
+                if pid not in soft_ids:
+                    soft_ids.add(pid)
+                    soft_params.append(param)
+            elif (canonical_name.startswith(
+                    'vla_head.transformer.action_encoder.')
+                  or canonical_name.startswith(
+                      'vla_head.transformer.action_decoder.')):
+                if pid not in action_ids:
+                    action_ids.add(pid)
+                    action_params.append(param)
+            else:
+                core_params.append(param)
+
+        return [
+            {
+                'name': 'vlm',
+                'params': vlm_params,
+                'lr': lr * coef,
+                'weight_decay': wd
+            },
+            {
+                'name': 'transformer_core',
+                'params': core_params,
+                'lr': lr,
+                'weight_decay': wd
+            },
+            {
+                'name': 'soft_prompts',
+                'params': soft_params,
+                'lr': lr * coef,
+                'weight_decay': wd
+            },
+            {
+                'name': 'action_heads',
+                'params': action_params,
+                'lr': lr,
+                'weight_decay': wd
+            },
+        ]
 
     def _update_xvla_group_lrs(self, step: int) -> None:
         lr = self.learning_rate

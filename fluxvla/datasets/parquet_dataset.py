@@ -268,12 +268,14 @@ class LiberoParquetEvalDataset:
                  norm_stats: Any,
                  task_suite_name: str,
                  transforms: List[Dict],
-                 num_padding_imgs: int = 0) -> None:
+                 num_padding_imgs: int = 0,
+                 allow_private_stats_fallback: bool = False) -> None:
 
         # Build image/token transforms (parquet-style sequential list)
         self.transforms = [build_transform_from_cfg(t) for t in transforms]
         self.task_suite_name = task_suite_name
         self.num_padding_imgs = num_padding_imgs
+        self.allow_private_stats_fallback = allow_private_stats_fallback
         if isinstance(norm_stats, str):
             with open(norm_stats, 'r', encoding='utf-8') as f:
                 self.norm_stats = json.load(f)
@@ -287,10 +289,12 @@ class LiberoParquetEvalDataset:
             stats_key = self.task_suite_name + '_no_noops'
             if stats_key in self.norm_stats:
                 norm_stats = self.norm_stats[stats_key]
-            elif 'private' in self.norm_stats:
+            elif (self.allow_private_stats_fallback
+                  and 'private' in self.norm_stats):
                 norm_stats = self.norm_stats['private']
             else:
-                norm_stats = None
+                raise KeyError(
+                    f"Normalization stats key '{stats_key}' not found.")
         else:
             norm_stats = None
         data['norm_stats'] = norm_stats

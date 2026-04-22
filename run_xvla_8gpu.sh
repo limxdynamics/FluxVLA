@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd /mnt/data/cpfs/users/yanis/FluxVLA
 
-WORK_DIR="${WORK_DIR:-work_dirs/xvla_libero_spatial_hdf5_8gpu_bs16}"
+WORK_DIR="${WORK_DIR:-work_dirs/xvla_libero_4suite_hdf5_8gpu_bs16}"
 PER_DEVICE_BATCH_SIZE="${PER_DEVICE_BATCH_SIZE:-16}"
 MAX_STEPS="${MAX_STEPS:-60000}"
 SAVE_INTERVAL="${SAVE_INTERVAL:-10000}"
@@ -25,4 +25,5 @@ CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}" \
     runner.max_steps="${MAX_STEPS}" \
     train_dataloader.per_device_batch_size="${PER_DEVICE_BATCH_SIZE}" \
     runner.save_iter_interval="${SAVE_INTERVAL}" \
+    train_dataloader.dataset.datasets.meta_path=/mnt/data/cpfs/users/yanis/X-VLA/data/libero_4suite_meta.json \
   2>&1 | tee "${WORK_DIR}/train.stdout.log"

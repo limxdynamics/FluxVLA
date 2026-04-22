@@ -177,6 +177,8 @@ class Florence2Backbone(nn.Module):
                    vlm_path: str,
                    target_dtype: Optional[torch.dtype],
                    vlm_config: Optional[Dict]) -> Florence2ForConditionalGeneration:
+        if vlm_config is not None and os.path.isdir(vlm_path):
+            return cls._load_xvla_vlm(vlm_path, target_dtype, vlm_config)
         if cls._is_xvla_checkpoint_dir(vlm_path):
             return cls._load_xvla_vlm(vlm_path, target_dtype, vlm_config)
 
