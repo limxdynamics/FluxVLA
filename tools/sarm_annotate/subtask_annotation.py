@@ -75,9 +75,71 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import transformers
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from pydantic import BaseModel, Field
-from transformers import AutoProcessor, Qwen3VLMoeForConditionalGeneration
+from transformers import AutoProcessor
+
+
+def resolve_hf_local_path(model_name_or_path: str) -> str:
+    path = Path(model_name_or_path)
+    if not path.exists() or not path.is_dir():
+        return model_name_or_path
+
+    refs_main = path / 'refs' / 'main'
+    snapshots_dir = path / 'snapshots'
+    if not snapshots_dir.is_dir():
+        return model_name_or_path
+
+    snapshot_name = None
+    if refs_main.is_file():
+        snapshot_name = refs_main.read_text(encoding='utf-8').strip()
+
+    if snapshot_name:
+        snapshot_path = snapshots_dir / snapshot_name
+        if snapshot_path.is_dir():
+            return str(snapshot_path)
+
+    snapshot_dirs = sorted(child for child in snapshots_dir.iterdir()
+                           if child.is_dir())
+    if snapshot_dirs:
+        return str(snapshot_dirs[0])
+
+    return model_name_or_path
+
+
+def resolve_qwen_vl_model_class(model_name: str):
+    from transformers import AutoConfig
+
+    resolved_model_name = resolve_hf_local_path(model_name)
+    config = AutoConfig.from_pretrained(
+        resolved_model_name, trust_remote_code=True)
+    architectures = list(getattr(config, 'architectures', []) or [])
+    model_type = getattr(config, 'model_type', '')
+
+    for architecture in architectures:
+        model_class = getattr(transformers, architecture, None)
+        if model_class is not None:
+            return model_class
+
+    if any(arch == 'Qwen2_5_VLForConditionalGeneration' for arch in architectures) or model_type == 'qwen2_5_vl':
+        from transformers import Qwen2_5_VLForConditionalGeneration
+
+        return Qwen2_5_VLForConditionalGeneration
+
+    if any(arch == 'Qwen2VLForConditionalGeneration' for arch in architectures) or model_type == 'qwen2_vl':
+        from transformers import Qwen2VLForConditionalGeneration
+
+        return Qwen2VLForConditionalGeneration
+
+    try:
+        from transformers import AutoModelForVision2Seq
+
+        return AutoModelForVision2Seq
+    except ImportError as exc:
+        raise ImportError(
+            f'No compatible Qwen VL model class found for {model_name} '
+            f'(architectures={architectures}, model_type={model_type})') from exc
 
 
 # Pydantic Models for SARM Subtask Annotation
@@ -267,8 +329,7 @@ class VideoAnnotator:
             model_name: str = 'Qwen/Qwen3-VL-30B-A3B-Instruct',
             device: str = 'cuda',
             torch_dtype: torch.dtype = torch.bfloat16,
-            model: Qwen3VLMoeForConditionalGeneration
-        | None = None,  # noqa: F821
+            model: Any | None = None,
             processor: AutoProcessor | None = None,  # noqa: F821
     ):
         """
@@ -292,19 +353,20 @@ class VideoAnnotator:
             self.processor = processor
             print(f'Using shared model on {device}')
         else:
-            from transformers import (AutoProcessor,
-                                      Qwen3VLMoeForConditionalGeneration)
+            resolved_model_name = resolve_hf_local_path(model_name)
+            print(f'Loading model: {resolved_model_name}...')
+            model_class = resolve_qwen_vl_model_class(resolved_model_name)
 
-            print(f'Loading model: {model_name}...')
-
-            self.model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-                model_name,
+            self.model = model_class.from_pretrained(
+                resolved_model_name,
                 torch_dtype=torch_dtype,
-                device_map=device,
                 trust_remote_code=True)
+            if device:
+                self.model = self.model.to(device)
+            self.model.eval()
 
             self.processor = AutoProcessor.from_pretrained(
-                model_name, trust_remote_code=True)
+                resolved_model_name, trust_remote_code=True)
 
             print(f'Model loaded successfully on {device}')
 
@@ -1102,6 +1164,12 @@ def main():
     parser.add_argument(
         '--device', type=str, default='cuda', help='Device (cuda/cpu)')
     parser.add_argument(
+        '--video-backend',
+        type=str,
+        default=None,
+        choices=['torchcodec', 'pyav', 'video_reader'],
+        help='Video decode backend passed to LeRobotDataset.')
+    parser.add_argument(
         '--dtype',
         type=str,
         default='bfloat16',
@@ -1143,7 +1211,11 @@ def main():
 
     # Load dataset first (needed for both annotation and visualization)
     print(f'Loading dataset: {args.repo_id}')
-    dataset = LeRobotDataset(args.repo_id, download_videos=True)
+    dataset = LeRobotDataset(
+        args.repo_id,
+        download_videos=True,
+        video_backend=args.video_backend,
+    )
     fps = dataset.fps
 
     if not dataset.meta.video_keys:

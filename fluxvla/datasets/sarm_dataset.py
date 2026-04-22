@@ -34,9 +34,8 @@ from fluxvla.engines import DATASETS
 class SARMDataset(ParquetDataset):
     """SARM dataset built on top of :class:`ParquetDataset`.
 
-    It reuses the base class for loading ``info.json``/``tasks.jsonl``/
-    ``episodes.jsonl`` and the concatenated Hugging Face parquet dataset,
-    and layers SARM-specific logic on top:
+    It reuses the base class for loading dataset metadata and the concatenated
+    Hugging Face parquet dataset, and layers SARM-specific logic on top:
 
     * multi-frame observation sequence construction from ``frame_gap``
     * video decoding via ``torchvision`` from ``videos/<key>/...mp4``
@@ -79,7 +78,7 @@ class SARMDataset(ParquetDataset):
         self.total_frames = 1 + n_obs_steps + rewind_reserve
 
         # ParquetDataset base class already loaded ``self.info``,
-        # ``self.tasks`` (as list[list[{task_index, task}]]),
+        # ``self.tasks`` (as list[task_index -> task text]),
         # ``self.episodes`` (flat), ``self.dataset`` (HF dataset concatenated
         # across data roots), ``self.dataset_cumulative_sizes`` and
         # ``self.transforms``. Convert / re-index them into the forms SARM
@@ -87,21 +86,13 @@ class SARMDataset(ParquetDataset):
         self.meta_roots = [
             os.path.join(path, 'meta') for path in self.data_root_path
         ]
-        self.tasks = [{
-            int(entry['task_index']): str(entry['task'])
-            for entry in dataset_tasks
-        } for dataset_tasks in self.tasks]
         self.episodes_meta: List[Dict[int, Dict]] = []
-        for meta_root in self.meta_roots:
+        for dataset_episodes in self.episodes_by_dataset:
             records: Dict[int, Dict] = {}
-            with open(
-                    os.path.join(meta_root, 'episodes.jsonl'),
-                    'r',
-                    encoding='utf-8') as handle:
-                for episode_index, line in enumerate(handle):
-                    if not line.strip():
-                        continue
-                    records[episode_index] = json.loads(line)
+            for fallback_episode_index, record in enumerate(dataset_episodes):
+                episode_index = int(
+                    record.get('episode_index', fallback_episode_index))
+                records[episode_index] = record
             self.episodes_meta.append(records)
 
         self.episode_ranges = {}
@@ -138,8 +129,7 @@ class SARMDataset(ParquetDataset):
                     meta_root, 'sparse')
                 self.sparse_temporal_meta[dataset_idx] = (sparse_names, {
                     name: prop
-                    for name, prop in zip(
-                        sparse_names, sparse_props, strict=True)
+                    for name, prop in zip(sparse_names, sparse_props)
                 })
                 self.sparse_annotations[
                     dataset_idx] = load_episode_annotations(
@@ -152,41 +142,14 @@ class SARMDataset(ParquetDataset):
                 meta_root, 'dense')
             self.dense_temporal_meta[dataset_idx] = (dense_names, {
                 name: prop
-                for name, prop in zip(dense_names, dense_props, strict=True)
+                for name, prop in zip(dense_names, dense_props)
             })
             self.dense_annotations[dataset_idx] = load_episode_annotations(
                 meta_root, 'dense')
 
-    def _resolve_task_description(self, dataset_idx: int, data: Dict) -> str:
-        raw_task = data.get('task')
-        if isinstance(raw_task, str):
-            return raw_task
-        if isinstance(raw_task, np.ndarray) and raw_task.ndim == 0:
-            raw_task = raw_task.item()
-        if isinstance(raw_task, torch.Tensor) and raw_task.numel() == 1:
-            raw_task = raw_task.item()
-        if isinstance(raw_task, (int, np.integer)):
-            task_idx = int(raw_task)
-            if task_idx in self.tasks[dataset_idx]:
-                return self.tasks[dataset_idx][task_idx]
-
-        raw_task_index = data.get('task_index')
-        if isinstance(raw_task_index, np.ndarray) and raw_task_index.ndim == 0:
-            raw_task_index = raw_task_index.item()
-        if isinstance(raw_task_index,
-                      torch.Tensor) and raw_task_index.numel() == 1:
-            raw_task_index = raw_task_index.item()
-        if isinstance(raw_task_index, (int, np.integer)):
-            task_idx = int(raw_task_index)
-            if task_idx in self.tasks[dataset_idx]:
-                return self.tasks[dataset_idx][task_idx]
-
-        raise KeyError('Unable to resolve task description for dataset index '
-                       f'{dataset_idx} from keys: {list(data.keys())}')
-
     def _decode_video_frames_torchvision(
             self,
-            video_path: Path | str,
+            video_path: Union[Path, str],
             timestamps: List[float],
             tolerance_s: float = 0.1,
             backend: str = 'pyav') -> torch.Tensor:
@@ -227,12 +190,29 @@ class SARMDataset(ParquetDataset):
             'video_key': video_key,
             'episode_index': episode_index,
         }
-        chunk_key = f'videos/{video_key}/chunk_index'
-        file_key = f'videos/{video_key}/file_index'
-        if chunk_key in episode_meta:
-            format_kwargs['chunk_index'] = int(episode_meta[chunk_key])
-        if file_key in episode_meta:
-            format_kwargs['file_index'] = int(episode_meta[file_key])
+
+        def _first_available_int(keys: List[str]) -> Optional[int]:
+            for key in keys:
+                if key in episode_meta:
+                    return int(episode_meta[key])
+            return None
+
+        chunk_index = _first_available_int([
+            f'videos/{video_key}/chunk_index',
+            'meta/episodes/chunk_index',
+            'data/chunk_index',
+            'chunk_index',
+        ])
+        file_index = _first_available_int([
+            f'videos/{video_key}/file_index',
+            'meta/episodes/file_index',
+            'data/file_index',
+            'file_index',
+        ])
+        if chunk_index is not None:
+            format_kwargs['chunk_index'] = chunk_index
+        if file_index is not None:
+            format_kwargs['file_index'] = file_index
         if 'chunks_size' in info:
             format_kwargs['episode_chunk'] = episode_index // int(
                 info['chunks_size'])

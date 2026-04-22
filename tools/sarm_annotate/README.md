@@ -143,13 +143,21 @@ A GPU with enough VRAM for the chosen Qwen3-VL variant (≥16 GB recommended for
 the 30B MoE model) is required for `VideoAnnotator`. The manual pipeline does
 not need any of these.
 
+### Practical notes
+
+- `--model` may point to a Hugging Face repo ID, a concrete snapshot directory, or a local cache root such as `./checkpoints/Qwen3-VL-32B-Instruct`; the script resolves cache roots automatically to a loadable `snapshots/*` directory.
+- If the default video decoder is unavailable in your environment, pass `--video-backend pyav` or `--video-backend video_reader`. Leaving it unset keeps LeRobot's default behavior.
+- The auto-annotation path resolves the actual Qwen model class from config, so Qwen2-VL, Qwen2.5-VL, and Qwen3-VL variants do not need hard-coded class names.
+
 ### Examples
 
 ```bash
 # Local dataset, dense-only
 python tools/sarm_annotate/subtask_annotation.py \
     --repo-id /path/to/your/lerobot_dataset \
+  --model ./checkpoints/Qwen3-VL-32B-Instruct \
     --video-key observation.images.image \
+  --video-backend pyav \
     --dense-only \
     --dense-subtasks "Move to object, Grasp object, Move to target, Place object"
 ```
