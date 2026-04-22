@@ -31,9 +31,9 @@ FluxVLA's SARM configs use relative checkpoint paths under `./checkpoints`, cons
 
 Current SARM configs:
 
-- `configs/sarm/sarm_single_stage_libero_10.py`
-- `configs/sarm/sarm_dense_only_libero_10.py`
-- `configs/sarm/sarm_dual_libero_10.py`
+- `configs/sarm/sarm_single_stage.py`
+- `configs/sarm/sarm_dense_only.py`
+- `configs/sarm/sarm_dual.py`
 
 These files are now starter templates. Their default `data_root_path` is the generic example path `./datasets/your_sarm_lerobot_dataset`, so they no longer assume Libero data by default. Replace it with your own dataset path before training; if your camera key is not `observation.images.image`, update that as well or override it with `--cfg-options`.
 
@@ -187,8 +187,8 @@ Example training command:
 export WANDB_MODE=disabled
 torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   scripts/train.py \
-  --config configs/sarm/sarm_dense_only_libero_10.py \
-  --work-dir ./work_dirs/sarm_dense_only_libero_10 \
+  --config configs/sarm/sarm_dense_only.py \
+  --work-dir ./work_dirs/sarm_dense_only \
   --cfg-options train_dataloader.per_device_batch_size=1
 ```
 
@@ -199,7 +199,7 @@ export WANDB_MODE=disabled
 export HF_ENDPOINT="https://hf-mirror.com"
 torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   scripts/train.py \
-  --config configs/sarm/sarm_dense_only_libero_10.py \
+  --config configs/sarm/sarm_dense_only.py \
   --work-dir ./work_dirs/sarm_dense_only_your_dataset \
   --cfg-options \
     model.data_root_path=/path/to/your_dataset \
@@ -220,9 +220,9 @@ Example offline progress inference command:
 
 ```bash
 python scripts/infer_sarm_progress.py \
-  --config configs/sarm/sarm_dense_only_libero_10.py \
-  --ckpt-path ./work_dirs/sarm_dense_only_libero_10/checkpoints/latest-checkpoint.pt \
-  --output-path ./work_dirs/sarm_dense_only_libero_10/sarm_progress.jsonl \
+  --config configs/sarm/sarm_dense_only.py \
+  --ckpt-path ./work_dirs/sarm_dense_only/checkpoints/latest-checkpoint.pt \
+  --output-path ./work_dirs/sarm_dense_only/sarm_progress.jsonl \
   --head-mode dense \
   --batch-size 1
 ```
@@ -231,7 +231,7 @@ Example minimal real-dataset inference command:
 
 ```bash
 python scripts/infer_sarm_progress.py \
-  --config configs/sarm/sarm_dense_only_libero_10.py \
+  --config configs/sarm/sarm_dense_only.py \
   --ckpt-path ./work_dirs/sarm_dense_only_your_dataset/checkpoints/latest-checkpoint.pt \
   --output-path ./work_dirs/sarm_dense_only_your_dataset/sarm_progress.jsonl \
   --head-mode dense \
