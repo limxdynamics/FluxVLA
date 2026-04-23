@@ -23,8 +23,9 @@ from mmengine import Config, DictAction
 
 from fluxvla.datasets.utils import (save_dataset_statistics,
                                     save_grouped_dataset_statistics)
-from fluxvla.engines import (build_dataset_from_cfg, build_runner_from_cfg,
-                             initialize_overwatch)
+from fluxvla.engines.utils import (build_dataset_from_cfg,
+                                   build_runner_from_cfg,
+                                   initialize_overwatch)
 
 overwatch = initialize_overwatch(__name__)
 

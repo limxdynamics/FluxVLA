@@ -1,5 +1,5 @@
 _XVLA_PATH = './checkpoints/X-VLA-Pt'
-_META_PATH = './datasets/libero_spatial_meta.json'
+_LEROBOT_ROOT = './datasets/libero_4suite_xvla_lerobotv2/libero_10'
 
 _FLORENCE_CONFIG = dict(
     model_type='florence2',
@@ -79,10 +79,6 @@ model = dict(
     pretrained_name_or_path=_XVLA_PATH,
     vlm_backbone=dict(
         type='Florence2Backbone',
-        # Keep vlm_path on the XVLA checkpoint directory. The standalone
-        # Florence checkpoint currently available in X-VLA uses a different
-        # config shape (e.g. text d_model/projection_dim), so swapping to it
-        # would break weight loading for this integration.
         vlm_path=_XVLA_PATH,
         dtype='bf16',
         vlm_config=_FLORENCE_CONFIG,
@@ -118,19 +114,25 @@ train_dataloader = dict(
     dataset=dict(
         type='DistributedRepeatingDataset',
         seed=7,
-        # No normalization stats needed for X-VLA (no mean/std norm on actions).
         statistic_keys=[],
         name_mappings={},
         statistic_name='private',
         datasets=dict(
-            type='LiberoHDF5Dataset',
-            meta_path=_META_PATH,
+            type='LiberoLeRobotEE6DDataset',
+            data_root_path=_LEROBOT_ROOT,
             num_actions=30,
             num_views=3,
             embodiment_id=3,
             training=True,
             statistic_name='private',
             image_size=224,
+            future_window_seconds=1.0,
+            frame_tolerance_s=0.1,
+            drop_incomplete_future=True,
+            image_keys=[
+                'observation.images.image',
+                'observation.images.wrist_image',
+            ],
             transforms=[
                 dict(
                     type='ProcessXVLAPrompts',
@@ -180,17 +182,12 @@ runner = dict(
 
 eval = dict(
     type='LiberoEvalRunner',
-    task_suite_name='libero_spatial',
+    task_suite_name='libero_10',
     model_family='pi0',
-    # Original X-VLA generates 30 actions per server call; payload steps=10 is
-    # the denoising step count, not the rollout action chunk length.
     eval_chunk_size=30,
     resize_size=224,
     num_trials_per_task=50,
     num_steps_wait=10,
-    task_horizons=dict(
-        libero_spatial=800,
-    ),
     use_xvla_client_semantics=True,
     seed=42,
     dataset=dict(

@@ -31,12 +31,14 @@ PI0_CKPT_PATH = './checkpoints/pi0_base/model.safetensors'
 PI05_CKPT_PATH = './checkpoints/pi05_base/model.safetensors'
 GR00T_CKPT_PATH = './checkpoints/GR00T-N1.5-3B'
 DREAMZERO_CKPT_PATH = './checkpoints/DreamZero-AgiBot'
+XVLA_CKPT_PATH = './checkpoints/X-VLA-Pt'
 OPENVLA_DATA_DIR = 'test/data/models/vlas/openvla'
 LLAVAVLA_DATA_DIR = 'test/data/models/vlas/llavavla'
 GR00T_DATA_DIR = 'test/data/models/vlas/gr00t'
 PI0_DATA_DIR = 'test/data/models/vlas/pi0'
 PI05_DATA_DIR = 'test/data/models/vlas/pi05'
 DREAMZERO_DATA_DIR = 'test/data/models/vlas/dreamzero'
+XVLA_DATA_DIR = 'test/data/models/vlas/xvla'
 DREAMZERO_NUM_INFERENCE_STEPS = 2
 
 
@@ -384,6 +386,7 @@ class TestPI0FlowMatching(unittest.TestCase):
         set_seed_everywhere(0)
         self.vla = build_vla_from_cfg(self.cfg).cuda()
         self.vla.from_pretrained()
+        self.vla.vla_head = self.vla.vla_head.to(dtype=torch.bfloat16)
         self.vla.eval()
 
     def test_prefix_forward(self):
@@ -1064,6 +1067,139 @@ class TestDreamZero(unittest.TestCase):
             with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
                 pred_actions = self.vla.predict_action(
                     images=images,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    states=states,
+                    embodiment_ids=embodiment_ids,
+                )
+
+        self.assertTrue(
+            np.allclose(
+                pred_actions.float().cpu().numpy(),
+                pred_actions_ref,
+                atol=1e-2))
+
+
+@pytest.mark.skipif(
+    not os.path.exists(XVLA_CKPT_PATH),
+    reason=f'Checkpoint not found: {XVLA_CKPT_PATH}')
+class TestXVLA(unittest.TestCase):
+
+    def setUp(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        self.cfg = dict(
+            type='XVLAVla',
+            pretrained_name_or_path=XVLA_CKPT_PATH,
+            vlm_backbone=dict(
+                type='Florence2Backbone',
+                vlm_path=XVLA_CKPT_PATH,
+                dtype='bf16',
+            ),
+            vla_head=dict(
+                type='XVLAFlowMatchingHead',
+                hidden_size=1024,
+                multi_modal_input_size=1024,
+                depth=24,
+                num_heads=16,
+                mlp_ratio=4.0,
+                num_domains=30,
+                dim_action=20,
+                dim_propio=20,
+                len_soft_prompts=32,
+                dim_time=32,
+                max_len_seq=512,
+                use_hetero_proj=False,
+                num_actions=30,
+                num_inference_steps=10,
+                action_mode='ee6d',
+            ),
+            freeze_vlm_backbone=False,
+            name_mapping={
+                'vlm_backbone.vlm': 'vlm',
+                'vla_head.transformer': 'transformer',
+            },
+        )
+        set_seed_everywhere(0)
+        self.vla = build_vla_from_cfg(self.cfg).cuda()
+        self.vla.from_pretrained()
+        self.vla.vla_head = self.vla.vla_head.to(dtype=torch.bfloat16)
+        self.vla.eval()
+
+    def _load_tensor(self, name, dtype=None):
+        arr = np.load(os.path.join(XVLA_DATA_DIR, f'{name}.npy'),
+                      allow_pickle=True)
+        tensor = torch.from_numpy(arr).cuda()
+        if dtype is not None:
+            tensor = tensor.to(dtype)
+        return tensor
+
+    def test_forward(self):
+        images = self._load_tensor('images', torch.bfloat16)
+        img_masks = self._load_tensor('img_masks')
+        lang_tokens = self._load_tensor('lang_tokens').long()
+        lang_masks = self._load_tensor('lang_masks').long()
+        states = self._load_tensor('states', torch.bfloat16)
+        actions = self._load_tensor('actions', torch.bfloat16)
+        action_masks = self._load_tensor('action_masks')
+        embodiment_ids = self._load_tensor('embodiment_ids').long()
+
+        loss_ref = np.load(os.path.join(XVLA_DATA_DIR, 'loss.npy'))
+        position_loss_ref = np.load(
+            os.path.join(XVLA_DATA_DIR, 'position_loss.npy'))
+        rotate6d_loss_ref = np.load(
+            os.path.join(XVLA_DATA_DIR, 'rotate6D_loss.npy'))
+        gripper_loss_ref = np.load(
+            os.path.join(XVLA_DATA_DIR, 'gripper_loss.npy'))
+
+        set_seed_everywhere(0)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                output = self.vla.forward(
+                    images=images,
+                    img_masks=img_masks,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    states=states,
+                    actions=actions,
+                    action_masks=action_masks,
+                    embodiment_ids=embodiment_ids,
+                )
+
+        self.assertTrue(
+            np.allclose(output['loss'].float().cpu().numpy(), loss_ref, atol=1e-2))
+        self.assertTrue(
+            np.allclose(
+                output['position_loss'].float().cpu().numpy(),
+                position_loss_ref,
+                atol=1e-2))
+        self.assertTrue(
+            np.allclose(
+                output['rotate6D_loss'].float().cpu().numpy(),
+                rotate6d_loss_ref,
+                atol=1e-2))
+        self.assertTrue(
+            np.allclose(
+                output['gripper_loss'].float().cpu().numpy(),
+                gripper_loss_ref,
+                atol=1e-2))
+
+    def test_predict_action(self):
+        images = self._load_tensor('images', torch.bfloat16)
+        img_masks = self._load_tensor('img_masks')
+        lang_tokens = self._load_tensor('lang_tokens').long()
+        lang_masks = self._load_tensor('lang_masks').long()
+        states = self._load_tensor('states', torch.bfloat16)
+        embodiment_ids = self._load_tensor('embodiment_ids').long()
+
+        pred_actions_ref = np.load(os.path.join(XVLA_DATA_DIR, 'pred_actions.npy'))
+
+        set_seed_everywhere(0)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                pred_actions = self.vla.predict_action(
+                    images=images,
+                    img_masks=img_masks,
                     lang_tokens=lang_tokens,
                     lang_masks=lang_masks,
                     states=states,

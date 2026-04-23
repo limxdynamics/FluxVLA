@@ -23,8 +23,10 @@ import torch
 from fluxvla.engines import build_vlm_backbone_from_cfg
 
 QWEN2_5_VL_CKPT_PATH = './checkpoints/Qwen2.5-VL-3B-Instruct'
+XVLA_CKPT_PATH = './checkpoints/X-VLA-Pt'
 PALIGEMMA_DATA_DIR = 'test/data/models/vlm_backbones/paligemma'
 QWEN_VL_DATA_DIR = 'test/data/models/vlm_backbones/qwen_vl'
+XVLA_VLM_DATA_DIR = 'test/data/models/vlm_backbones/xvla_florence2'
 
 
 class TestPaligemmaBackbone(unittest.TestCase):
@@ -267,3 +269,82 @@ class TestQWenVLBackbone(unittest.TestCase):
                 torch.from_numpy(pad_masks_target).cuda(),
                 rtol=1e-3,
                 atol=1e-3))
+
+
+@pytest.mark.skipif(
+    not os.path.exists(XVLA_CKPT_PATH),
+    reason=f'Checkpoint not found: {XVLA_CKPT_PATH}')
+class TestXVLAFloence2Backbone(unittest.TestCase):
+
+    def setUp(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        self.cfg = dict(
+            type='Florence2Backbone',
+            vlm_path=XVLA_CKPT_PATH,
+            dtype='bf16',
+        )
+        np.random.seed(0)
+        torch.manual_seed(0)
+        torch.cuda.manual_seed(0)
+        import tensorflow as tf
+        tf.random.set_seed(0)
+        self.vlm_backbone = build_vlm_backbone_from_cfg(self.cfg).cuda().eval()
+
+    @pytest.mark.skipif(
+        condition=torch.cuda.is_available() is False,
+        reason='No GPU available.')
+    def test_xvla_florence2_forward(self):
+        images = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'images.npy'),
+                allow_pickle=True)).cuda().to(torch.bfloat16)
+        img_masks = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'img_masks.npy'),
+                allow_pickle=True)).cuda()
+        lang_tokens = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'lang_tokens.npy'),
+                allow_pickle=True)).cuda()
+        lang_masks = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'lang_masks.npy'),
+                allow_pickle=True)).cuda()
+
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                features, attention_mask, aux_visual_inputs = self.vlm_backbone(
+                    images=images,
+                    img_masks=img_masks,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                )
+
+        features_target = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'vlm_features.npy'),
+                allow_pickle=True)).cuda()
+        attention_mask_target = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'attention_mask.npy'),
+                allow_pickle=True)).cuda()
+        aux_visual_inputs_target = torch.from_numpy(
+            np.load(
+                os.path.join(XVLA_VLM_DATA_DIR, 'aux_visual_inputs.npy'),
+                allow_pickle=True)).cuda()
+
+        self.assertTrue(
+            torch.allclose(
+                features.float()[:, ::10, ::10],
+                features_target[:, ::10, ::10],
+                rtol=1e-3,
+                atol=1e-1))
+        self.assertTrue(
+            torch.equal(attention_mask, attention_mask_target))
+        self.assertTrue(
+            torch.allclose(
+                aux_visual_inputs.float()[:, ::10, ::10],
+                aux_visual_inputs_target[:, ::10, ::10],
+                rtol=1e-3,
+                atol=1e-1))
