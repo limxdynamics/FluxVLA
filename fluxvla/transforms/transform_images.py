@@ -283,10 +283,12 @@ class TransformImage:
         input_sizes: Optional[List[Tuple[int, int, int]]] = None,
         means: Optional[List[Tuple[float, float, float]]] = None,
         stds: Optional[List[Tuple[float, float, float]]] = None,
+        interpolation: str = 'bilinear',
         **kwargs: str,
     ) -> None:
         self.use_fused_vision_backbone = use_fused_vision_backbone
         self.image_resize_strategy = image_resize_strategy
+        self.interpolation = interpolation
 
         # Handle `None` default values
         input_sizes = [(3, 224, 224)] if input_sizes is None else input_sizes
@@ -306,7 +308,7 @@ class TransformImage:
         for idx in range(len(input_sizes)):
             self.resize_params.append({
                 'size': input_sizes[idx][-2:],
-                'interpolation': 'bilinear'
+                'interpolation': interpolation
             })
             self.crop_params.append({'output_size': input_sizes[idx][-2:]})
             self.normalize_params.append({
@@ -347,13 +349,15 @@ class TransformImage:
         if self.image_resize_strategy == 'resize-naive':
             # Resize without keeping the aspect ratio (naive resize)
             img_resized = img.resize(resize_param['size'],
-                                     Image.Resampling.BILINEAR)
+                                     self._get_pil_resampling(
+                                         resize_param['interpolation']))
         else:
             if self.do_letterbox:
                 img = self.letterbox_pad_transform(img, self.letterbox_fill)
             # Resize the image
             img_resized = img.resize(resize_param['size'],
-                                     Image.Resampling.BILINEAR)
+                                     self._get_pil_resampling(
+                                         resize_param['interpolation']))
 
         # Center crop
         left = (img_resized.width - crop_param['output_size'][0]) // 2
@@ -406,6 +410,19 @@ class TransformImage:
                     self.crop_params[idx], self.normalize_params[idx]))
 
         return np.concatenate(pixel_values)
+
+    @staticmethod
+    def _get_pil_resampling(interpolation: str) -> Image.Resampling:
+        interpolation = interpolation.lower()
+        if interpolation == 'bilinear':
+            return Image.Resampling.BILINEAR
+        if interpolation == 'bicubic':
+            return Image.Resampling.BICUBIC
+        if interpolation == 'lanczos':
+            return Image.Resampling.LANCZOS
+        if interpolation == 'nearest':
+            return Image.Resampling.NEAREST
+        raise ValueError(f'Unsupported interpolation: {interpolation}')
 
     def __call__(self, inputs: Dict, **kwargs) -> dict:
         images = inputs['pixel_values']

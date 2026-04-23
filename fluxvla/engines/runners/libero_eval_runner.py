@@ -18,15 +18,16 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List, Optional
 
+import numpy as np
 import torch
 import torch.distributed as dist
 import tqdm
 from libero.libero import benchmark
 from safetensors.torch import load_file
 
-from fluxvla.engines.utils import initialize_overwatch
+from fluxvla.engines.utils import initialize_overwatch, rotmat_to_rot6d
 from fluxvla.engines.utils.eval_utils import (get_libero_dummy_action,
                                               get_libero_env,
                                               save_rollout_video)
@@ -79,6 +80,9 @@ class LiberoEvalRunner:
                  resize_size: int = 224,
                  num_trials_per_task: int = 50,
                  num_steps_wait: int = 10,
+                 task_ids: Optional[List[int]] = None,
+                 task_horizons: Dict = None,
+                 use_xvla_client_semantics: bool = False,
                  mixed_precision_dtype: str = 'bf16',
                  enable_mixed_precision_training: bool = True):
         from fluxvla.engines import (build_dataset_from_cfg,
@@ -147,6 +151,11 @@ class LiberoEvalRunner:
         self.resize_size = resize_size
         self.num_trials_per_task = num_trials_per_task
         self.num_steps_wait = num_steps_wait
+        self.task_ids = None if task_ids is None else sorted(
+            {int(task_id)
+             for task_id in task_ids})
+        self.task_horizons = task_horizons or {}
+        self.use_xvla_client_semantics = use_xvla_client_semantics
         self.mixed_precision_dtype = str_to_dtype(mixed_precision_dtype)
         self.enable_mixed_precision_training = enable_mixed_precision_training
         self.distributed_state = overwatch.distributed_state
@@ -161,6 +170,24 @@ class LiberoEvalRunner:
                 'You can ignore this if you are loading the base VLA (i.e. not fine-tuned) checkpoint.'  # noqa: E501
                 'Otherwise, you may run into errors when trying to call `predict_action()` due to an absent `unnorm_key`.'  # noqa: E501
             )
+
+    @staticmethod
+    def _mat_to_rot6d(rot_mat: np.ndarray) -> np.ndarray:
+        return rotmat_to_rot6d(rot_mat)
+
+    @classmethod
+    def _build_closed_loop_state(cls, env) -> np.ndarray:
+        ee_pos = np.asarray(env.env.robots[0].controller.ee_pos,
+                            dtype=np.float32)
+        ee_rot6d = cls._mat_to_rot6d(
+            np.asarray(env.env.robots[0].controller.ee_ori_mat,
+                       dtype=np.float32))
+        arm = np.concatenate([ee_pos, ee_rot6d, np.array([0.0],
+                              dtype=np.float32)],
+                             axis=-1)
+        state = np.zeros((20,), dtype=np.float32)
+        state[:10] = arm
+        return state
 
     def run_setup(self):
         """Set up the evaluation environment and model."""
@@ -182,11 +209,28 @@ class LiberoEvalRunner:
         benchmark_dict = benchmark.get_benchmark_dict()
         task_suite = benchmark_dict[self.task_suite_name]()
         num_tasks_in_suite = task_suite.n_tasks
-        global_episodes = list(
-            range(num_tasks_in_suite * self.num_trials_per_task))
+        if self.task_ids is None:
+            eval_task_ids = list(range(num_tasks_in_suite))
+        else:
+            invalid = [
+                task_id for task_id in self.task_ids
+                if task_id < 0 or task_id >= num_tasks_in_suite
+            ]
+            if invalid:
+                raise ValueError(
+                    f'Invalid task_ids for {self.task_suite_name}: {invalid}; '
+                    f'valid range is [0, {num_tasks_in_suite - 1}]')
+            eval_task_ids = self.task_ids
+        global_episodes = [
+            task_id * self.num_trials_per_task + trial_id
+            for task_id in eval_task_ids
+            for trial_id in range(self.num_trials_per_task)
+        ]
         overwatch.info(f'Task suite: {self.task_suite_name}')
-        overwatch.info(f'Running evaluation on {num_tasks_in_suite} tasks '
-                       f'with {self.num_trials_per_task} trials each.')
+        overwatch.info(
+            f'Running evaluation on {len(eval_task_ids)} task(s) '
+            f'with {self.num_trials_per_task} trials each.')
+        overwatch.info(f'Evaluated task IDs: {eval_task_ids}')
         overwatch.info(f'Using model family: {self.model_family}')
         overwatch.info(f'Using resize size: {self.resize_size}')
         overwatch.info(f'Using evaluation chunk size: {self.eval_chunk_size}')
@@ -248,6 +292,8 @@ class LiberoEvalRunner:
 
                 # Initialize LIBERO environment and task description
                 env, task_description = get_libero_env(task, resolution=256)
+                if self.use_xvla_client_semantics:
+                    env.seed(self.seed + trial_id + 100)
                 overwatch.info(f'\nTask: {task_description}')
                 log_file.write(f'\nTask: {task_description}\n')
 
@@ -255,13 +301,19 @@ class LiberoEvalRunner:
                 env.reset()
 
                 # Set initial states
-                obs = env.set_init_state(initial_states[trial_id])
+                init_state_id = trial_id
+                if self.use_xvla_client_semantics:
+                    init_state_id = trial_id % initial_states.shape[0]
+                obs = env.set_init_state(initial_states[init_state_id])
                 is_new_episode = True
 
                 # Setup
                 t = 0
                 replay_images = []
-                if self.task_suite_name == 'libero_spatial':
+                closed_loop_state = None
+                if self.task_suite_name in self.task_horizons:
+                    max_steps = self.task_horizons[self.task_suite_name]
+                elif self.task_suite_name == 'libero_spatial':
                     max_steps = 220  # longest training demo has 193 steps
                 elif self.task_suite_name == 'libero_object':
                     max_steps = 280  # longest training demo has 254 steps
@@ -275,6 +327,13 @@ class LiberoEvalRunner:
                 overwatch.info(f'Starting episode {trial_id+1}...')
 
                 log_file.write(f'Starting episode {trial_id+1}...\n')
+                if self.use_xvla_client_semantics:
+                    for _ in range(self.num_steps_wait):
+                        obs, reward, done, info = env.step(
+                            get_libero_dummy_action())
+                        t += 1
+                    for robot in env.env.robots:
+                        robot.controller.use_delta = False
                 while t < max_steps + self.num_steps_wait:
                     # IMPORTANT: Do nothing for the first
                     # few timesteps
@@ -289,6 +348,14 @@ class LiberoEvalRunner:
                     obs['is_new_episode'] = is_new_episode
                     batch, replay_img = self.dataset(obs)
                     is_new_episode = False
+                    if self.use_xvla_client_semantics:
+                        if closed_loop_state is None:
+                            closed_loop_state = self._build_closed_loop_state(
+                                env)
+                        batch['states'] = torch.from_numpy(
+                            closed_loop_state).to(
+                                device=batch['images'].device,
+                                dtype=torch.bfloat16).unsqueeze(0)
                     batch['unnorm_key'] = unnorm_key
                     if len(replay_images) == 0:
                         replay_images.append(replay_img)
@@ -311,6 +378,9 @@ class LiberoEvalRunner:
                             task_suite_name=self.task_suite_name,
                         )
                         action_denormed = self.denormalize_action(inputs)
+                        if self.use_xvla_client_semantics:
+                            closed_loop_state[:9] = action[:9].astype(
+                                np.float32)
                         obs, reward, done, info = env.step(
                             action_denormed.tolist())
                         obs['task_description'] = task_description

@@ -26,7 +26,9 @@ import torchvision
 from PIL import Image
 
 from fluxvla.engines import TRANSFORMS
-from fluxvla.engines.utils.eval_utils import crop_and_resize, get_libero_image
+from fluxvla.engines.utils.eval_utils import (crop_and_resize,
+                                              get_libero_image,
+                                              get_libero_image_no_flip)
 from .utils import pad_to_dim, parse_image
 
 
@@ -346,12 +348,18 @@ class ProcessLiberoEvalInputs:
                  resize_size: int = 224,
                  center_crop: bool = False,
                  use_pil: bool = True,
-                 embodiment_id: int = None) -> None:
+                 embodiment_id: int = None,
+                 flip_all_views: bool = True,
+                 num_padding_imgs: int = 0,
+                 defer_resize: bool = False) -> None:
         self.img_keys = img_keys
         self.resize_size = resize_size
         self.center_crop = center_crop
         self.use_pil = use_pil
         self.embodiment_id = embodiment_id
+        self.flip_all_views = flip_all_views
+        self.num_padding_imgs = num_padding_imgs
+        self.defer_resize = defer_resize
 
     def __call__(self, inputs: Dict) -> Dict:
         # Load raw images
@@ -359,7 +367,20 @@ class ProcessLiberoEvalInputs:
         for img_key in self.img_keys:
             if img_key not in inputs:
                 raise KeyError(f'Image key `{img_key}` not found in inputs!')
-            imgs.append(get_libero_image(inputs, self.resize_size, img_key))
+            if self.defer_resize:
+                img = np.asarray(inputs[img_key])
+                if self.flip_all_views or img_key == 'agentview_image':
+                    img = img[::-1, ::-1].copy()
+                else:
+                    img = img.copy()
+                imgs.append(img)
+            elif self.flip_all_views:
+                imgs.append(get_libero_image(inputs, self.resize_size, img_key))
+            elif img_key == 'agentview_image':
+                imgs.append(get_libero_image(inputs, self.resize_size, img_key))
+            else:
+                imgs.append(
+                    get_libero_image_no_flip(inputs, self.resize_size, img_key))
         replay_img = copy.deepcopy(imgs[0])
         images = list()
         img_masks = list()
@@ -399,9 +420,19 @@ class ProcessLiberoEvalInputs:
                     image = image.convert('RGB')
                 images.append(image)
                 img_masks.append(True)
+            if self.num_padding_imgs > 0 and len(images) > 0:
+                padding_arr = np.zeros_like(np.asarray(images[0]))
+                for _ in range(self.num_padding_imgs):
+                    images.append(Image.fromarray(padding_arr).convert('RGB'))
+                    img_masks.append(False)
         else:
             images = imgs
             img_masks = [True] * len(imgs)
+            if self.num_padding_imgs > 0 and len(images) > 0:
+                padding_img = np.zeros_like(images[0])
+                for _ in range(self.num_padding_imgs):
+                    images.append(padding_img)
+                    img_masks.append(False)
         inputs['pixel_values'] = images
         inputs['img_masks'] = img_masks
         inputs['replay_img'] = replay_img

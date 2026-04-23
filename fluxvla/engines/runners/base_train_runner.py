@@ -92,8 +92,13 @@ class BaseTrainRunner(ABC):
                  lr_scheduler_type: str = 'constant',
                  lr_schedule: Optional[Dict[float, float]] = None,
                  warmup_ratio: int = 0,
+                 freeze_steps: int = 0,
+                 warmup_steps: int = 0,
+                 lr_coef: float = 1.0,
+                 betas: tuple = (0.9, 0.999),
                  enable_gradient_checkpointing: bool = True,
                  enable_mixed_precision_training: bool = True,
+                 convert_batch_float_to_mixed_precision: bool = True,
                  reduce_in_full_precision: bool = True,
                  mixed_precision_dtype: str = 'bf16',
                  tokenizer: Optional[Dict] = None,
@@ -139,8 +144,14 @@ class BaseTrainRunner(ABC):
         self.save_full_model = save_full_model
         self.lr_scheduler_type = lr_scheduler_type
         self.warmup_ratio = warmup_ratio
+        self.freeze_steps = freeze_steps
+        self.warmup_steps = warmup_steps
+        self.lr_coef = lr_coef
+        self.betas = tuple(float(b) for b in betas)
         self.enable_gradient_checkpointing = enable_gradient_checkpointing
         self.enable_mixed_precision_training = enable_mixed_precision_training
+        self.convert_batch_float_to_mixed_precision = \
+            convert_batch_float_to_mixed_precision
         self.reduce_in_full_precision = reduce_in_full_precision
         self.mixed_precision_dtype = str_to_dtype(mixed_precision_dtype)
         self.per_device_batch_size = cfg.train_dataloader.per_device_batch_size
@@ -629,9 +640,111 @@ class BaseTrainRunner(ABC):
             self.lr_scheduler = get_step_based_schedule(
                 self.optimizer, num_training_steps, lr_schedule)
 
+        elif self.lr_scheduler_type == 'xvla-freeze-warmup':
+            param_groups = self._build_xvla_param_groups(weight_decay)
+            self.optimizer = AdamW(param_groups, betas=self.betas)
+            self.lr_scheduler = get_constant_schedule(self.optimizer)
+
         else:
             raise ValueError(f'Learning Rate Schedule with type '
                              f"'{self.lr_scheduler_type}' is not supported!")
+
+    def _get_log_lr(self) -> float:
+        if self.lr_scheduler_type == 'xvla-freeze-warmup':
+            for group in self.optimizer.param_groups:
+                if group.get('name') == 'action_heads':
+                    return group['lr']
+        return self.lr_scheduler.get_last_lr()[0]
+
+    @staticmethod
+    def _canonicalize_param_name(name: str) -> str:
+        canonical_name = name
+        while canonical_name.startswith('module.'):
+            canonical_name = canonical_name.removeprefix('module.')
+        while canonical_name.startswith('_fsdp_wrapped_module.'):
+            canonical_name = canonical_name.removeprefix(
+                '_fsdp_wrapped_module.')
+        return canonical_name.replace('._fsdp_wrapped_module.', '.')
+
+    def _build_xvla_param_groups(self, weight_decay=None):
+        lr = self.learning_rate
+        coef = self.lr_coef
+        wd = weight_decay if weight_decay is not None else 0.0
+
+        vlm_ids, soft_ids, action_ids = set(), set(), set()
+        vlm_params, soft_params, action_params, core_params = [], [], [], []
+
+        for name, param in self.vla.named_parameters():
+            if not param.requires_grad:
+                continue
+
+            canonical_name = self._canonicalize_param_name(name)
+            pid = id(param)
+
+            if canonical_name.startswith('vlm_backbone.'):
+                if pid not in vlm_ids:
+                    vlm_ids.add(pid)
+                    vlm_params.append(param)
+            elif canonical_name.startswith(
+                    'vla_head.transformer.soft_prompt_hub.'):
+                if pid not in soft_ids:
+                    soft_ids.add(pid)
+                    soft_params.append(param)
+            elif (canonical_name.startswith(
+                    'vla_head.transformer.action_encoder.')
+                  or canonical_name.startswith(
+                      'vla_head.transformer.action_decoder.')):
+                if pid not in action_ids:
+                    action_ids.add(pid)
+                    action_params.append(param)
+            else:
+                core_params.append(param)
+
+        return [
+            {
+                'name': 'vlm',
+                'params': vlm_params,
+                'lr': lr * coef,
+                'weight_decay': wd
+            },
+            {
+                'name': 'transformer_core',
+                'params': core_params,
+                'lr': lr,
+                'weight_decay': wd
+            },
+            {
+                'name': 'soft_prompts',
+                'params': soft_params,
+                'lr': lr * coef,
+                'weight_decay': wd
+            },
+            {
+                'name': 'action_heads',
+                'params': action_params,
+                'lr': lr,
+                'weight_decay': wd
+            },
+        ]
+
+    def _update_xvla_group_lrs(self, step: int) -> None:
+        lr = self.learning_rate
+        coef = self.lr_coef
+        base = {
+            'vlm': lr * coef,
+            'transformer_core': lr,
+            'soft_prompts': lr * coef,
+            'action_heads': lr,
+        }
+        for group in self.optimizer.param_groups:
+            name = group.get('name', '')
+            if name not in base:
+                continue
+            if step < self.freeze_steps:
+                group['lr'] = 0.0 if name in ('vlm',
+                                              'transformer_core') else base[name]
+            else:
+                group['lr'] = base[name]
 
     def run(self, vla_dataset) -> None:
         """Train the VLA model."""
@@ -716,7 +829,7 @@ class BaseTrainRunner(ABC):
                 self.metric.commit(
                     global_step=self.metric.global_step + 1,
                     epoch=self.current_epoch,
-                    lr=self.lr_scheduler.get_last_lr()[0])
+                    lr=self._get_log_lr())
                 progress.set_description(self.metric.push())
                 progress.update()
 
@@ -781,7 +894,7 @@ class BaseTrainRunner(ABC):
                         self.metric.commit(
                             global_step=self.metric.global_step + 1,
                             epoch=self.current_epoch,
-                            lr=self.lr_scheduler.get_last_lr()[0])
+                            lr=self._get_log_lr())
                         iter_pbar.set_description(self.metric.push())
                         iter_pbar.update()
 
@@ -823,7 +936,11 @@ class BaseTrainRunner(ABC):
 
     def _training_step(self, batch) -> torch.Tensor:
         """Execute single training step: forward, backward, optimize."""
-        if self.enable_mixed_precision_training:
+        if self.lr_scheduler_type == 'xvla-freeze-warmup':
+            self._update_xvla_group_lrs(self.metric.global_step)
+
+        if (self.enable_mixed_precision_training
+                and self.convert_batch_float_to_mixed_precision):
             batch = self._convert_batch_to_dtype(batch,
                                                  self.mixed_precision_dtype)
         with torch.autocast(

@@ -17,6 +17,7 @@ from .flow_matching_inference_head import \
     FlowMatchingInferenceHead  # noqa: F401, F403
 from .llava_action_head import LlavaActionHead  # noqa: F401, F403
 from .openvla_head import OpenVLAHead  # noqa: F401, F403
+from .xvla_head import XVLAFlowMatchingHead  # noqa: F401, F403
 
 try:
     from .dreamzero_head import DreamZeroHead  # noqa: F401

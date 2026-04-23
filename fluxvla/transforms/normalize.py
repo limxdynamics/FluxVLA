@@ -317,6 +317,36 @@ class DenormalizePrivateAction(DenormalizeLiberoAction):
 
 
 @TRANSFORMS.register_module()
+class DenormalizeXVLALiberoAction:
+    """Convert X-VLA EE6D action (20D) back to LIBERO 7D action."""
+
+    def __init__(self, gripper_binarize: bool = True, **kwargs) -> None:
+        self.gripper_binarize = gripper_binarize
+
+    @staticmethod
+    def _rot6d_to_axisangle(r6: np.ndarray) -> np.ndarray:
+        from scipy.spatial.transform import Rotation as R
+        a1 = r6[:3]
+        a2 = r6[3:6]
+        b1 = a1 / (np.linalg.norm(a1) + 1e-8)
+        b2 = a2 - np.dot(b1, a2) * b1
+        b2 = b2 / (np.linalg.norm(b2) + 1e-8)
+        b3 = np.cross(b1, b2)
+        rot_mat = np.stack([b1, b2, b3], axis=-1)
+        return R.from_matrix(rot_mat).as_rotvec()
+
+    def __call__(self, data: Dict) -> np.ndarray:
+        action = np.asarray(data['action'], dtype=np.float32)
+        xyz = action[:3]
+        rot6d = action[3:9]
+        gripper = action[9:10]
+        aa = self._rot6d_to_axisangle(rot6d)
+        if self.gripper_binarize:
+            gripper = np.where(gripper > 0.5, 1.0, -1.0).astype(np.float32)
+        return np.concatenate([xyz, aa, gripper])
+
+
+@TRANSFORMS.register_module()
 class NormalizeStatesAndActions:
     """Normalize states and actions in the data.
     This transform normalizes the state and action
@@ -528,6 +558,75 @@ class LiberoProprioFromInputs:
                 2 * (normalized_states - state_low) /
                 (state_high - state_low + 1e-8) - 1, -1, 1), normalized_states)
         return states
+
+
+@TRANSFORMS.register_module()
+class LiberoEE6DStateTransform:
+    """Convert LIBERO state vector to X-VLA EE6D proprio format (20D)."""
+
+    def __init__(self, state_key: str = 'states', target_dim: int = 20) -> None:
+        self.state_key = state_key
+        self.target_dim = target_dim
+
+    @staticmethod
+    def _axisangle_to_rot6d(aa: np.ndarray) -> np.ndarray:
+        from scipy.spatial.transform import Rotation as R
+        mat = R.from_rotvec(aa).as_matrix()
+        return np.concatenate([mat[:3, 0], mat[:3, 1]], axis=-1).astype(
+            np.float32)
+
+    def __call__(self, data: Dict) -> Dict:
+        s = np.asarray(data[self.state_key], dtype=np.float32)
+        assert s.shape[0] >= 8, \
+            f'LiberoEE6DStateTransform expects state dim >= 8, got {s.shape[0]}'
+        xyz = s[:3]
+        rot6d = self._axisangle_to_rot6d(s[3:6])
+        gripper = np.array([s[6:8].mean()], dtype=np.float32)
+        arm1 = np.concatenate([xyz, rot6d, gripper])
+        out_state = np.zeros(self.target_dim, dtype=np.float32)
+        out_state[:len(arm1)] = arm1
+        out = dict(data)
+        out[self.state_key] = out_state
+        return out
+
+
+@TRANSFORMS.register_module()
+class LiberoEE6DProprioFromInputs:
+    """Convert LIBERO robot state to X-VLA EE6D proprio format (20D)."""
+
+    def __init__(
+        self,
+        pos_key: str = 'robot0_eef_pos',
+        quat_key: str = 'robot0_eef_quat',
+        gripper_key: str = 'robot0_gripper_qpos',
+        out_key: str = 'states',
+        target_dim: int = 20,
+    ) -> None:
+        self.pos_key = pos_key
+        self.quat_key = quat_key
+        self.gripper_key = gripper_key
+        self.out_key = out_key
+        self.target_dim = target_dim
+
+    @staticmethod
+    def _quat_to_rot6d(q: np.ndarray) -> np.ndarray:
+        from scipy.spatial.transform import Rotation as R
+        mat = R.from_quat(q).as_matrix()
+        return np.concatenate([mat[:3, 0], mat[:3, 1]], axis=-1).astype(
+            np.float32)
+
+    def __call__(self, data: Dict) -> Dict:
+        pos = np.asarray(data[self.pos_key], dtype=np.float32)
+        quat = np.asarray(data[self.quat_key], dtype=np.float32)
+        grip = np.asarray(data[self.gripper_key], dtype=np.float32)
+        rot6d = self._quat_to_rot6d(quat)
+        gripper = np.array([grip.mean()], dtype=np.float32)
+        arm1 = np.concatenate([pos, rot6d, gripper])
+        state = np.zeros(self.target_dim, dtype=np.float32)
+        state[:len(arm1)] = arm1
+        out = dict(data)
+        out[self.out_key] = state
+        return out
 
     def _normalize_min_max(self, normalized_states: np.ndarray, stats: Dict):
         assert 'min' in stats and stats['min'] is not None
