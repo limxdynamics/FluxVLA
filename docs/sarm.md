@@ -161,8 +161,8 @@ Runs a local Qwen3-VL model on the episode videos and writes the same columns
 back. Requires a GPU (≥16 GB VRAM for the 30B MoE variant) and
 `pip install qwen-vl-utils transformers`. Three modes:
 
-| Mode           | CLI invocation                                    | Intended config                       |
-| -------------- | ------------------------------------------------- | ------------------------------------- |
+| Mode           | CLI invocation                                    | Intended config                     |
+| -------------- | ------------------------------------------------- | ----------------------------------- |
 | `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args  | `configs/sarm/sarm_single_stage.py` |
 | `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."` | `configs/sarm/sarm_dense_only.py`   |
 | `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`  | `configs/sarm/sarm_dual.py`         |

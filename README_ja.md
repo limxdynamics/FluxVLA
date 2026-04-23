@@ -338,9 +338,9 @@ SARM ワークフローでは、通常は学習 / 推論用の CLIP チェック
 <details>
 <summary><b>視覚言語モデル（VLM）</b></summary>
 
-| モデル     | サイズ | ダウンロードリンク                                                    |
-| ---------- | ------ | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B     | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| モデル     | サイズ | ダウンロードリンク                                                       |
+| ---------- | ------ | ------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B     | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)    |
 | Qwen3-VL   | 30B    | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>

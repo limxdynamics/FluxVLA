@@ -52,8 +52,7 @@ def _load_episode_records(meta_root: Path) -> List[Dict[str, Any]]:
     if parquet_files:
         return _load_parquet_records(parquet_files)
 
-    raise FileNotFoundError(
-        f'Episodes metadata not found under {meta_root}')
+    raise FileNotFoundError(f'Episodes metadata not found under {meta_root}')
 
 
 def _load_stats_records(meta_root: Path) -> List[Dict[str, Any]]:
@@ -65,8 +64,7 @@ def _load_stats_records(meta_root: Path) -> List[Dict[str, Any]]:
     if legacy_path.exists():
         return _load_jsonl_records(legacy_path)
 
-    raise FileNotFoundError(
-        f'Statistics metadata not found under {meta_root}')
+    raise FileNotFoundError(f'Statistics metadata not found under {meta_root}')
 
 
 def _extract_task_text(record: Dict[str, Any]) -> str:
@@ -247,8 +245,7 @@ class ParquetDataset(Dataset):
             return self.tasks[dataset_idx].get(int(raw_task), '')
 
         raw_task_index = data.get('task_index')
-        if isinstance(raw_task_index,
-                      np.ndarray) and raw_task_index.ndim == 0:
+        if isinstance(raw_task_index, np.ndarray) and raw_task_index.ndim == 0:
             raw_task_index = raw_task_index.item()
         if isinstance(raw_task_index,
                       torch.Tensor) and raw_task_index.numel() == 1:
@@ -265,11 +262,11 @@ class ParquetDataset(Dataset):
         while (index == len(self.dataset) - 1
                or self.dataset[index]['episode_index'] !=
                self.dataset[index + 1]['episode_index']
-               or self._get_dataset_index(index + 1) != dataset_idx or
-               self._resolve_task_description(dataset_idx, self.dataset[
-                   index + 1]) == 'empty' or
-               self._resolve_task_description(dataset_idx, self.dataset[
-                   index + 1]) == 'static'):
+               or self._get_dataset_index(index + 1) != dataset_idx
+               or self._resolve_task_description(
+                   dataset_idx, self.dataset[index + 1]) == 'empty'
+               or self._resolve_task_description(
+                   dataset_idx, self.dataset[index + 1]) == 'static'):
 
             index = self._rand_another()
             data = self.dataset[index]
@@ -286,9 +283,8 @@ class ParquetDataset(Dataset):
                     self._get_dataset_index(index + window_idx) == dataset_idx
                     and  # noqa: E501
                     self._resolve_task_description(
-                        dataset_idx,
-                        self.dataset[index + window_idx]) != 'empty'
-                    and  # noqa: E501
+                        dataset_idx, self.dataset[index + window_idx]) !=
+                    'empty' and  # noqa: E501
                     self._resolve_task_description(
                         dataset_idx,
                         self.dataset[index + window_idx]) != 'static'):
@@ -310,8 +306,8 @@ class ParquetDataset(Dataset):
                     actions.append(actions[-1])
                     action_masks.append(0)
                 break
-            elif self._resolve_task_description(dataset_idx, self.dataset[
-                    index + window_idx]) == 'static':
+            elif self._resolve_task_description(
+                    dataset_idx, self.dataset[index + window_idx]) == 'static':
                 window_idx += 1
                 continue
             else:

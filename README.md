@@ -338,9 +338,9 @@ For SARM workflows, you typically need a CLIP checkpoint for training / inferenc
 <details>
 <summary><b>Vision-Language Models (VLM)</b></summary>
 
-| Model      | Size | Download link                                                         |
-| ---------- | ---- | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Model      | Size | Download link                                                            |
+| ---------- | ---- | ------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)    |
 | Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>

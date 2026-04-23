@@ -338,9 +338,9 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 <details>
 <summary><b>视觉语言模型（VLM）</b></summary>
 
-| 模型       | 大小 | 下载链接                                                              |
-| ---------- | ---- | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| 模型       | 大小 | 下载链接                                                                 |
+| ---------- | ---- | ------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)    |
 | Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>
