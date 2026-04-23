@@ -139,8 +139,8 @@ matching `--default-sparse` / `--default-dense`) is left untouched.
 
 Uses a local Qwen3-VL model to auto-annotate episode videos. Three modes:
 
-| Mode           | CLI invocation                                     | Intended FluxVLA config               |
-| -------------- | -------------------------------------------------- | ------------------------------------- |
+| Mode           | CLI invocation                                     | Intended FluxVLA config             |
+| -------------- | -------------------------------------------------- | ----------------------------------- |
 | `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args   | `configs/sarm/sarm_single_stage.py` |
 | `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only.py`   |
 | `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual.py`         |

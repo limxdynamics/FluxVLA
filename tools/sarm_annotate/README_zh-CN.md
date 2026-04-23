@@ -115,8 +115,8 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 使用本地 Qwen3-VL 对 episode 视频自动生成标注。支持三种模式：
 
-| 模式           | CLI 用法                                           | 对应 FluxVLA 配置                     |
-| -------------- | -------------------------------------------------- | ------------------------------------- |
+| 模式           | CLI 用法                                           | 对应 FluxVLA 配置                   |
+| -------------- | -------------------------------------------------- | ----------------------------------- |
 | `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`      | `configs/sarm/sarm_single_stage.py` |
 | `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only.py`   |
 | `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual.py`         |
