@@ -1,9 +1,16 @@
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
 
 def resolve_hf_local_path(model_name_or_path: str) -> str:
     """Resolve a local Hugging Face cache root to a concrete snapshot path."""
-    path = Path(model_name_or_path)
+    path = Path(model_name_or_path).expanduser()
+    if not path.exists() and path.is_absolute() is False:
+        repo_relative_path = (REPO_ROOT / path).resolve()
+        if repo_relative_path.exists():
+            path = repo_relative_path
+
     if not path.exists() or not path.is_dir():
         return model_name_or_path
 
