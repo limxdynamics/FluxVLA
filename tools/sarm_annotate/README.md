@@ -16,6 +16,18 @@ Two complementary entry points:
 
 Both routes produce byte-compatible columns.
 
+Published reference datasets on Hugging Face:
+
+- Manually annotated training / inference dataset: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- Unannotated dataset intended for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+Download them under `./datasets` with:
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
+
 ## What gets written
 
 Takes a standard LeRobot v2.1 (`meta/episodes.jsonl`) or v3.x
@@ -44,32 +56,32 @@ Bootstraps `single_stage` SARM training without touching frame numbers:
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --default-sparse auto
 ```
 
-Matches `configs/sarm/sarm_single_stage_*.py`.
+Matches `configs/sarm/sarm_single_stage.py`.
 
 ### Dense-only with a VLM-less fallback
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec specs/my_dense_stages.json \
     --default-sparse auto
 ```
 
-Matches `configs/sarm/sarm_dense_only_*.py`.
+Matches `configs/sarm/sarm_dense_only.py`.
 
 ### Dual multi-stage (both sparse and dense, per-episode spec)
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec specs/my_dual_stages.json
 ```
 
-Matches `configs/sarm/sarm_dual_*.py`.
+Matches `configs/sarm/sarm_dual.py`.
 
 ### Spec format
 
@@ -129,9 +141,9 @@ Uses a local Qwen3-VL model to auto-annotate episode videos. Three modes:
 
 | Mode           | CLI invocation                                     | Intended FluxVLA config               |
 | -------------- | -------------------------------------------------- | ------------------------------------- |
-| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args   | `configs/sarm/sarm_single_stage_*.py` |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only_*.py`   |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual_*.py`         |
+| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args   | `configs/sarm/sarm_single_stage.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual.py`         |
 
 ### Requirements (VLM path only)
 
@@ -154,9 +166,9 @@ not need any of these.
 ```bash
 # Local dataset, dense-only
 python tools/sarm_annotate/subtask_annotation.py \
-    --repo-id /path/to/your/lerobot_dataset \
+    --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
   --model ./checkpoints/Qwen3-VL-30B-A3B-Instruct \
-    --video-key observation.images.image \
+    --video-key observation.images.cam_high \
   --video-backend pyav \
     --dense-only \
     --dense-subtasks "Move to object, Grasp object, Move to target, Place object"

@@ -26,7 +26,7 @@ from fluxvla.engines import (build_collator_from_cfg, build_dataset_from_cfg,
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Infer SARM progress over a v2.1 dataset.')
+        description='Infer SARM progress over a LeRobot v2.1 or v3.x dataset.')
     parser.add_argument('--config', type=str, required=True)
     parser.add_argument('--ckpt-path', type=str, required=True)
     parser.add_argument('--output-path', type=str, required=True)
