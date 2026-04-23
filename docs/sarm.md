@@ -35,7 +35,19 @@ Current SARM configs:
 - `configs/sarm/sarm_dense_only.py`
 - `configs/sarm/sarm_dual.py`
 
-These files are now starter templates. Their default `data_root_path` is the generic example path `./datasets/your_sarm_lerobot_dataset`, so they no longer assume Libero data by default. Replace it with your own dataset path before training; if your camera key is not `observation.images.image`, update that as well or override it with `--cfg-options`.
+These starter configs now default to the published manual SARM dataset at `./datasets/SARM_manual_test_10Episodes_lerobotv3.0` and use `observation.images.cam_high`, which matches the released 10-episode example datasets on Hugging Face. If you keep the dataset under a different local path or want to use another camera stream, override both `data_root_path` and `video_keys` with `--cfg-options`.
+
+Published Hugging Face datasets:
+
+- Manual annotations for training / inference: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- Unannotated dataset for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+Download them locally under `./datasets` with:
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
 
 These configs expect:
 
@@ -96,7 +108,7 @@ scripts. Works on both v2.1 and v3.x.
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --default-sparse auto
 ```
 
@@ -104,7 +116,7 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec /path/to/my_stages.json
 ```
 
@@ -134,11 +146,11 @@ Missing entries / missing `sparse`/`dense` keys are left untouched unless you
 pass `--default-sparse auto` / `--default-dense auto`.
 
 **c) Dense-only with auto sparse fallback** (matches
-`configs/sarm/sarm_dense_only_*.py`):
+`configs/sarm/sarm_dense_only.py`):
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec /path/to/my_dense_stages.json \
     --default-sparse auto
 ```
@@ -151,14 +163,14 @@ back. Requires a GPU (≥16 GB VRAM for the 30B MoE variant) and
 
 | Mode           | CLI invocation                                    | Intended config                       |
 | -------------- | ------------------------------------------------- | ------------------------------------- |
-| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args  | `configs/sarm/sarm_single_stage_*.py` |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."` | `configs/sarm/sarm_dense_only_*.py`   |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`  | `configs/sarm/sarm_dual_*.py`         |
+| `single_stage` | no `--sparse-subtasks` / `--dense-subtasks` args  | `configs/sarm/sarm_single_stage.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, ..."` | `configs/sarm/sarm_dense_only.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`  | `configs/sarm/sarm_dual.py`         |
 
 ```bash
 python tools/sarm_annotate/subtask_annotation.py \
-  --repo-id /path/to/your/lerobot_dataset \
-  --video-key observation.images.image \
+  --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --video-key observation.images.cam_high \
   --dense-only \
   --dense-subtasks "Move to object, Grasp object, Move to target, Place object"
 ```
@@ -202,9 +214,9 @@ torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   --config configs/sarm/sarm_dense_only.py \
   --work-dir ./work_dirs/sarm_dense_only_your_dataset \
   --cfg-options \
-    model.data_root_path=/path/to/your_dataset \
-    train_dataloader.dataset.data_root_path=/path/to/your_dataset \
-    inference_dataset.data_root_path=/path/to/your_dataset \
+    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
+    train_dataloader.dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
+    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
     train_dataloader.dataset.video_keys="['observation.images.cam_high']" \
     inference_dataset.video_keys="['observation.images.cam_high']" \
     train_dataloader.per_device_batch_size=1 \
@@ -238,7 +250,7 @@ python scripts/infer_sarm_progress.py \
   --batch-size 1 \
   --max-batches 1 \
   --cfg-options \
-    model.data_root_path=/path/to/your_dataset \
-    inference_dataset.data_root_path=/path/to/your_dataset \
+    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
+    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
     inference_dataset.video_keys="['observation.images.cam_high']"
 ```

@@ -9,6 +9,18 @@
 
 两种路线写入的列是完全一致的。
 
+已发布到 Hugging Face 的参考数据集：
+
+- 用于训练 / 推理的人工标注数据：[`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- 供手工或 VLM 继续标注的无标注数据：[`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+可通过以下命令下载到 `./datasets`：
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
+
 ## 写入的内容
 
 在标准 LeRobot v2.1（`meta/episodes.jsonl`）或 v3.x（`meta/episodes/*.parquet`）数据集上追加这些列：
@@ -30,32 +42,32 @@
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --default-sparse auto
 ```
 
-匹配 `configs/sarm/sarm_single_stage_*.py`。
+匹配 `configs/sarm/sarm_single_stage.py`。
 
 ### 仅 dense（sparse 用 auto 兜底）
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec specs/my_dense_stages.json \
     --default-sparse auto
 ```
 
-匹配 `configs/sarm/sarm_dense_only_*.py`。
+匹配 `configs/sarm/sarm_dense_only.py`。
 
 ### 双标注：per-episode 多段 sparse + dense
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-    --dataset-root /path/to/dataset \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
     --spec specs/my_dual_stages.json
 ```
 
-匹配 `configs/sarm/sarm_dual_*.py`。
+匹配 `configs/sarm/sarm_dual.py`。
 
 ### Spec 格式
 
@@ -105,9 +117,9 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 | 模式           | CLI 用法                                           | 对应 FluxVLA 配置                     |
 | -------------- | -------------------------------------------------- | ------------------------------------- |
-| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`      | `configs/sarm/sarm_single_stage_*.py` |
-| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only_*.py`   |
-| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual_*.py`         |
+| `single_stage` | 不传 `--sparse-subtasks` / `--dense-subtasks`      | `configs/sarm/sarm_single_stage.py` |
+| `dense_only`   | `--dense-only --dense-subtasks "Do A, Do B, Do C"` | `configs/sarm/sarm_dense_only.py`   |
+| `dual`         | `--sparse-subtasks "..." --dense-subtasks "..."`   | `configs/sarm/sarm_dual.py`         |
 
 ### 依赖（仅 VLM 路线需要）
 
@@ -128,9 +140,9 @@ pip install "lerobot>=0.3.4" qwen-vl-utils transformers torch opencv-python pyda
 ```bash
 # 本地数据集，dense-only
 python tools/sarm_annotate/subtask_annotation.py \
-    --repo-id /path/to/your/lerobot_dataset \
+    --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
   --model ./checkpoints/Qwen3-VL-30B-A3B-Instruct \
-    --video-key observation.images.image \
+    --video-key observation.images.cam_high \
   --video-backend pyav \
     --dense-only \
     --dense-subtasks "Move to object, Grasp object, Move to target, Place object"

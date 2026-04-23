@@ -1,5 +1,5 @@
 clip_pretrained_name_or_path = './checkpoints/clip-vit-base-patch32'
-data_root_path = './datasets/your_sarm_lerobot_dataset'
+data_root_path = './datasets/SARM_manual_test_10Episodes_lerobotv3.0'
 
 current_transforms = [
     dict(type='ResizeImageSequence', height=224, width=224),
@@ -52,7 +52,7 @@ train_dataloader = dict(
     dataset=dict(
         type='SARMDataset',
         data_root_path=data_root_path,
-        video_keys=['observation.images.image'],
+        video_keys=['observation.images.cam_high'],
         annotation_mode='single_stage',
         n_obs_steps=8,
         frame_gap=30,
@@ -89,7 +89,7 @@ runner = dict(
 inference_dataset = dict(
     type='SARMDataset',
     data_root_path=data_root_path,
-    video_keys=['observation.images.image'],
+    video_keys=['observation.images.cam_high'],
     annotation_mode='single_stage',
     n_obs_steps=8,
     frame_gap=30,

@@ -260,6 +260,18 @@ Replace `libero_10_no_noops_lerobotv2.1` with the corresponding folder name of t
 
 FluxVLA SARM workflows accept standard LeRobot v2.1 or v3.x datasets. Besides the usual observation / action fields, the dataset must carry SARM subtask annotations in episodes metadata.
 
+Published SARM example datasets on Hugging Face:
+
+- Training / inference dataset with manual sparse+dense annotations: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- Unannotated dataset kept for manual or VLM labeling: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+Download them under `./datasets` with:
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
+
 - For ready-to-use SARM dataset structure, annotation columns, and progress inference usage, see [docs/sarm.md](docs/sarm.md).
 - For writing manual stages or generating VLM-based annotations, see [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md).
 

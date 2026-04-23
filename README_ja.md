@@ -260,6 +260,18 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 FluxVLA の SARM ワークフローは、標準的な LeRobot v2.1 / v3.x データセットをサポートします。通常の observation / action フィールドに加えて、episodes メタデータに SARM subtask アノテーション列が必要です。
 
+公開済みの SARM サンプルデータセット:
+
+- 学習 / 推論向けの手動 sparse+dense アノテーション付きデータ: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- 手動または VLM アノテーション用の未注釈データ: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+`./datasets` へは次のようにダウンロードできます:
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
+
 - SARM データセット構成、アノテーション列の契約、progress 推論の使い方は [docs/sarm.md](docs/sarm.md) を参照してください。
 - 手動 stage 書き込みや VLM ベースの自動アノテーションは [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md) を参照してください。
 

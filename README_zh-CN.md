@@ -260,6 +260,18 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 FluxVLA 的 SARM 工作流支持标准 LeRobot v2.1 与 v3.x 数据集。除常规 observation / action 字段外，数据集还需要在 episodes 元信息里带有 SARM subtask 标注列。
 
+已发布到 Hugging Face 的 SARM 示例数据集：
+
+- 用于训练 / 推理的完整人工 sparse+dense 标注数据：[limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- 供手工或 VLM 继续标注的无标注数据：[limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+
+可通过以下命令下载到 `./datasets`：
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+```
+
 - SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
 - 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README_zh-CN.md](tools/sarm_annotate/README_zh-CN.md)。
 
