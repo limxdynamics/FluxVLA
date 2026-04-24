@@ -353,7 +353,9 @@ class TransformImage:
                                          resize_param['interpolation']))
         else:
             if self.do_letterbox:
-                img = self.letterbox_pad_transform(img, self.letterbox_fill)
+                img = self.letterbox_pad_transform(
+                    img, resize_param['size'], resize_param['interpolation'],
+                    self.letterbox_fill)
             # Resize the image
             img_resized = img.resize(resize_param['size'],
                                      self._get_pil_resampling(
@@ -431,8 +433,8 @@ class TransformImage:
         return inputs
 
     def letterbox_pad_transform(
-            self, img: Image.Image, fill_color: Tuple[int, int,
-                                                      int]) -> Image.Image:
+            self, img: Image.Image, size: Tuple[int, int], interpolation: str,
+            fill_color: Tuple[int, int, int]) -> Image.Image:
         """Apply letterbox padding to the image to fit the target size.
         This method resizes the image to fit within the target dimensions
         while maintaining the aspect ratio, and pads the remaining
@@ -440,14 +442,17 @@ class TransformImage:
 
         Args:
             img (Image.Image): The input image to be padded.
+            size (Tuple[int, int]): The target size as (width, height).
+            interpolation (str): Interpolation mode used for resizing.
             fill_color (Tuple[int, int, int]): The RGB color to use
                 for padding.
 
         Returns:
             Image.Image: The padded image with the target dimensions.
         """
-        target_width, target_height = self.resize_params[0]['size']
-        img.thumbnail((target_width, target_height), Image.Resampling.BILINEAR)
+        target_width, target_height = size
+        img.thumbnail((target_width, target_height),
+                      self._get_pil_resampling(interpolation))
         new_img = Image.new('RGB', (target_width, target_height), fill_color)
         new_img.paste(img, ((target_width - img.width) // 2,
                             (target_height - img.height) // 2))

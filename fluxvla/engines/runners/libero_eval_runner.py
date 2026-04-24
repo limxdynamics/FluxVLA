@@ -114,28 +114,20 @@ class LiberoEvalRunner:
             if ckpt_path.endswith('.safetensors'):
                 state_dict = load_file(ckpt_path, device='cpu')
             else:
-                # Prefer sibling safetensors because .pt checkpoints usually
-                # include optimizer/scheduler states that are unused in eval.
-                sf_candidate = (
-                    ckpt_path[:-len('.pt')] +
-                    '.safetensors' if ckpt_path.endswith('.pt') else None)
-                if sf_candidate is not None and os.path.exists(sf_candidate):
-                    state_dict = load_file(sf_candidate, device='cpu')
+                try:
+                    checkpoint = torch.load(
+                        ckpt_path, map_location='cpu', mmap=True)
+                except TypeError:
+                    checkpoint = torch.load(ckpt_path, map_location='cpu')
+                if isinstance(checkpoint, dict) and 'model' in checkpoint:
+                    state_dict = checkpoint['model']
+                    checkpoint.pop('optimizer_state_dict', None)
+                    checkpoint.pop('scheduler_state_dict', None)
+                    checkpoint.pop('optimizer_state_index_to_name', None)
                 else:
-                    try:
-                        checkpoint = torch.load(
-                            ckpt_path, map_location='cpu', mmap=True)
-                    except TypeError:
-                        checkpoint = torch.load(ckpt_path, map_location='cpu')
-                    if isinstance(checkpoint, dict) and 'model' in checkpoint:
-                        state_dict = checkpoint['model']
-                        checkpoint.pop('optimizer_state_dict', None)
-                        checkpoint.pop('scheduler_state_dict', None)
-                        checkpoint.pop('optimizer_state_index_to_name', None)
-                    else:
-                        state_dict = checkpoint
-                    del checkpoint
-                    gc.collect()
+                    state_dict = checkpoint
+                del checkpoint
+                gc.collect()
             self.vla.load_state_dict(state_dict, strict=True)
             del state_dict
             gc.collect()
