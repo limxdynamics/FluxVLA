@@ -153,8 +153,8 @@ class SARMDataset(ParquetDataset):
             tolerance_s: float = 0.1,
             backend: str = 'pyav') -> torch.Tensor:
         video_path = str(video_path)
-        first_ts = timestamps[0]
-        last_ts = timestamps[-1]
+        first_ts = min(timestamps)
+        last_ts = max(timestamps)
 
         def _load_candidates(seek_ts: float) -> tuple[List[torch.Tensor],
                                                       List[float]]:
