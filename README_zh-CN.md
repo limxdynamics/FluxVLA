@@ -272,12 +272,12 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 ```
 
-在训练或发布 LeRobot v3.x 的 SARM 数据集前，建议先做一次视频元信息自检：
+在使用 LeRobot v3.x 的 SARM 数据集前，建议先做一次视频元信息自检：
 
 - LeRobot v3.x 既允许多个 episode 共用一个 MP4，也允许一个 episode 对应一个 MP4。
 - 如果多个 episode 共用同一个 MP4，那么每个 episode 的 `from_timestamp` / `to_timestamp` 必须正确描述它在该视频中的片段区间。
 - 如果视频本身已经拆成 `file-000.mp4`、`file-001.mp4` 这样的逐集文件，那么每个 episode 就应该指向各自的 `file_index`，且 `from_timestamp` 通常应回到 `0.0`。
-- 如果目录里明明有多个 MP4，但所有 episode 仍都指向 `file-000.mp4`，那就是错误的 metadata，应先修正再训练或上传到 Hugging Face。
+- 如果目录里明明有多个 MP4，但所有 episode 仍都指向 `file-000.mp4`，那就是错误的 metadata，应先修正再使用。
 
 - SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
 - 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README_zh-CN.md](tools/sarm_annotate/README_zh-CN.md)。

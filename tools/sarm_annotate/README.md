@@ -38,7 +38,7 @@ LeRobot v3.x video metadata sanity check:
   usually reset to `0.0`.
 - If the directory contains multiple MP4 files but all episodes still point to
   `file-000.mp4`, the dataset metadata is malformed and should be fixed before
-  training, annotation, or pushing to the Hub.
+  training or annotation.
 
 ## What gets written
 
