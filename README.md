@@ -275,6 +275,19 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 ```
 
+Before training on or publishing a LeRobot v3.x SARM dataset, sanity-check the
+video metadata:
+
+- LeRobot v3.x allows either many episodes in one MP4 or one MP4 per episode.
+- If many episodes share one MP4, each episode that points to that file must
+  use correct `from_timestamp` / `to_timestamp` offsets.
+- If videos are already split as `file-000.mp4`, `file-001.mp4`, ..., each
+  episode should point to its own `file_index`, and `from_timestamp` will
+  usually reset to `0.0`.
+- If the directory contains multiple MP4 files but all episodes still point to
+  `file-000.mp4`, the dataset metadata is malformed and should be fixed before
+  training or pushing to the Hub.
+
 - For ready-to-use SARM dataset structure, annotation columns, and progress inference usage, see [docs/sarm.md](docs/sarm.md).
 - For writing manual stages or generating VLM-based annotations, see [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md).
 

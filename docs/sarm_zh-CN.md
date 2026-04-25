@@ -49,6 +49,13 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 ```
 
+LeRobot v3.x 视频元信息自检：
+
+- LeRobot v3.x 既允许多个 episode 共用一个 MP4，也允许一个 episode 对应一个 MP4。
+- 如果多个 episode 共用同一个 MP4，那么每个 episode 的 `from_timestamp` / `to_timestamp` 必须正确描述它在该视频中的片段区间。
+- 如果视频本身已经拆成 `file-000.mp4`、`file-001.mp4` 这样的逐集文件，那么每个 episode 就应该指向各自的 `file_index`，且 `from_timestamp` 通常应回到 `0.0`。
+- 如果目录里明明有多个 MP4，但所有 episode 仍都指向 `file-000.mp4`，那就是错误的 metadata，应先修正再训练或上传到 Hugging Face。
+
 这些配置要求：
 
 - `./checkpoints/clip-vit-base-patch32` 下已存在 CLIP 主干与 tokenizer。
