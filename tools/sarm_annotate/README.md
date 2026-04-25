@@ -18,15 +18,21 @@ Both routes produce byte-compatible columns.
 
 Published reference datasets on Hugging Face:
 
-- Manually annotated training / inference dataset: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
-- Unannotated dataset intended for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x manual annotations for training / inference: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x unlabeled dataset intended for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- New LeRobot v2.1 manual conversion for training / inference and legacy-tool compatibility: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- New LeRobot v2.1 unlabeled conversion for manual or VLM labeling workflows: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
 
 Download them under `./datasets` with:
 
 ```bash
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
 ```
+
+Use the `manual_*` datasets directly for training / inference. Use the `vlm_*` datasets as clean starting points for manual stage writing or VLM auto-annotation. The examples below use the new v2.1 unlabeled conversion because it matches the common `meta/episodes.jsonl` plus per-episode video layout.
 
 LeRobot v3.x video metadata sanity check:
 
@@ -68,7 +74,7 @@ Bootstraps `single_stage` SARM training without touching frame numbers:
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --default-sparse auto
 ```
 
@@ -78,7 +84,7 @@ Matches `configs/sarm/sarm_single_stage.py`.
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec specs/my_dense_stages.json \
     --default-sparse auto
 ```
@@ -89,7 +95,7 @@ Matches `configs/sarm/sarm_dense_only.py`.
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec specs/my_dual_stages.json
 ```
 
@@ -178,7 +184,7 @@ not need any of these.
 ```bash
 # Local dataset, dense-only
 python tools/sarm_annotate/subtask_annotation.py \
-    --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
   --model ./checkpoints/Qwen3-VL-30B-A3B-Instruct \
     --video-key observation.images.cam_high \
   --video-backend pyav \

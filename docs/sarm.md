@@ -35,19 +35,25 @@ Current SARM configs:
 - `configs/sarm/sarm_dense_only.py`
 - `configs/sarm/sarm_dual.py`
 
-These starter configs now default to the published manual SARM dataset at `./datasets/SARM_manual_test_10Episodes_lerobotv3.0` and use `observation.images.cam_high`, which matches the released 10-episode example datasets on Hugging Face. If you keep the dataset under a different local path or want to use another camera stream, override both `data_root_path` and `video_keys` with `--cfg-options`.
+These starter configs now default to the published manual SARM dataset at `./datasets/SARM_manual_test_10Episodes_lerobotv3.0` and use `observation.images.cam_high`, which matches the released 10-episode example datasets on Hugging Face. The newer `./datasets/SARM_manual_test_10Episodes_lerobotv2.1` conversion has also been smoke-tested end to end with all three SARM configs by overriding the dataset roots. If you keep the dataset under a different local path or want to use another camera stream, override both `data_root_path` and `video_keys` with `--cfg-options`.
 
 Published Hugging Face datasets:
 
-- Manual annotations for training / inference: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
-- Unannotated dataset for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x manual annotations for training / inference: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x unlabeled dataset for manual or VLM labeling: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- New LeRobot v2.1 manual conversion for training / inference and legacy-tool compatibility: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- New LeRobot v2.1 unlabeled conversion for manual or VLM labeling workflows: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
 
 Download them locally under `./datasets` with:
 
 ```bash
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
 ```
+
+Use the `manual_*` datasets directly for training / inference. Use the `vlm_*` datasets as clean starting points for manual stage writing or VLM auto-annotation. Prefer the v2.1 pair when another tool expects `meta/episodes.jsonl` plus per-episode videos; prefer the v3.0 pair when you want to keep native LeRobot v3.x metadata layout.
 
 LeRobot v3.x video metadata sanity check:
 
@@ -120,7 +126,7 @@ scripts. Works on both v2.1 and v3.x.
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --default-sparse auto
 ```
 
@@ -128,7 +134,7 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec /path/to/my_stages.json
 ```
 
@@ -162,7 +168,7 @@ pass `--default-sparse auto` / `--default-dense auto`.
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec /path/to/my_dense_stages.json \
     --default-sparse auto
 ```
@@ -181,7 +187,7 @@ back. Requires a GPU (≥16 GB VRAM for the 30B MoE variant) and
 
 ```bash
 python tools/sarm_annotate/subtask_annotation.py \
-  --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
   --video-key observation.images.cam_high \
   --dense-only \
   --dense-subtasks "Move to object, Grasp object, Move to target, Place object"
@@ -226,9 +232,9 @@ torchrun --standalone --nnodes 1 --nproc-per-node 1 \
   --config configs/sarm/sarm_dense_only.py \
   --work-dir ./work_dirs/sarm_dense_only_your_dataset \
   --cfg-options \
-    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
-    train_dataloader.dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
-    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
+    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
+    train_dataloader.dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
+    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
     train_dataloader.dataset.video_keys="['observation.images.cam_high']" \
     inference_dataset.video_keys="['observation.images.cam_high']" \
     train_dataloader.per_device_batch_size=1 \
@@ -262,7 +268,7 @@ python scripts/infer_sarm_progress.py \
   --batch-size 1 \
   --max-batches 1 \
   --cfg-options \
-    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
-    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv3.0 \
+    model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
+    inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
     inference_dataset.video_keys="['observation.images.cam_high']"
 ```

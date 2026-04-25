@@ -11,15 +11,21 @@
 
 已发布到 Hugging Face 的参考数据集：
 
-- 用于训练 / 推理的人工标注数据：[`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
-- 供手工或 VLM 继续标注的无标注数据：[`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x 版、用于训练 / 推理的人工标注数据：[`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x 版、供手工或 VLM 继续标注的无标注数据：[`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- 新增的 LeRobot v2.1 manual 转换版，可直接用于训练 / 推理，也适合需要旧版目录结构的工具链：[`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- 新增的 LeRobot v2.1 vlm 转换版，适合作为手工补 stage 或 VLM 自动标注的干净起点：[`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
 
 可通过以下命令下载到 `./datasets`：
 
 ```bash
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
 ```
+
+`manual_*` 两份数据可以直接接训练 / 推理；`vlm_*` 两份数据适合作为手工写 stage 或 VLM 自动标注的起点。下面的示例统一使用新的 v2.1 无标注转换版，因为它更贴合常见的 `meta/episodes.jsonl` 加逐集视频布局。
 
 LeRobot v3.x 视频元信息自检：
 
@@ -49,7 +55,7 @@ LeRobot v3.x 视频元信息自检：
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --default-sparse auto
 ```
 
@@ -59,7 +65,7 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec specs/my_dense_stages.json \
     --default-sparse auto
 ```
@@ -70,7 +76,7 @@ python tools/sarm_annotate/write_manual_stages.py \
 
 ```bash
 python tools/sarm_annotate/write_manual_stages.py \
-  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --dataset-root ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
     --spec specs/my_dual_stages.json
 ```
 
@@ -147,7 +153,7 @@ pip install "lerobot>=0.3.4" qwen-vl-utils transformers torch opencv-python pyda
 ```bash
 # 本地数据集，dense-only
 python tools/sarm_annotate/subtask_annotation.py \
-    --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv3.0 \
+  --repo-id ./datasets/SARM_vlm_test_10Episodes_lerobotv2.1 \
   --model ./checkpoints/Qwen3-VL-30B-A3B-Instruct \
     --video-key observation.images.cam_high \
   --video-backend pyav \

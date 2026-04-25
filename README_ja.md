@@ -264,15 +264,21 @@ FluxVLA の SARM ワークフローは、標準的な LeRobot v2.1 / v3.x デー
 
 公開済みの SARM サンプルデータセット:
 
-- 学習 / 推論向けの手動 sparse+dense アノテーション付きデータ: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
-- 手動または VLM アノテーション用の未注釈データ: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x 版の学習 / 推論向け手動 sparse+dense アノテーション付きデータ: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x 版の手動または VLM アノテーション用未注釈データ: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- 新しい LeRobot v2.1 manual 変換版。学習 / 推論や旧来ツール互換向け: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- 新しい LeRobot v2.1 vlm 変換版。手動 stage 書き込みや VLM 自動アノテーション向け: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
 
 `./datasets` へは次のようにダウンロードできます:
 
 ```bash
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
 huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
 ```
+
+`manual_*` はそのまま学習 / 推論に使えます。`vlm_*` は手動 stage 書き込みや VLM 自動アノテーションの開始点として使います。`meta/episodes.jsonl` と episode 単位動画を前提とするツールでは v2.1 を、ネイティブな LeRobot v3.x metadata を保ちたい場合は v3.0 を優先してください。
 
 LeRobot v3.x の SARM データセットを使う前に、動画メタデータを確認してください:
 
