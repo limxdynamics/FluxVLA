@@ -153,32 +153,52 @@ class SARMDataset(ParquetDataset):
             tolerance_s: float = 0.1,
             backend: str = 'pyav') -> torch.Tensor:
         video_path = str(video_path)
-        keyframes_only = backend == 'pyav'
-        torchvision.set_video_backend(backend)
-        reader = torchvision.io.VideoReader(video_path, 'video')
         first_ts = timestamps[0]
         last_ts = timestamps[-1]
-        reader.seek(first_ts, keyframes_only=keyframes_only)
 
-        loaded_frames = []
-        loaded_ts = []
-        for frame in reader:
-            current_ts = frame['pts']
-            loaded_frames.append(frame['data'])
-            loaded_ts.append(current_ts)
-            if current_ts >= last_ts:
-                break
-        if backend == 'pyav':
-            reader.container.close()
+        def _load_candidates(seek_ts: float) -> tuple[List[torch.Tensor],
+                                                      List[float]]:
+            keyframes_only = backend == 'pyav'
+            torchvision.set_video_backend(backend)
+            reader = torchvision.io.VideoReader(video_path, 'video')
+            reader.seek(seek_ts, keyframes_only=keyframes_only)
 
-        query_ts = torch.tensor(timestamps)
-        loaded_ts_tensor = torch.tensor(loaded_ts)
-        dist = torch.cdist(query_ts[:, None], loaded_ts_tensor[:, None], p=1)
-        min_dist, argmin = dist.min(1)
-        if not (min_dist < tolerance_s).all():
+            loaded_frames: List[torch.Tensor] = []
+            loaded_ts: List[float] = []
+            try:
+                for frame in reader:
+                    current_ts = float(frame['pts'])
+                    loaded_frames.append(frame['data'])
+                    loaded_ts.append(current_ts)
+                    if current_ts >= last_ts:
+                        break
+            finally:
+                if backend == 'pyav':
+                    reader.container.close()
+            return loaded_frames, loaded_ts
+
+        def _match_candidates(loaded_frames: List[torch.Tensor],
+                              loaded_ts: List[float]) -> Optional[torch.Tensor]:
+            if not loaded_ts:
+                return None
+            query_ts = torch.tensor(timestamps, dtype=torch.float32)
+            loaded_ts_tensor = torch.tensor(loaded_ts, dtype=torch.float32)
+            dist = torch.cdist(query_ts[:, None], loaded_ts_tensor[:, None], p=1)
+            min_dist, argmin = dist.min(1)
+            if not (min_dist <= tolerance_s).all():
+                return None
+            return torch.stack([loaded_frames[idx] for idx in argmin])
+
+        loaded_frames, loaded_ts = _load_candidates(first_ts)
+        matched_frames = _match_candidates(loaded_frames, loaded_ts)
+        if matched_frames is None and backend == 'pyav' and first_ts > 0:
+            # torchvision warns that accurate seek is not implemented for pyav.
+            loaded_frames, loaded_ts = _load_candidates(0.0)
+            matched_frames = _match_candidates(loaded_frames, loaded_ts)
+        if matched_frames is None:
             raise ValueError(
                 f'Failed to find frames within tolerance for {video_path}')
-        return torch.stack([loaded_frames[idx] for idx in argmin])
+        return matched_frames
 
     def _build_video_path(self, dataset_idx: int, episode_index: int,
                           video_key: str) -> str:
