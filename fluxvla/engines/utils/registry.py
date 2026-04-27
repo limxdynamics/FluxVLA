@@ -298,13 +298,13 @@ class Registry:
                             'modules will not be registered. If you '
                             'want to use modules defined in '
                             f'{scope}, Please install {scope} by '
-                            f'`pip install {MODULE2PACKAGE[scope]}.',
+                            f'pip install {MODULE2PACKAGE[scope]}.',
                             logger='current',
                             level=logging.WARNING)
                     else:
                         print_log(
-                            f'Failed to import `{scope}.registry` '
-                            f'make sure the registry.py exists in `{scope}` '
+                            f'Failed to import {scope}.registry, '
+                            f'make sure the registry.py exists in {scope} '
                             'package.',
                             logger='current',
                             level=logging.WARNING)
@@ -348,7 +348,7 @@ class Registry:
                 print_log(
                     f'The "{self.name}" registry in {self.scope} did not '
                     'set import location. Fallback to call '
-                    f'`{self.scope}.utils.register_all_modules` '
+                    f'`{self.scope}.utils.register_all_modules` '  # noqa: W604
                     'instead.',
                     logger='current',
                     level=logging.DEBUG)
@@ -361,7 +361,7 @@ class Registry:
                             'modules will not be registered. If you '
                             'want to use modules defined in '
                             f'{self.scope}, Please install {self.scope} by '
-                            f'`pip install {MODULE2PACKAGE[self.scope]}.',
+                            f'`pip install {MODULE2PACKAGE[self.scope]}.',  # noqa: W604,E501
                             logger='current',
                             level=logging.WARNING)
                     else:
@@ -518,7 +518,7 @@ class Registry:
             # doesn't have `__name__`. Use default value to prevent error
             cls_name = getattr(obj_cls, '__name__', str(obj_cls))
             print_log(
-                f'Get class `{cls_name}` from "{registry_name}"'
+                f'Get class `{cls_name}` from "{registry_name}"'  # noqa: W604
                 f' registry in "{scope_name}"',
                 logger='current',
                 level=logging.DEBUG)

@@ -127,7 +127,7 @@ class PaddedCollatorForLanguageModeling:
             }
         else:
             raise ValueError(
-                f'Unsupported `pixel_values` type = {type(pixel_values)}')
+                f'Unsupported pixel_values type = {type(pixel_values)}')
 
         return dict(
             pixel_values=pixel_values,

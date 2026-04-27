@@ -92,7 +92,7 @@ def maybe_download(url: str,
             _ensure_permissions(local_path)
 
     except PermissionError as e:
-        msg = f'Permission error downloading {url}. Try: `rm -rf {local_path}*`'  # noqa: E501
+        msg = f'Permission error downloading {url}. Try: `rm -rf {local_path}*`'  # noqa: E501,W604
         raise PermissionError(msg) from e
 
     return local_path
@@ -127,7 +127,7 @@ def _download_boto3(url: str,
     def validate_and_parse_url(s3_url: str):
         parsed = urllib.parse.urlparse(s3_url)
         if parsed.scheme != 's3':
-            raise ValueError(f'URL must be s3://, got {s3_url}')
+            raise ValueError(f'URL must be s3://, got {s3_url}')  # noqa: E231
         return parsed.netloc, parsed.path.strip('/')
 
     bucket_name, prefix = validate_and_parse_url(url)

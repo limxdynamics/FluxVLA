@@ -54,7 +54,8 @@ class FusedMLPProjector(nn.Module):
             )
         else:
             raise ValueError(
-                f'Fused Projector with `{mlp_type = }` is not supported!')
+                f'Fused Projector with mlp_type={mlp_type!r} is not supported!'
+            )
 
     def forward(self, fused_img_patches: torch.Tensor) -> torch.Tensor:
         """

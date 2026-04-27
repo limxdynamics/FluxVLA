@@ -20,10 +20,9 @@ import imageio
 import numpy as np
 import tensorflow as tf
 import torch
-from PIL import Image
-
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
+from PIL import Image
 
 OPENVLA_V01_SYSTEM_PROMPT = (
     'A chat between a curious user and an artificial intelligence assistant. '
@@ -253,10 +252,10 @@ def get_vla_action(vla,
     # Build VLA prompt
     if 'openvla-v01' in base_vla_name:  # OpenVLA v0.1
         prompt = (
-            f'{OPENVLA_V01_SYSTEM_PROMPT} USER: What action should the robot take to {task_label.lower()}? ASSISTANT:'  # noqa: E501
+            f'{OPENVLA_V01_SYSTEM_PROMPT} USER: What action should the robot take to {task_label.lower()}? ASSISTANT:'  # noqa: E501,E231
         )
     else:  # OpenVLA
-        prompt = f'In: What action should the robot take to {task_label.lower()}?\nOut:'  # noqa: E501
+        prompt = f'In: What action should the robot take to {task_label.lower()}?\nOut:'  # noqa: E501,E231
 
     # Process inputs.
     inputs = processor(prompt, image).to(device, dtype=torch.bfloat16)

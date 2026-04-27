@@ -101,7 +101,7 @@ class RLDSDataset(IterableDataset):
         for d_name, d_weight in data_mix:
             if d_name in included_datasets:
                 # TODO: Change to logging
-                print(f'Skipping Duplicate Dataset: `{(d_name, d_weight)}`')
+                print(f'Skipping Duplicate Dataset: {(d_name, d_weight)!r}')
                 continue
 
             included_datasets.add(d_name)
@@ -125,7 +125,7 @@ class RLDSDataset(IterableDataset):
 
             except ValueError as e:
                 # TODO: Change to logging
-                print(f'Skipping `{d_name}` due to Error: {e}')
+                print(f'Skipping {d_name} due to Error: {e}')
 
         # If applicable, enable image augmentations
         if image_aug:
@@ -234,7 +234,7 @@ class LiberoEvalDataset:
         imgs = list()
         for img_key in self.img_keys:
             if img_key not in inputs:
-                raise KeyError(f'Image key `{img_key}` not found in inputs!')
+                raise KeyError(f'Inputs are missing image key {img_key!r}.')
             imgs.append(get_libero_image(inputs, self.resize_size, img_key))
         replay_img = copy.deepcopy(imgs[0])
         robot0_eef_pos = inputs['robot0_eef_pos'],
@@ -290,7 +290,8 @@ class LiberoEvalDataset:
             pixel_values = image_out
             image_grid_thw = None
         # Build VLA prompt
-        prompt = f'In: What action should the robot take to {task_description.lower()}?\nOut:' + self.prompt_suffix  # noqa: E501
+        prompt = 'In: What action should the robot take to {}?\nOut:{}'.format(
+            task_description.lower(), self.prompt_suffix)
 
         # Process inputs.
         tokens = torch.tensor(self.tokenizer(prompt)['input_ids']).unsqueeze(0)

@@ -49,7 +49,7 @@ class MLPProjector(nn.Module):
             )
         else:
             raise ValueError(
-                f'Projector with `{mlp_type = }` is not supported!')
+                f'Projector with mlp_type={mlp_type!r} is not supported!')
 
     def forward(self, img_patches: torch.Tensor) -> torch.Tensor:
         """

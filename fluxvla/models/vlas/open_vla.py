@@ -577,14 +577,14 @@ class OpenVLA(BaseVLA):
         if unnorm_key is None:
             assert len(norm_stats) == 1, (
                 f'Your model was trained on more than one dataset, '
-                f'please pass a `unnorm_key` from the following options to'
+                f'please pass an unnorm_key from the following options to '
                 f'choose the statistics'
                 f'used for un-normalizing actions: {norm_stats.keys()}')
             unnorm_key = next(iter(norm_stats.keys()))
 
         assert unnorm_key in norm_stats, (
-            f'The `unnorm_key` you chose is not in'
-            f'the set of available dataset statistics,'
+            f'The unnorm_key you chose is unavailable in '
+            f'the set of available dataset statistics, '
             f'please choose from: {norm_stats.keys()}')
         return unnorm_key
 

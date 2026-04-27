@@ -186,7 +186,7 @@ def plot_denoising_per_dim(intermediates,
     fig, axes = plt.subplots(
         n_rows, n_cols, figsize=(14, 3 * n_rows), squeeze=False)
     fig.suptitle(
-        f'{title_prefix}Denoising Process (prefix_len={prefix_len})',
+        '{}Denoising Process (prefix_len={})'.format(title_prefix, prefix_len),
         fontsize=14)
 
     colors = plt.cm.viridis(np.linspace(0, 1, n_steps))
@@ -275,7 +275,8 @@ def plot_comparison(results,
     n_rows = (action_dim + n_cols - 1) // n_cols
     fig, axes = plt.subplots(
         n_rows, n_cols, figsize=(14, 3 * n_rows), squeeze=False)
-    fig.suptitle(f'RTC Comparison (prefix_len={prefix_len})', fontsize=14)
+    fig.suptitle(
+        'RTC Comparison (prefix_len={})'.format(prefix_len), fontsize=14)
 
     for d in range(action_dim):
         ax = axes[d // n_cols, d % n_cols]
@@ -412,7 +413,7 @@ def main():
         t0 = time_mod.time()
         pred, inter = predict_with_intermediates(model, batch, **kwargs)
         elapsed = time_mod.time() - t0
-        print(f'  Time: {elapsed:.3f}s')
+        print(f'  Time: {elapsed:.3f}s')  # noqa: E231
         results[mode] = (pred, inter, elapsed)
 
     # -- Timing summary -------------------------------------------------------
@@ -421,8 +422,8 @@ def main():
     for mode in modes:
         t = results[mode][2]
         display = mode_configs[mode][0]
-        ratio = f' ({t / t_base:.1f}x)' if mode != modes[0] else ''
-        print(f'  {display:20s}: {t:.3f}s{ratio}')
+        ratio = ' ({:.1f}x)'.format(t / t_base) if mode != modes[0] else ''
+        print('  {:20s}: {:.3f}s{}'.format(display, t, ratio))
 
     # -- Overlap L2 (prefix region) -------------------------------------------
     print('\n=== Overlap L2 (prefix region) ===')
@@ -431,7 +432,7 @@ def main():
         display = mode_configs[mode][0]
         overlap = p[:, :prefix_len].cpu() - gt_actions[:, :prefix_len]
         l2 = overlap.pow(2).mean().sqrt().item()
-        print(f'  {display:20s}: L2={l2:.4f}')
+        print(f'  {display:20s}: L2={l2:.4f}')  # noqa: E231
 
     # -- Per-dimension denoising visualization --------------------------------
     for mode in modes:

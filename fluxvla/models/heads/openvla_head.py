@@ -107,11 +107,11 @@ class OpenVLAHead(nn.Module):
         if unnorm_key is None:
             assert len(norm_stats) == 1, (
                 'Model trained on multiple datasets. Please provide an '
-                '`unnorm_key` from: ' + str(norm_stats.keys()))
+                '`unnorm_key` from: ' + str(norm_stats.keys()))  # noqa: W604
             unnorm_key = next(iter(norm_stats.keys()))
 
         assert unnorm_key in norm_stats, (
-            f'The `unnorm_key` is invalid. Choose from: {norm_stats.keys()}'
+            f'The `unnorm_key` is invalid. Choose from: {norm_stats.keys()}'  # noqa: W604,E501
         )  # noqa: E501
 
         return unnorm_key
