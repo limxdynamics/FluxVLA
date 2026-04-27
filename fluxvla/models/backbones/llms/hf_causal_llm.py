@@ -70,7 +70,7 @@ class HFCausalLLMBackbone(nn.Module):
         # more explicit about LLM-specific details
         if not self.inference_mode:
             overwatch.info(
-                f'Loading [bold]{llm_family}[/] LLM from [underline]`{llm_path}`[/]',  # noqa: E501
+                f'Loading [bold]{llm_family}[/] LLM from [underline]`{llm_path}`[/]',  # noqa: E501,W604
                 ctx_level=1)
             if llm_config is None:
                 llm_config = llm_cfg.from_pretrained(llm_path, token=hf_token)
@@ -90,7 +90,7 @@ class HFCausalLLMBackbone(nn.Module):
         # no need to load base weights!
         else:
             overwatch.info(
-                f'Building empty [bold]{llm_family}[/] LLM from [underline]`{llm_path}`[/]',  # noqa: E501
+                f'Building empty [bold]{llm_family}[/] LLM from [underline]`{llm_path}`[/]',  # noqa: E501,W604
                 ctx_level=1)
             llm_config = AutoConfig.from_pretrained(llm_path, token=hf_token)
             self.llm = model_cls._from_config(llm_config)

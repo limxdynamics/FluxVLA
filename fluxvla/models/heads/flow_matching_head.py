@@ -150,7 +150,7 @@ class MultiEmbodimentActionEncoder(nn.Module):
         elif timesteps.dim() == 2:
             assert timesteps.shape == (B, T)
         else:
-            raise ValueError(f'Expected timesteps shape (B,) or (B,T), got '
+            raise ValueError(f'Expected timesteps shape (B,) or (B, T), got '
                              f'{timesteps.shape}')
 
         # 2) Standard action MLP step for shape => (B, T, w)

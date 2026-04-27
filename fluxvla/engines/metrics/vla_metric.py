@@ -235,7 +235,7 @@ class VLAMetric:
                 tracker = TensorBoardTracker(run_id, run_dir, hparams)
             else:
                 raise ValueError(
-                    f'Tracker with type `{tracker_type} is not supported!')
+                    f'Tracker with type {tracker_type} is not supported!')
 
             # Add Hyperparameters --> add to `self.trackers`
             tracker.write_hyperparameters()
@@ -265,10 +265,10 @@ class VLAMetric:
     def get_status(self, loss: Optional[torch.Tensor] = None) -> str:
         lr = self.state['lr'][-1] if len(self.state['lr']) > 0 else 0
         if loss is None:
-            return f'=>> [Epoch {self.epoch:03d}] Global Step {self.global_step:06d} =>> LR :: {lr:.6f}'  # noqa: E501
+            return f'=>> [Epoch {self.epoch:03d}] Global Step {self.global_step:06d} =>> LR :: {lr:.6f}'  # noqa: E501,E231,E203
 
         # Otherwise, embed `loss` in status report!
-        return f'=>> [Epoch {self.epoch:03d}] Global Step {self.global_step:06d} =>> LR :: {lr:.6f} - Loss :: {loss:.4f}'  # noqa: E501
+        return f'=>> [Epoch {self.epoch:03d}] Global Step {self.global_step:06d} =>> LR :: {lr:.6f} - Loss :: {loss:.4f}'  # noqa: E501,E231,E203
 
     def commit(
         self,
@@ -346,7 +346,7 @@ class VLAMetric:
         # Fire to Trackers
         prefix = 'VLA Train'
         # Format lr to ensure at least 6 decimal places
-        lr_formatted = f'{lr:.7f}'
+        lr_formatted = f'{lr:.7f}'  # noqa: E231
         self.log(
             self.global_step,
             metrics={

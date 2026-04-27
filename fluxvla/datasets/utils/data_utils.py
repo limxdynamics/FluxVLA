@@ -145,7 +145,7 @@ def make_oxe_dataset_kwargs(
             ActionEncoding.EEF_POS, ActionEncoding.EEF_R6
     ]:
         raise ValueError(
-            f'Cannot load `{dataset_name}`; only EEF_POS & EEF_R6 actions '
+            f'Cannot load {dataset_name}. Only EEF_POS & EEF_R6 actions '
             'supported!')
 
     # For EEF_POS & EEF_R6, only the gripper dimension is absolute.
@@ -163,8 +163,9 @@ def make_oxe_dataset_kwargs(
     # Validate camera views
     if len(missing_keys := (set(load_camera_views) -
                             set(dataset_kwargs['image_obs_keys']))) > 0:
-        raise ValueError(f'Cannot load `{dataset_name}`; missing camera views \
-                `{missing_keys}`')
+        raise ValueError(
+            f'Cannot load {dataset_name}. Missing camera views {missing_keys}.'
+        )
 
     # Filter image and depth observation keys by view
     dataset_kwargs['image_obs_keys'] = {
@@ -493,11 +494,12 @@ def pprint_data_mixture(dataset_kwargs_list: List[Dict[str, Any]],
     print(
         '\n###################################################################'
     )
-    print(f'# Loading the following {len(dataset_kwargs_list)} datasets '
-          f"(incl. sampling weight):{'': >24} #")
+    print('# Loading the following {} datasets (incl. sampling weight):{} #'.
+          format(len(dataset_kwargs_list), ''.rjust(24)))
     for dataset_kwargs, weight in zip(dataset_kwargs_list, dataset_weights):
         pad = 80 - len(dataset_kwargs['name'])
-        print(f"# {dataset_kwargs['name']}: {weight:=>{pad}f} #")
+        print('# {}: {} #'.format(dataset_kwargs['name'],
+                                  format(weight, '=>{}f'.format(pad))))
     print(
         '###################################################################\n'
     )
@@ -865,10 +867,11 @@ def make_dataset_from_rlds(
 
         if absolute_action_mask is not None:
             if len(absolute_action_mask) != traj['action'].shape[-1]:
+                action_dim = traj['action'].shape[-1]
                 raise ValueError(
                     f'Length of absolute_action_mask '
                     f'({len(absolute_action_mask)}) does not match action '
-                    f'dimension ({traj["action"].shape[-1]}).')
+                    f'dimension ({action_dim}).')
             traj['absolute_action_mask'] = tf.tile(
                 tf.convert_to_tensor(absolute_action_mask,
                                      dtype=tf.bool)[None],
@@ -906,11 +909,11 @@ def make_dataset_from_rlds(
     if action_normalization_mask is not None:
         if len(action_normalization_mask) != \
                 dataset_statistics['action']['mean'].shape[-1]:
+            action_dim = dataset_statistics['action']['mean'].shape[-1]
             raise ValueError(
                 f'Length of normalization mask '
                 f'({len(action_normalization_mask)}) does not match action '
-                f'dimension ({dataset_statistics["action"]["mean"].shape[-1]}).'  # noqa: E501
-            )
+                f'dimension ({action_dim}).')
         dataset_statistics['action']['mask'] = np.array(
             action_normalization_mask)
 

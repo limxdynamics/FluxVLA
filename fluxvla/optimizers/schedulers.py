@@ -761,7 +761,7 @@ def get_scheduler(
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
         raise ValueError(
-            f'{name} requires `num_warmup_steps`, please provide that '
+            f'{name} requires `num_warmup_steps`, please provide that '  # noqa: W604,E501
             f'argument.')
 
     if name == SchedulerType.CONSTANT_WITH_WARMUP:
@@ -782,7 +782,7 @@ def get_scheduler(
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:
         raise ValueError(
-            f'{name} requires `num_training_steps`, please provide that '
+            f'{name} requires `num_training_steps`, please provide that '  # noqa: W604,E501
             f'argument.')
 
     return schedule_func(

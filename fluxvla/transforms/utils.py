@@ -319,8 +319,8 @@ class TimmViTBackbone(VisionBackbone, ABC):
                 [LetterboxPad(fill), *default_image_transform.transforms])
         else:
             raise ValueError(
-                f'Image Resize Strategy {self.image_resize_strategy} \
-                    is not supported!')
+                f'Image Resize Strategy {self.image_resize_strategy} '
+                'is not supported!')
 
     def get_fsdp_wrapping_policy(self) -> Callable:
         """

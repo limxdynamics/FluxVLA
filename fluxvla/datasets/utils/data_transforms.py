@@ -227,10 +227,9 @@ def decode_and_resize(
     for name in depth_names:
         if name not in depth_resize_size:
             logging.warning(
-                f'No depth_resize_size was provided for depth_{name}. \
-                    This will result in 1x1  \
-                        padding depth images, which may cause errors \
-                            if you mix padding and non-padding images.')
+                f'No depth_resize_size was provided for depth_{name}. '
+                'This will result in 1x1 padding depth images, which may '
+                'cause errors if you mix padding and non-padding images.')
         depth = obs[f'depth_{name}']
 
         if depth.dtype == tf.string:

@@ -281,11 +281,15 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 LeRobot v3.x の SARM データセットを使う前に、動画メタデータを確認してください:
 
 - LeRobot v3.x では、複数 episode を 1 本の MP4 にまとめても、1 episode ごとに 1 本の MP4 でも構いません。
+
 - 複数 episode が同じ MP4 を共有する場合は、各 episode の `from_timestamp` / `to_timestamp` がその動画内の区間を正しく表している必要があります。
+
 - 動画がすでに `file-000.mp4`、`file-001.mp4` のように episode ごとに分かれている場合は、各 episode が対応する `file_index` を指し、`from_timestamp` は通常 `0.0` に戻ります。
+
 - ディレクトリ内に複数の MP4 があるのに、すべての episode が `file-000.mp4` を指している場合、その metadata は壊れているため、使用前に修正してください。
 
 - SARM データセット構成、アノテーション列の契約、progress 推論の使い方は [docs/sarm.md](docs/sarm.md) を参照してください。
+
 - 手動 stage 書き込みや VLM ベースの自動アノテーションは [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md) を参照してください。
 
 </details>

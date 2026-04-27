@@ -101,7 +101,7 @@ class RLDSBatchTransform:
                     Image.fromarray(rlds_batch['observation'][view][0]))
             else:
                 raise ValueError(
-                    f"View '{view}' not found in observation images.")
+                    f'Observation images are missing view {view!r}.')
         lang = (rlds_batch['task']['language_instruction'].decode().lower())
 
         conversation = [

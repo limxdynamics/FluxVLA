@@ -1305,8 +1305,8 @@ def decode_and_resize(
                 image = tf.io.decode_image(
                     image, expand_animations=False, dtype=tf.uint8)
         elif image.dtype != tf.uint8:
-            raise ValueError(f'Unsupported image dtype: found image_{name} \
-                    with dtype {image.dtype}')
+            raise ValueError(f'Unsupported image dtype: found image_{name} '
+                             f'with dtype {image.dtype}')
         if name in resize_size:
             image = dl.transforms.resize_image(image, size=resize_size[name])
         obs[f'image_{name}'] = image

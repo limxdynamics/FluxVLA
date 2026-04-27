@@ -156,8 +156,8 @@ class SARMDataset(ParquetDataset):
         first_ts = min(timestamps)
         last_ts = max(timestamps)
 
-        def _load_candidates(seek_ts: float) -> tuple[List[torch.Tensor],
-                                                      List[float]]:
+        def _load_candidates(
+                seek_ts: float) -> tuple[List[torch.Tensor], List[float]]:
             keyframes_only = backend == 'pyav'
             torchvision.set_video_backend(backend)
             reader = torchvision.io.VideoReader(video_path, 'video')
@@ -177,13 +177,15 @@ class SARMDataset(ParquetDataset):
                     reader.container.close()
             return loaded_frames, loaded_ts
 
-        def _match_candidates(loaded_frames: List[torch.Tensor],
-                              loaded_ts: List[float]) -> Optional[torch.Tensor]:
+        def _match_candidates(
+                loaded_frames: List[torch.Tensor],
+                loaded_ts: List[float]) -> Optional[torch.Tensor]:
             if not loaded_ts:
                 return None
             query_ts = torch.tensor(timestamps, dtype=torch.float32)
             loaded_ts_tensor = torch.tensor(loaded_ts, dtype=torch.float32)
-            dist = torch.cdist(query_ts[:, None], loaded_ts_tensor[:, None], p=1)
+            dist = torch.cdist(
+                query_ts[:, None], loaded_ts_tensor[:, None], p=1)
             min_dist, argmin = dist.min(1)
             if not (min_dist <= tolerance_s).all():
                 return None
