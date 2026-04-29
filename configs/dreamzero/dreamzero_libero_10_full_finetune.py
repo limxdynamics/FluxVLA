@@ -40,7 +40,7 @@
 _ckpt_root = './checkpoints'
 _tokenizer = _ckpt_root + '/Wan2.1-I2V-14B-480P/google/umt5-xxl'
 
-_frame_window_size = 9
+_frame_window_size = 33
 
 model = dict(
     type='DreamZeroVLA',
@@ -155,7 +155,7 @@ train_dataloader = dict(
                     frame_window_size=_frame_window_size,
                 ),
             ],
-            action_window_size=10,
+            action_window_size=40,
             action_key='action',
             use_delta=False,
             statistic_name='libero_10_no_noops',
@@ -244,6 +244,14 @@ eval = dict(
                     model_path=_tokenizer,
                 ),
                 max_len=512,
+                negative_prompt=(
+                    'Vibrant colors, overexposed, static, blurry details, '
+                    'text, subtitles, style, artwork, painting, image, still, '
+                    'grayscale, dull, worst quality, low quality, JPEG '
+                    'artifacts, ugly, mutilated, extra fingers, bad hands, '
+                    'bad face, deformed, disfigured, mutated limbs, fused '
+                    'fingers, stagnant image, cluttered background, three '
+                    'legs, many people in the background, walking backwards.'),
                 use_conversation=False,
             ),
             dict(
