@@ -17,29 +17,11 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
+from ..utils.postprocess import (Trajectory, TrajectoryPostprocessor,
+                                 compute_dynamic_horizon, resample_remaining)
+from ..utils.postprocess.plot_utils import plot_postprocess_comparison
 from ..utils.root import RUNNERS
 from .base_inference_runner import BaseInferenceRunner
-
-
-def resample_remaining(traj, offset):
-    """Linearly interpolate remaining trajectory from a fractional offset.
-
-    Args:
-        traj: (N, D) sequential data (numpy array).
-        offset: Fractional starting index, e.g. (t - t0) / dt.
-
-    Returns:
-        (M, D) resampled rows where M = N - int(offset).
-    """
-    N = traj.shape[0]
-    M = N - int(offset)
-    if M <= 0:
-        return traj[:0]
-    idx = np.clip(offset + np.arange(M), 0.0, N - 1.0)
-    lo = np.floor(idx).astype(int)
-    hi = np.minimum(lo + 1, N - 1)
-    alpha = (idx - lo)[:, np.newaxis]
-    return traj[lo] + alpha * (traj[hi] - traj[lo])
 
 
 @RUNNERS.register_module()
@@ -68,11 +50,15 @@ class AlohaInferenceRunner(BaseInferenceRunner):
                  prepare_pose: List[float] = None,
                  async_execution: bool = False,
                  execute_horizon: int = None,
+                 dynamic_horizon: dict = None,
+                 postprocess_config: dict = None,
                  *args,
                  **kwargs):
         self.gripper_threshold = gripper_threshold
         self.async_execution = async_execution
         self.execute_horizon = execute_horizon
+        self.dynamic_horizon_config = dynamic_horizon or {}
+        self.postprocess_config = postprocess_config or {}
         # Set Aloha-specific defaults
         if 'camera_names' not in kwargs or kwargs['camera_names'] is None:
             kwargs['camera_names'] = [
@@ -125,6 +111,8 @@ class AlohaInferenceRunner(BaseInferenceRunner):
         super().__init__(*args, **kwargs)
 
         self.dt = 1.0 / self.publish_rate
+        self.trajectory_postprocessor = TrajectoryPostprocessor(
+            config=self.postprocess_config)
 
         if prepare_pose is None:
             # Initialize other special poses
@@ -252,47 +240,97 @@ class AlohaInferenceRunner(BaseInferenceRunner):
         return raw_action
 
     # Action layout: [left_arm(7), right_arm(7), base(2)]
+    LEFT_ARM_COLS = slice(0, 7)
+    RIGHT_ARM_COLS = slice(7, 14)
+    BASE_COLS = slice(14, 16)
     LEFT_GRIPPER_COL = 6
     RIGHT_GRIPPER_COL = 13
     GRIPPER_CLOSED = -0.01
+    DEFAULT_JOINT_DOF_INDICES = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
+
+    def _compute_horizon(self, actions):
+        dynamic = compute_dynamic_horizon(actions, self.dynamic_horizon_config)
+        if dynamic is not None:
+            return dynamic
+        return self.execute_horizon
 
     def _postprocess_actions(self, raw_action):
-        """Denormalize and snap near-closed grippers to fully closed."""
-        actions = super()._postprocess_actions(raw_action)
+        """Denormalize, apply jerk-constrained smoothing, and snap grippers."""
+        raw_chunk_actions = super()._postprocess_actions(raw_action)
+        raw_trajectory = Trajectory(
+            t0=self._action_ctx.inference_start,
+            dt=self.dt,
+            positions=raw_chunk_actions,
+        )
+        self._action_ctx.raw_trajectory = raw_trajectory
+
+        previous_trajectory = getattr(self._prev_ctx, 'trajectory', None)
+        processed_trajectory = self.trajectory_postprocessor.process(
+            traj=raw_trajectory,
+            dof_indices=self.DEFAULT_JOINT_DOF_INDICES,
+            prev_traj=previous_trajectory)
+
         for col in (self.LEFT_GRIPPER_COL, self.RIGHT_GRIPPER_COL):
-            actions[:,
-                    col] = np.where(actions[:, col] < self.gripper_threshold,
-                                    self.GRIPPER_CLOSED, actions[:, col])
-        return actions
+            col_data = processed_trajectory.positions[:, col]
+            col_data[col_data < self.gripper_threshold] = self.GRIPPER_CLOSED
+
+        self._action_ctx.trajectory = processed_trajectory
+
+        self._debug_plot(processed_trajectory)
+        return processed_trajectory.positions
+
+    def _debug_plot(self, processed_traj):
+        if not self.postprocess_config.get('debug_plot', False):
+            return
+        prev = self._prev_ctx
+        prev_raw = getattr(prev, 'raw_trajectory', None)
+        prev_post = getattr(prev, 'trajectory', None)
+
+        plot_postprocess_comparison(
+            dof_indices=self.DEFAULT_JOINT_DOF_INDICES,
+            cur_raw=self._action_ctx.raw_trajectory,
+            cur_post=processed_traj,
+            prev_raw=prev_raw,
+            prev_post=prev_post,
+            plot_dofs=self.postprocess_config.get('debug_plot_dofs'),
+        )
 
     def _execute_actions(self, actions, rate):
         """Execute dual-arm actions (sync or async).
 
         In async mode, skips steps that elapsed during inference.
+        Uses dynamic horizon to avoid replanning during startup delay.
         """
         if self.disable_puppet_arm:
             return
 
         ctx = self._action_ctx
+        horizon = self._compute_horizon(actions)
 
         if self.async_execution and self._prev_ctx is not None:
             ctx.action_timestamp = ctx.inference_start
-            offset = (time.time() - ctx.action_timestamp) / self.dt
+            offset = max(0.0, (time.time() - ctx.action_timestamp) / self.dt)
             actions = resample_remaining(actions, offset)
         else:
             ctx.action_timestamp = time.time()
-            if self.execute_horizon is not None:
-                actions = actions[:self.execute_horizon]
+            if horizon is not None:
+                actions = actions[:horizon]
 
         self.ros_operator.execute_trajectory(
-            actions[:, :7],
-            actions[:, 7:14],
+            actions[:, self.LEFT_ARM_COLS],
+            actions[:, self.RIGHT_ARM_COLS],
             dt=self.dt,
             async_exec=self.async_execution,
-            base_velocity=actions[:, 14:16] if self.use_robot_base else None)
+            base_velocity=actions[:, self.BASE_COLS]
+            if self.use_robot_base else None)
 
-        if self.async_execution and self.execute_horizon is not None:
-            time.sleep(self.execute_horizon * self.dt)
+        if self.async_execution and horizon is not None:
+            time.sleep(horizon * self.dt)
+
+        prev = self._prev_ctx
+        if prev is not None and hasattr(prev, 'action_timestamp'):
+            dt = ctx.action_timestamp - prev.action_timestamp
+            print(f'[FPS] {1.0 / dt: .1f} chunk/s ({dt: .3f}s)')
 
     def cleanup(self):
         """Clean up resources."""
