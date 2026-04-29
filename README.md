@@ -410,6 +410,7 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 - Supports multi-GPU evaluating libero on devices without ray tracing.
 - Supports remote inference infrastructure with ZMQ-based server/client architecture, enabling GPU-offloaded inference for resource-constrained edge devices. See [Remote Inference Serving](docs/remote_inference_serving.md).
 - Supports [RTC (Real-Time Chunking)](docs/rtc.md) to improve cross-chunk trajectory continuity.
+- Supports trajectory postprocessing with reusable MPC and Ruckig backends; see [Trajectory Postprocessing](docs/trajectory_postprocessing.md) for configuration, stitching, and benchmark details.
 - Supports accelerated inference for GR00T and PI0.5; see [Inference Acceleration](docs/inference_acceleration.md), including Triton fused kernels, CUDA Graph capture, and CUDA custom operators.
 
 </details>

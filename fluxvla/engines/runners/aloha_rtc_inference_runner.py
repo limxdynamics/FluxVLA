@@ -18,7 +18,6 @@ import torch
 
 from ..utils import initialize_overwatch
 from ..utils.root import RUNNERS
-from ..utils.trajectory_utils import resample_remaining
 from .aloha_inference_runner import AlohaInferenceRunner
 
 overwatch = initialize_overwatch(__name__)
@@ -80,7 +79,8 @@ class AlohaRTCInferenceRunner(AlohaInferenceRunner):
         if (prev is not None and self.rtc_config
                 and self.rtc_config.get('enabled', False)):
             offset = (ctx.inference_start - prev.action_timestamp) / self.dt
-            remaining = resample_remaining(prev.raw_actions[0], offset)[None]
+            remaining = self._resample_remaining(prev.raw_actions[0],
+                                                 offset)[None]
             # Use configured prefix_len, or estimate from last inference time
             prefix_len = self.rtc_config.get('prefix_len')
             if prefix_len is None:

@@ -168,6 +168,22 @@ class BaseInferenceRunner:
         self._prev_ctx = None
         self._action_ctx = SimpleNamespace()
 
+    @staticmethod
+    def _resample_remaining(sequence: np.ndarray, offset: float) -> np.ndarray:
+        """Linearly interpolate the unconsumed suffix of an action chunk."""
+        total_steps = sequence.shape[0]
+        remaining_steps = total_steps - int(offset)
+        if remaining_steps <= 0:
+            return sequence[:0]
+
+        sample_idx = np.clip(offset + np.arange(remaining_steps), 0.0,
+                             total_steps - 1.0)
+        lower_idx = np.floor(sample_idx).astype(int)
+        upper_idx = np.minimum(lower_idx + 1, total_steps - 1)
+        alpha = (sample_idx - lower_idx)[:, np.newaxis]
+        return (sequence[lower_idx] + alpha *
+                (sequence[upper_idx] - sequence[lower_idx]))
+
     def _init_zmq_client(self, cfg: Dict):
         """Initialize ZMQ client for remote inference.
 
