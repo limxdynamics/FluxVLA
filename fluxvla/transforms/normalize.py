@@ -153,8 +153,8 @@ class DenormalizeLiberoAction:
                 contain keys that match the keys in `norm_stats`.
         """
         if self.norm_stats is not None and self.denorm_action:
-            task_suite_name = data.get('task_suite_name', '')
-            norm_stats = self.norm_stats[task_suite_name + '_no_noops']
+            norm_stats_key = data.get('norm_stats_key')
+            norm_stats = self.norm_stats[norm_stats_key]
             action = data.get('action', None)
             assert action is not None, \
                 f'Action is not found in the data: {data.keys()}'

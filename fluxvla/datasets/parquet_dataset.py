@@ -268,11 +268,13 @@ class LiberoParquetEvalDataset:
                  norm_stats: Any,
                  task_suite_name: str,
                  transforms: List[Dict],
+                 norm_stats_key: str,
                  num_padding_imgs: int = 0) -> None:
 
         # Build image/token transforms (parquet-style sequential list)
         self.transforms = [build_transform_from_cfg(t) for t in transforms]
         self.task_suite_name = task_suite_name
+        self.norm_stats_key = norm_stats_key
         self.num_padding_imgs = num_padding_imgs
         if isinstance(norm_stats, str):
             with open(norm_stats, 'r', encoding='utf-8') as f:
@@ -284,7 +286,7 @@ class LiberoParquetEvalDataset:
         # Compose transforms chain (parquet-style) starting from raw inputs
         data: Dict[str, Any] = dict(inputs)
         if self.norm_stats is not None:
-            norm_stats = self.norm_stats[self.task_suite_name + '_no_noops']
+            norm_stats = self.norm_stats[self.norm_stats_key]
         else:
             norm_stats = None
         data['norm_stats'] = norm_stats

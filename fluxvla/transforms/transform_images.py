@@ -29,13 +29,38 @@ from transformers.models.qwen2_vl.image_processing_qwen2_vl import \
 from fluxvla.engines import TRANSFORMS
 
 
+def _resize_chw_with_top_left_pad(image: np.ndarray, height: int, width: int,
+                                  pad_value: int) -> np.ndarray:
+    img_hwc = image.transpose(1, 2, 0)
+    cur_height, cur_width = img_hwc.shape[:2]
+
+    ratio = max(cur_width / width, cur_height / height)
+    resized_height = max(1, int(cur_height / ratio))
+    resized_width = max(1, int(cur_width / ratio))
+
+    resized = cv2.resize(
+        img_hwc, (resized_width, resized_height),
+        interpolation=cv2.INTER_LINEAR)
+
+    pad_height = max(0, height - resized_height)
+    pad_width = max(0, width - resized_width)
+    padded = cv2.copyMakeBorder(
+        resized,
+        pad_height,
+        0,
+        pad_width,
+        0,
+        borderType=cv2.BORDER_CONSTANT,
+        value=pad_value)
+    return padded.transpose(2, 0, 1)
+
+
 @TRANSFORMS.register_module()
 class ResizeImages:
     """Resize images in the dataset to a specified
     height and width. This transform resizes all images
     in the 'image' dictionary of the input data
-    to the specified dimensions while maintaining the
-    aspect ratio by padding if necessary.
+    to the specified dimensions.
 
     Args:
         height (int): The target height for the images.
@@ -62,6 +87,45 @@ class ResizeImages:
                 cv2.resize(
                     image.transpose(1, 2, 0), (self.width, self.height),
                     interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1))
+
+        resized_images = np.concatenate(resized_images, axis=0)
+        data['images'] = resized_images
+        return data
+
+
+@TRANSFORMS.register_module()
+class ResizeImagesTopLeftPad:
+    """Resize images while preserving aspect ratio and pad on top/left.
+
+    The resized image is anchored to the bottom-right corner so any extra
+    space is added on the top and left, matching LeRobot SmolVLA.
+
+    Args:
+        height (int): The target height for the images.
+        width (int): The target width for the images.
+        pad_value (int): Constant pad value.
+    """
+
+    def __init__(self, height, width, pad_value: int = 0, *args, **kwargs):
+        self.height = height
+        self.width = width
+        self.pad_value = pad_value
+
+    def __call__(self, data: dict):
+        assert 'images' in data, "Input data must contain 'images' key"
+        if isinstance(data['images'], np.ndarray):
+            assert data['images'].ndim == 3, \
+                "Input 'images' must be a 4D numpy array"
+            images = data['images'].reshape(-1, 3, data['images'].shape[-2],
+                                            data['images'].shape[-1])
+
+        else:
+            images = data['images']
+        resized_images = list()
+        for image in images:
+            resized_images.append(
+                _resize_chw_with_top_left_pad(image, self.height, self.width,
+                                              self.pad_value))
 
         resized_images = np.concatenate(resized_images, axis=0)
         data['images'] = resized_images
@@ -264,7 +328,7 @@ class TransformImage:
             fused vision backbone.
         image_resize_strategy (str): The strategy for
             resizing images. Options are 'resize-naive',
-            'letterbox', and 'resize-crop'.
+            'letterbox', 'letterbox-top-left', and 'resize-crop'.
         input_sizes (Optional[List[Tuple[int, int, int]]]): List
             of input sizes for the images, where each size is
             a tuple of (channels, height, width).
@@ -274,6 +338,9 @@ class TransformImage:
         stds (Optional[List[Tuple[float, float, float]]]): List of
             standard deviations for normalization,
             where each std is a tuple of (std_r, std_g, std_b).
+        letterbox_fill (Optional[List[int]]): RGB fill color used for
+            letterbox padding. The transform stores this as a list and
+            converts it only at the PIL call site.
     """
 
     def __init__(
@@ -283,6 +350,7 @@ class TransformImage:
         input_sizes: Optional[List[Tuple[int, int, int]]] = None,
         means: Optional[List[Tuple[float, float, float]]] = None,
         stds: Optional[List[Tuple[float, float, float]]] = None,
+        letterbox_fill: Optional[List[int]] = None,
         **kwargs: str,
     ) -> None:
         self.use_fused_vision_backbone = use_fused_vision_backbone
@@ -302,6 +370,7 @@ class TransformImage:
         self.crop_params = list()
         self.normalize_params = list()
         self.do_letterbox, self.letterbox_fill = False, None
+        self.letterbox_position = 'center'
 
         for idx in range(len(input_sizes)):
             self.resize_params.append({
@@ -321,8 +390,17 @@ class TransformImage:
                 self.resize_params[idx]['size'] = (input_sizes[idx][-1],
                                                    input_sizes[idx][-1])
             elif self.image_resize_strategy == 'letterbox':
-                self.do_letterbox, self.letterbox_fill = True, tuple(
-                    [int(x * 255) for x in self.means[idx]])
+                self.do_letterbox = True
+                self.letterbox_fill = letterbox_fill or [
+                    int(x * 255) for x in self.means[idx]
+                ]
+                self.letterbox_position = 'center'
+            elif self.image_resize_strategy == 'letterbox-top-left':
+                self.do_letterbox = True
+                self.letterbox_fill = letterbox_fill or [
+                    int(x * 255) for x in self.means[idx]
+                ]
+                self.letterbox_position = 'top-left'
             elif self.image_resize_strategy == 'resize-crop':
                 pass
             else:
@@ -413,9 +491,8 @@ class TransformImage:
             self.preprocess(images, **kwargs)).float()
         return inputs
 
-    def letterbox_pad_transform(
-            self, img: Image.Image, fill_color: Tuple[int, int,
-                                                      int]) -> Image.Image:
+    def letterbox_pad_transform(self, img: Image.Image,
+                                fill_color: List[int]) -> Image.Image:
         """Apply letterbox padding to the image to fit the target size.
         This method resizes the image to fit within the target dimensions
         while maintaining the aspect ratio, and pads the remaining
@@ -423,17 +500,25 @@ class TransformImage:
 
         Args:
             img (Image.Image): The input image to be padded.
-            fill_color (Tuple[int, int, int]): The RGB color to use
-                for padding.
-
+            fill_color (List[int]): The RGB color to use for padding.
         Returns:
             Image.Image: The padded image with the target dimensions.
         """
         target_width, target_height = self.resize_params[0]['size']
-        img.thumbnail((target_width, target_height), Image.Resampling.BILINEAR)
+        ratio = max(img.width / target_width, img.height / target_height)
+        new_w = max(1, round(img.width / ratio))
+        new_h = max(1, round(img.height / ratio))
+        img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+        if isinstance(fill_color, list):
+            fill_color = tuple(fill_color)
         new_img = Image.new('RGB', (target_width, target_height), fill_color)
-        new_img.paste(img, ((target_width - img.width) // 2,
-                            (target_height - img.height) // 2))
+        if self.letterbox_position == 'top-left':
+            paste_x = target_width - img.width
+            paste_y = target_height - img.height
+        else:
+            paste_x = (target_width - img.width) // 2
+            paste_y = (target_height - img.height) // 2
+        new_img.paste(img, (paste_x, paste_y))
 
         return new_img
 
