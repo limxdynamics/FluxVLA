@@ -13,6 +13,7 @@
 # limitations under the License.
 import json
 import os
+from collections import deque
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -262,6 +263,8 @@ class LiberoParquetEvalDataset:
         task_suite_name (str): Name of Libero task suite (for stats keying).
         tokenizer (Dict): Tokenizer config for `build_tokenizer_from_cfg`.
         transforms (List[Dict]): List of transform configs applied in order.
+        num_padding_imgs (int): Number of zero image slots appended per step.
+        img_buffer_len (int): Number of recent image frames kept for eval.
     """
 
     def __init__(self,
@@ -269,22 +272,74 @@ class LiberoParquetEvalDataset:
                  task_suite_name: str,
                  transforms: List[Dict],
                  norm_stats_key: str,
-                 num_padding_imgs: int = 0) -> None:
+                 num_padding_imgs: int = 0,
+                 img_buffer_len: int = 1) -> None:
 
         # Build image/token transforms (parquet-style sequential list)
         self.transforms = [build_transform_from_cfg(t) for t in transforms]
         self.task_suite_name = task_suite_name
         self.norm_stats_key = norm_stats_key
         self.num_padding_imgs = num_padding_imgs
+        assert img_buffer_len >= 1, 'img_buffer_len must be >= 1'
+        self.img_buffer_len = img_buffer_len
+        self.img_buffer = None
+        self.img_mask_buffer = None
         if isinstance(norm_stats, str):
             with open(norm_stats, 'r', encoding='utf-8') as f:
                 self.norm_stats = json.load(f)
         else:
             self.norm_stats = norm_stats
 
+    def _reset_img_buffer(self) -> None:
+        self.img_buffer = None
+        self.img_mask_buffer = None
+
+    def _split_image_frames(self, pixel_values: torch.Tensor) -> List:
+        if pixel_values.ndim == 4:
+            if pixel_values.shape[0] == 3:
+                return [
+                    pixel_values[:, i:i + 1].detach().clone()
+                    for i in range(pixel_values.shape[1])
+                ]
+            return [pixel_values.detach().clone()]
+        if pixel_values.ndim == 3:
+            return [pixel_values.detach().clone()]
+        raise ValueError(f'Unsupported image shape: {pixel_values.shape}')
+
+    def _update_img_buffer(self, pixel_values: torch.Tensor,
+                           img_masks: List[bool]):
+        if self.img_buffer is None:
+            self.img_buffer = deque(maxlen=self.img_buffer_len)
+            self.img_mask_buffer = deque(maxlen=self.img_buffer_len)
+
+        frames = self._split_image_frames(pixel_values)
+        for frame in frames:
+            self.img_buffer.append(frame)
+            self.img_mask_buffer.append(list(img_masks))
+
+        buffered_frames = list(self.img_buffer)
+        buffered_masks = list(self.img_mask_buffer)
+        if len(buffered_frames) < self.img_buffer_len:
+            pad_len = self.img_buffer_len - len(buffered_frames)
+            buffered_frames = [buffered_frames[0]] * pad_len + buffered_frames
+            buffered_masks = [buffered_masks[0]] * pad_len + buffered_masks
+
+        if buffered_frames[0].ndim == 4 and buffered_frames[0].shape[0] == 3:
+            pixel_values = torch.cat(buffered_frames, dim=1)
+        else:
+            pixel_values = torch.cat(buffered_frames, dim=0)
+
+        img_masks = [
+            mask for frame_masks in buffered_masks for mask in frame_masks
+        ]
+        return pixel_values, img_masks
+
     def __call__(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Compose transforms chain (parquet-style) starting from raw inputs
         data: Dict[str, Any] = dict(inputs)
+        is_new_episode = bool(data.get('is_new_episode', False))
+        if is_new_episode:
+            self._reset_img_buffer()
         if self.norm_stats is not None:
             norm_stats = self.norm_stats[self.norm_stats_key]
         else:
@@ -316,6 +371,9 @@ class LiberoParquetEvalDataset:
             padding_imgs = padding_img.repeat(self.num_padding_imgs, 1, 1)
             pixel_values = torch.cat([pixel_values, padding_imgs], dim=0)
             img_masks.extend([False] * self.num_padding_imgs)
+        if self.img_buffer_len > 1:
+            pixel_values, img_masks = self._update_img_buffer(
+                pixel_values, img_masks)
         batch: Dict[str, Any] = dict(
             images=pixel_values.cuda().unsqueeze(0),
             img_masks=torch.tensor([img_masks]).cuda(),
@@ -333,7 +391,7 @@ class LiberoParquetEvalDataset:
         if data.get('image_grid_thw', None) is not None:
             batch['image_grid_thw'] = data['image_grid_thw'].unsqueeze(0)
 
-        batch['reset_history'] = bool(data.get('is_new_episode', False))
+        batch['reset_history'] = is_new_episode
 
         return batch, replay_img
 

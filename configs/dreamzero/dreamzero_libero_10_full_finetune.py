@@ -86,6 +86,7 @@ model = dict(
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
+        cfg_scale=5.0,
     ),
     name_mapping={
         'vla_head.model': 'action_head.model',
@@ -216,6 +217,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
+        img_buffer_len=5,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',

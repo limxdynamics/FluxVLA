@@ -58,7 +58,7 @@ class DreamZeroVLA(BaseVLA):
         freeze_llm_backbone: bool = True,
         freeze_vlm_backbone: bool = True,
         freeze_projector: bool = True,
-        use_cache: bool = False,
+        use_cache: bool = True,
         *args,
         **kwargs,
     ) -> None:
@@ -269,10 +269,10 @@ class DreamZeroVLA(BaseVLA):
             states=states,
             embodiment_ids=embodiment_ids,
             use_cache=use_cache,
+            reset_history=reset_history,
         )
         if use_cache:
             head_kwargs['observed_latent_frames'] = observed_latent_frames
-            head_kwargs['reset_history'] = reset_history
 
         return self.vla_head.predict_action(**head_kwargs)
 
