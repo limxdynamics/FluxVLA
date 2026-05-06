@@ -12,35 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ===================================================================
-# DreamZero – LIBERO-10 full fine-tune config
-#
-# Video setup:
-#   frame_window_size = 9 (current frame + 8 future frames for
-#   dynamics supervision).  The first frame is the conditioning
-#   observation; the remaining frames are prediction targets for
-#   the video dynamics loss.
-#   VAE temporal compression: latent_frames = 1 + (T-1)//4
-#   T=9 → 3 latent frames → 1 conditioning + 2 = 1 block of
-#   num_frame_per_block=2.
-#
-# Image layout : 2 views (agentview + wrist) @ 128x128 each
-#                tiled vertically → 256×128
-# VAE latent   : 32×16 (spatial /8)
-# After patch  : 16×8  (patch 2×2)
-# frame_seqlen : 16 * 8 = 128
-#
-# Pretrained weights are loaded from pretrained_name_or_path
-# (DreamZero-AgiBot safetensors) with name_mapping to remap
-# checkpoint keys to the fluxvla module structure.
-# Sub-model pretrained_name_or_path=None because weights come
-# from the unified checkpoint, not per-component .pth files.
-# ===================================================================
-
 _ckpt_root = './checkpoints'
 _tokenizer = _ckpt_root + '/Wan2.1-I2V-14B-480P/google/umt5-xxl'
 
-_frame_window_size = 33
+_frame_window_size = 9
 
 model = dict(
     type='DreamZeroVLA',
@@ -48,7 +23,7 @@ model = dict(
     frame_window_size=_frame_window_size,
     pretrained_name_or_path=  # noqa: E251
     _ckpt_root + '/DreamZero-AgiBot',
-    use_cache=True,
+    use_cache=False,
     vlm_backbone=dict(
         type='WanBackbone',
         text_encoder_path=None,
@@ -58,18 +33,15 @@ model = dict(
     ),
     vla_head=dict(
         type='DreamZeroHead',
-        # ----- action / state dims -----
         action_dim=7,
         max_action_dim=32,
         action_horizon=10,
         max_state_dim=64,
-        # ----- video / latent -----
         num_frames=_frame_window_size,
         num_frame_per_block=2,
         num_action_per_block=10,
         num_state_per_block=1,
         frame_seqlen=128,
-        # ----- DiT architecture (Wan 14B) -----
         hidden_size=1024,
         input_embedding_dim=1536,
         dit_dim=5120,
@@ -80,14 +52,14 @@ model = dict(
         dit_in_dim=36,
         dit_out_dim=16,
         max_num_embodiments=32,
-        # ----- noise schedule -----
         noise_beta_alpha=1.5,
         noise_beta_beta=1.0,
         noise_s=0.999,
         num_inference_steps=16,
-        # ----- pretrained paths -----
         use_gradient_checkpointing=True,
-        cfg_scale=2.0),
+        cfg_scale=1.0,
+        max_chunk_size=-1,
+    ),
     name_mapping={
         'vla_head.model': 'action_head.model',
         'vlm_backbone.text_encoder': 'action_head.text_encoder',
@@ -156,7 +128,7 @@ train_dataloader = dict(
                     frame_window_size=_frame_window_size,
                 ),
             ],
-            action_window_size=40,
+            action_window_size=10,
             action_key='action',
             use_delta=False,
             statistic_name='libero_10_no_noops',
@@ -217,7 +189,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
-        img_buffer_len=5,
+        img_buffer_len=1,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',
@@ -246,15 +218,6 @@ eval = dict(
                     model_path=_tokenizer,
                 ),
                 max_len=512,
-                negative_prompt=(
-                    'Vibrant colors, overexposed, static, blurry details, '
-                    'text, subtitles, style, artwork, painting, image, still, '
-                    'grayscale, dull, worst quality, low quality, JPEG '
-                    'artifacts, ugly, mutilated, extra fingers, bad hands, '
-                    'bad face, deformed, disfigured, mutated limbs, fused '
-                    'fingers, stagnant image, cluttered background, three '
-                    'legs, many people in the background, walking backwards.'
-                ),  # noqa: E501
                 use_conversation=False,
             ),
             dict(
