@@ -194,12 +194,14 @@ class WanBackbone(nn.Module):
             y = torch.concat([msk, y], dim=1)
         return clip_context, y, new_image
 
-    def forward(self, video, input_ids, attention_mask):
+    def forward(self, video, input_ids, attention_mask, condition_image=None):
 
         self.set_frozen_modules_to_eval_mode()
 
         _, _, num_frames, height, width = video.shape
-        first_frame = video[:, :, :1].transpose(1, 2)
+        if condition_image is None:
+            condition_image = video[:, :, :1]
+        condition_image = condition_image.transpose(1, 2)
         if input_ids.ndim == 3:
             assert input_ids.shape == attention_mask.shape, (
                 'input_ids and attention_mask must have the same shape')
@@ -212,7 +214,7 @@ class WanBackbone(nn.Module):
             prompt_embs = self.encode_prompt(input_ids, attention_mask)
         latents = self.encode_video(video)
         clip_feas, image_cond, new_image = self.encode_image(
-            first_frame, num_frames, height, width)
+            condition_image, num_frames, height, width)
         return dict(
             prompt_embs=prompt_embs,
             latents=latents,

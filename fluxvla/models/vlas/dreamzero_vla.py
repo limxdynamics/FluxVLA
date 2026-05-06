@@ -210,9 +210,8 @@ class DreamZeroVLA(BaseVLA):
         device = images.device
         # images: [B, C, T, H, W] (prepared by PrepareVideo)
         video = images
-        use_cache = kwargs.get('use_cache', self.use_cache)
 
-        if use_cache:
+        if self.use_cache:
             observed_video_frames = video.shape[2]
             observed_latent_frames = 1 + max(0, observed_video_frames - 1) // 4
             if observed_video_frames <= 1:
@@ -228,6 +227,9 @@ class DreamZeroVLA(BaseVLA):
         # latent frames (and thus image/action/state blocks) matches
         # what the model was trained with.
         b, c, t_obs, h, w = video.shape
+        condition_image = None
+        if t_obs > 1:
+            condition_image = video[:, :, t_obs - 1:t_obs]
         t_train = self.frame_window_size
         if t_obs < t_train:
             pad = video.new_zeros(b, c, t_train - t_obs, h, w)
@@ -238,6 +240,7 @@ class DreamZeroVLA(BaseVLA):
             video=video,
             input_ids=lang_tokens.long().to(device),
             attention_mask=lang_masks.long().to(device),
+            condition_image=condition_image,
         )
         prompt_embs = vlm_outputs['prompt_embs']
         latents = vlm_outputs['latents']
@@ -268,10 +271,9 @@ class DreamZeroVLA(BaseVLA):
             ys=image_cond,
             states=states,
             embodiment_ids=embodiment_ids,
-            use_cache=use_cache,
             reset_history=reset_history,
         )
-        if use_cache:
+        if self.use_cache:
             head_kwargs['observed_latent_frames'] = observed_latent_frames
 
         return self.vla_head.predict_action(**head_kwargs)

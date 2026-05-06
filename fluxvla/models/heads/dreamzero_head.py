@@ -402,6 +402,17 @@ class DreamZeroHead(nn.Module):
         self.inference_prompt_embs = None
         self.current_start_frame = 0
 
+    def _as_prompt_emb_list(self, prompt_embs):
+        if isinstance(prompt_embs, torch.Tensor):
+            return [prompt_embs]
+        prompt_embs = list(prompt_embs)
+        if len(prompt_embs) == 0:
+            raise ValueError('prompt_embs must contain at least one tensor.')
+        if len(prompt_embs) > 2:
+            raise ValueError(
+                'DreamZeroHead supports at most cond and neg prompt_embs.')
+        return prompt_embs
+
     def _should_reset_inference_state(
         self,
         prompt_embs: torch.Tensor,
@@ -414,13 +425,20 @@ class DreamZeroHead(nn.Module):
                 or self.inference_clip_feas is None
                 or self.inference_ys is None):
             return True
-        if self.inference_prompt_embs[0].shape != prompt_embs[0].shape:
+        prompt_embs = self._as_prompt_emb_list(prompt_embs)
+        cached_prompt_embs = self._as_prompt_emb_list(
+            self.inference_prompt_embs)
+        if len(cached_prompt_embs) != len(prompt_embs):
             return True
+        for cached_prompt_emb, prompt_emb in zip(cached_prompt_embs,
+                                                 prompt_embs):
+            if cached_prompt_emb.shape != prompt_emb.shape:
+                return True
+            if not torch.equal(cached_prompt_emb, prompt_emb):
+                return True
         if self.inference_clip_feas.shape != clip_feas.shape:
             return True
         if self.inference_ys.shape != ys.shape:
-            return True
-        if not torch.equal(self.inference_prompt_embs[0], prompt_embs[0]):
             return True
         if not torch.equal(self.inference_clip_feas, clip_feas):
             return True
@@ -431,7 +449,7 @@ class DreamZeroHead(nn.Module):
             return True
         return False
 
-    def _append_reference_frames(
+    def _single_flowmatching_step(
         self,
         prompt_embs: torch.Tensor,
         reference_latents: torch.Tensor,
@@ -463,6 +481,7 @@ class DreamZeroHead(nn.Module):
             )
 
         predictions = list()
+        prompt_embs = self._as_prompt_emb_list(prompt_embs)
         for index, prompt_emb in enumerate(prompt_embs):
             obs_noise_pred, action_noise_pred, updated_kv_caches = self.model(
                 reference_latents,
@@ -557,6 +576,8 @@ class DreamZeroHead(nn.Module):
         y_future = ys[:, :, y_future_start:y_future_end]
         if y_future.shape[2] < denoise_frames:
             y_future = ys[:, :, -denoise_frames:]
+        prompt_embs = self._as_prompt_emb_list(prompt_embs)
+        use_cfg = self.cfg_scale != 1.0 and len(prompt_embs) > 1
 
         for step_index in range(len(sample_scheduler.timesteps)):
             video_timestep = sample_scheduler.timesteps[step_index]
@@ -565,7 +586,7 @@ class DreamZeroHead(nn.Module):
             t_video = video_timestep.expand(b, denoise_frames)
             t_action = action_timestep.expand(b, self.action_horizon)
 
-            predictions = self._append_reference_frames(
+            predictions = self._single_flowmatching_step(
                 prompt_embs=prompt_embs,
                 reference_latents=noisy_latents,
                 clip_feas=clip_feas,
@@ -583,7 +604,7 @@ class DreamZeroHead(nn.Module):
             flow_pred_cond, flow_pred_cond_action = predictions[0]
             flow_pred = flow_pred_cond
 
-            if self.cfg_scale != 1.0:
+            if use_cfg:
                 flow_pred_uncond, _ = predictions[1]
                 flow_pred = flow_pred_uncond + self.cfg_scale * (
                     flow_pred_cond - flow_pred_uncond)
@@ -631,7 +652,7 @@ class DreamZeroHead(nn.Module):
                 device=states.device,
             ))
         observed_latents = latents[:, :, :observed_latent_frames]
-        self._append_reference_frames(
+        self._single_flowmatching_step(
             prompt_embs=prompt_embs,
             reference_latents=observed_latents[:, :, :1],
             clip_feas=clip_feas,
@@ -699,8 +720,7 @@ class DreamZeroHead(nn.Module):
         if num_inference_steps is None:
             num_inference_steps = self.num_inference_steps
 
-        use_cache = kwargs.get('use_cache', self.use_cache)
-        if not use_cache:
+        if not self.use_cache:
             self.reset_inference_state()
             return self._predict_action_stateless(
                 prompt_embs=prompt_embs,
@@ -728,6 +748,7 @@ class DreamZeroHead(nn.Module):
                 or self.current_start_frame == 0)
             if should_reset:
                 self.reset_inference_state()
+                prompt_embs = self._as_prompt_emb_list(prompt_embs)
                 cache_pair = self._create_kv_caches(
                     batch_size=states.shape[0],
                     dtype=latents.dtype,
@@ -751,7 +772,7 @@ class DreamZeroHead(nn.Module):
             assert self.inference_crossattn_cache_neg is not None
 
             if self.current_start_frame == 0:
-                self._append_reference_frames(
+                self._single_flowmatching_step(
                     prompt_embs=prompt_embs,
                     reference_latents=observed_latents[:, :, :1],
                     clip_feas=self.inference_clip_feas,
@@ -767,13 +788,28 @@ class DreamZeroHead(nn.Module):
                 )
                 self.current_start_frame = 1
 
-            if self.current_start_frame > 1:
-                self._append_reference_frames(
+            if (self.current_start_frame != 1 and observed_latent_frames > 1):
+                reference_latents = observed_latents[:, :, -self.
+                                                     num_frame_per_block:]
+                reference_start_frame = max(
+                    1,
+                    self.current_start_frame - reference_latents.shape[2],
+                )
+                y_ref_end = min(
+                    self.current_start_frame,
+                    self.inference_ys.shape[2],
+                )
+                y_ref_start = max(0, y_ref_end - reference_latents.shape[2])
+                y_reference = self.inference_ys[:, :, y_ref_start:y_ref_end]
+                if y_reference.shape[2] == 0:
+                    y_reference = self.inference_ys[:, :, :reference_latents.
+                                                    shape[2]]
+                self._single_flowmatching_step(
                     prompt_embs=prompt_embs,
-                    reference_latents=observed_latents,
+                    reference_latents=reference_latents,
                     clip_feas=self.inference_clip_feas,
-                    ys=ys,
-                    start_frame=self.current_start_frame,
+                    ys=y_reference,
+                    start_frame=reference_start_frame,
                     kv_caches=[
                         self.inference_kv_cache, self.inference_kv_cache_neg
                     ],

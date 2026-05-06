@@ -48,6 +48,7 @@ model = dict(
     frame_window_size=_frame_window_size,
     pretrained_name_or_path=  # noqa: E251
     _ckpt_root + '/DreamZero-AgiBot',
+    use_cache=True,
     vlm_backbone=dict(
         type='WanBackbone',
         text_encoder_path=None,

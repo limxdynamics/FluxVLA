@@ -284,6 +284,7 @@ class LiberoParquetEvalDataset:
         self.img_buffer_len = img_buffer_len
         self.img_buffer = None
         self.img_mask_buffer = None
+        self.img_buffer_updates = 0
         if isinstance(norm_stats, str):
             with open(norm_stats, 'r', encoding='utf-8') as f:
                 self.norm_stats = json.load(f)
@@ -293,6 +294,7 @@ class LiberoParquetEvalDataset:
     def _reset_img_buffer(self) -> None:
         self.img_buffer = None
         self.img_mask_buffer = None
+        self.img_buffer_updates = 0
 
     def _split_image_frames(self, pixel_values: torch.Tensor) -> List:
         if pixel_values.ndim == 4:
@@ -319,7 +321,13 @@ class LiberoParquetEvalDataset:
 
         buffered_frames = list(self.img_buffer)
         buffered_masks = list(self.img_mask_buffer)
-        if len(buffered_frames) < self.img_buffer_len:
+        # Match DreamZero causal eval behavior: the first request in a new
+        # episode uses a single frame to warm the cache. Later requests pad
+        # short histories by repeating the earliest available frame.
+        is_first_buffer_update = self.img_buffer_updates == 0
+        self.img_buffer_updates += 1
+        if (not is_first_buffer_update
+                and len(buffered_frames) < self.img_buffer_len):
             pad_len = self.img_buffer_len - len(buffered_frames)
             buffered_frames = [buffered_frames[0]] * pad_len + buffered_frames
             buffered_masks = [buffered_masks[0]] * pad_len + buffered_masks
