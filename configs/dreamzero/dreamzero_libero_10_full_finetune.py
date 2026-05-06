@@ -88,7 +88,7 @@ model = dict(
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
         cfg_scale=5.0,
-    ),
+        max_chunk_size=2),
     name_mapping={
         'vla_head.model': 'action_head.model',
         'vlm_backbone.text_encoder': 'action_head.text_encoder',

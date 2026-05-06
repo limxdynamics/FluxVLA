@@ -113,6 +113,7 @@ class DreamZeroHead(nn.Module):
         pretrained_name_or_path: Optional[str] = None,
         use_gradient_checkpointing: bool = True,
         cfg_scale: float = 1.0,
+        max_chunk_size: int = -1,
         *args,
         **kwargs,
     ):
@@ -132,6 +133,7 @@ class DreamZeroHead(nn.Module):
         self.num_state_per_block = num_state_per_block
         self.use_cache = False
         self.cfg_scale = cfg_scale
+        self.max_chunk_size = max_chunk_size
 
         # ----- build DiT model -----
         self.model = CausalWanModel(
@@ -145,7 +147,7 @@ class DreamZeroHead(nn.Module):
             freq_dim=dit_freq_dim,
             num_heads=dit_num_heads,
             num_layers=dit_num_layers,
-            max_chunk_size=-1,
+            max_chunk_size=max_chunk_size,
             num_frame_per_block=num_frame_per_block,
             action_dim=max_action_dim,
             max_state_dim=max_state_dim,
@@ -443,9 +445,6 @@ class DreamZeroHead(nn.Module):
         if not torch.equal(self.inference_clip_feas, clip_feas):
             return True
         if not torch.equal(self.inference_ys, ys):
-            return True
-        if getattr(self.model, 'local_attn_size', -1) != -1 \
-                and self.current_start_frame >= self.model.local_attn_size:
             return True
         return False
 
