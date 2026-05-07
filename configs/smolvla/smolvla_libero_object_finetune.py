@@ -12,31 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-fixed_dataset_statistics = dict(
-    smolvla_libero=dict(
-        proprio=dict(
-            mean=[
-                -0.04651878401637077, 0.034409068524837494, 0.7645524740219116,
-                2.9722094535827637, -0.22046978771686554, -0.12557940185070038,
-                0.02691425383090973, -0.027190783992409706
-            ],
-            std=[
-                0.10494395345449448, 0.15176619589328766, 0.37851670384407043,
-                0.3442734479904175, 0.9069468379020691, 0.32539188861846924,
-                0.014175903983414173, 0.014058894477784634
-            ]),
-        action=dict(
-            mean=[
-                0.06278156489133835, 0.08684080839157104, -0.09037306159734726,
-                0.0005407430580817163, 0.005643379874527454,
-                -0.0052290987223386765, -0.0496407225728035
-            ],
-            std=[
-                0.33552372455596924, 0.3784469962120056, 0.4447286128997803,
-                0.03924354165792465, 0.06339296698570251, 0.07797027379274368,
-                0.9987671375274658
-            ])), )
-
 model = dict(
     type='SmolVLAFlowMatching',
     vlm_backbone=dict(
@@ -118,8 +93,7 @@ train_dataloader = dict(
             'action': ['action']
         },
         statistic_keys=['observation.state', 'timestamp', 'action'],
-        statistic_name='smolvla_libero',
-        dataset_statistics=fixed_dataset_statistics,
+        statistic_name='libero_object_no_noops',
         datasets=dict(
             type='ParquetDataset',
             data_root_path=  # noqa: E251
@@ -163,12 +137,12 @@ train_dataloader = dict(
             action_window_size=50,
             action_key='action',
             use_delta=False,
-            statistic_name='smolvla_libero',
+            statistic_name='libero_object_no_noops',
             window_start_idx=0)))
 
 runner = dict(
     type='FSDPTrainRunner',
-    max_epochs=24,
+    max_epochs=36,
     learning_rate=1e-4,
     weight_decay=0.0,
     max_grad_norm=1.0,
@@ -202,7 +176,6 @@ runner = dict(
 eval = dict(
     type='LiberoEvalRunner',
     task_suite_name='libero_object',
-    norm_stats_key='smolvla_libero',
     model_family='smolvla',
     eval_chunk_size=10,
     num_trials_per_task=50,
