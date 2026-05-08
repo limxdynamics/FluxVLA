@@ -21,14 +21,9 @@ from fluxvla.ops.triton.matmul_triton_ops import (matmul_small,
                                                   matmul_small_res_gate)
 from fluxvla.ops.triton.norm_triton_ops import (ada_layer_norm_kernel,
                                                 adarms_norm_kernel,
+                                                adarms_norm_kernel_rowwise,
                                                 rms_norm_kernel,
                                                 rmsnorm_factor_kernel)
-
-# yapf: enable
-
-# ---------------------------------------------------------------------------
-# Vision encoder ops (shared by eagle2 & pi05)
-# ---------------------------------------------------------------------------
 
 
 def conv2d_embed_res(images, patch_w, patch_b, pos_emb, out, grid_size,
@@ -109,11 +104,6 @@ def matmul_split_k_bias_res(x, weight, bias, res, out, buf, num_patches,
     matmul_bias_cuda(x, weight, bias, out=out, res=res)
 
 
-# ---------------------------------------------------------------------------
-# LayerNorm + matmul + bias (e.g. vision→encoder projection)
-# ---------------------------------------------------------------------------
-
-
 def layer_norm_matmul_bias(x,
                            norm_w,
                            norm_b,
@@ -147,11 +137,6 @@ def layer_norm_matmul_bias(x,
         BLOCK_SIZE_K=64)
 
 
-# ---------------------------------------------------------------------------
-# RMSNorm + matmul → QKV + RoPE
-# ---------------------------------------------------------------------------
-
-
 def rms_matmul_qkv_rope(x, weight_qkv, rope_weight, Q, K, V, x_norm,
                         hidden_dim, head_dim, num_kv_heads):
     seq_len = x.shape[0]
@@ -162,12 +147,6 @@ def rms_matmul_qkv_rope(x, weight_qkv, rope_weight, Q, K, V, x_norm,
                                                  rope_weight, Q, K, V, seq_len,
                                                  hidden_dim, head_dim,
                                                  num_kv_heads)
-
-
-# ---------------------------------------------------------------------------
-# Matmul + residual
-# ---------------------------------------------------------------------------
-
 
 def matmul_res(x, weight, out, in_features, out_features):
     seq_len = x.shape[0]
@@ -188,22 +167,12 @@ def matmul_res(x, weight, out, in_features, out_features):
                          BLOCK_SIZE_K=64)
 
 
-# ---------------------------------------------------------------------------
-# RMSNorm + gated MLP (gate_proj * silu ⊙ up_proj)
-# ---------------------------------------------------------------------------
-
-
 def rms_matmul_gate(x, gate_w, up_w, out, x_norm, hidden_dim,
                     intermediate_dim):
     seq_len = x.shape[0]
     rms_norm_kernel[(seq_len, )](x, x_norm, seq_len, hidden_dim)
     matmul_small_gate[((seq_len + 127) // 128, (intermediate_dim + 63) // 64)](
         x_norm, gate_w, up_w, out, seq_len, hidden_dim, intermediate_dim)
-
-
-# ---------------------------------------------------------------------------
-# Attention: softmax(Q·Kᵀ/√d)·V  — the V matmul part
-# ---------------------------------------------------------------------------
 
 
 def matmul_attn_v(x, V, out, head_dim):
@@ -221,11 +190,6 @@ def matmul_attn_v(x, V, out, head_dim):
         BLOCK_SIZE_K=64)
 
 
-# ---------------------------------------------------------------------------
-# Matmul + bias + SiLU
-# ---------------------------------------------------------------------------
-
-
 def matmul_bias_silu(x, weight, bias, out, in_features, out_features):
     seq_len = x.shape[0]
     matmul_small_bias_silu[((seq_len + 31) // 32) * (out_features // 32), ](
@@ -239,11 +203,6 @@ def matmul_bias_silu(x, weight, bias, out, in_features, out_features):
         BLOCK_SIZE_N=32,
         BLOCK_SIZE_M=32,
         BLOCK_SIZE_K=64)
-
-
-# ---------------------------------------------------------------------------
-# Matmul + bias (generic small)
-# ---------------------------------------------------------------------------
 
 
 def matmul_bias_small(x,
@@ -270,11 +229,6 @@ def matmul_bias_small(x,
                           BLOCK_SIZE_K=BLOCK_SIZE_K)
 
 
-# ---------------------------------------------------------------------------
-# AdaRMSNorm + style projection
-# ---------------------------------------------------------------------------
-
-
 def adarms_norm_style_proj(x, time_emb, mod_w, mod_b, x_normed, gate, style,
                            hidden_dim, style_dim):
     seq_len = x.shape[0]
@@ -299,9 +253,22 @@ def adarms_norm_style_proj(x, time_emb, mod_w, mod_b, x_normed, gate, style,
         BLOCK_SIZE=512)
 
 
-# ---------------------------------------------------------------------------
-# Matmul → QKV + RoPE (no norm)
-# ---------------------------------------------------------------------------
+
+def adarms_norm_mod_proj_rowwise(
+    x: torch.Tensor, adarms_mod: torch.Tensor, x_normed: torch.Tensor, gate: torch.Tensor
+) -> None:
+    seq_len = x.shape[0]
+    adarms_norm_kernel_rowwise[(seq_len,)](
+        x,
+        adarms_mod,
+        x_normed,
+        gate,
+        seq_len=seq_len,
+        features=1024,
+        adarms_mod_stride=3072,
+        BLOCK_SIZE=512,
+    )
+
 
 
 def matmul_qkv_rope(x_normed, weight_qkv, rope_weight, Q, K, V, hidden_dim,
@@ -309,12 +276,6 @@ def matmul_qkv_rope(x_normed, weight_qkv, rope_weight, Q, K, V, hidden_dim,
     seq_len = x_normed.shape[0]
     matmul_rope_qkv[(128, )](x_normed, seq_len, hidden_dim, head_dim,
                              num_kv_heads, weight_qkv, rope_weight, Q, K, V)
-
-
-# ---------------------------------------------------------------------------
-# RMSNorm-factor + scaled matmul → QKV + RoPE
-# ---------------------------------------------------------------------------
-
 
 def rms_matmul_scaled_qkv_rope(x,
                                weight_qkv,
@@ -333,12 +294,6 @@ def rms_matmul_scaled_qkv_rope(x,
     scaled_matmul_rope_qkv[(128, )](x, x_norm_factor, seq_len, hidden_dim,
                                     head_dim, num_kv_heads, weight_qkv,
                                     rope_weight, Q, K, V)
-
-
-# ---------------------------------------------------------------------------
-# Matmul + residual + gate
-# ---------------------------------------------------------------------------
-
 
 def matmul_res_gate(x,
                     weight,
@@ -365,10 +320,6 @@ def matmul_res_gate(x,
             BLOCK_SIZE_K=BLOCK_SIZE_K)
 
 
-# ---------------------------------------------------------------------------
-# Gated MLP (gate_proj * silu ⊙ up_proj, no norm)
-# ---------------------------------------------------------------------------
-
 
 def matmul_gate(x, gate_w, up_w, out, in_features, intermediate_dim):
     seq_len = x.shape[0]
@@ -376,11 +327,6 @@ def matmul_gate(x, gate_w, up_w, out, in_features, intermediate_dim):
                        (intermediate_dim + 63) // 64)](x, gate_w, up_w, out,
                                                        seq_len, in_features,
                                                        intermediate_dim)
-
-
-# ---------------------------------------------------------------------------
-# MHA + FFN blocks (FlowMatching inference)
-# ---------------------------------------------------------------------------
 
 
 def mha_self(x, qkv_w, qkv_b, out_w, out_b, num_heads, head_dim):

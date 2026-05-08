@@ -393,6 +393,7 @@ class PI0FlowMatching(BaseVLA):
                 attention_masks,
                 scaling,
             )
+            
             head_dim = self.llm_backbone.layers[layer_idx].self_attn.head_dim
             att_output = att_output.reshape(batch_size, -1, 1 * 8 * head_dim)
 

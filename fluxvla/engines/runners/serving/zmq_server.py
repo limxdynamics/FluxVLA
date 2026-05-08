@@ -187,6 +187,7 @@ def create_server(
     dataset=None,
     denormalize_action=None,
     task_suite_name: str = '',
+    optimizer=None,
     host: str = '*',
     port: int = 5555,
     device: str = 'cuda:0',
@@ -199,6 +200,7 @@ def create_server(
         dataset: Optional dataset transform pipeline for preprocessing.
         denormalize_action: Optional denormalization transform.
         task_suite_name: Task suite name for denormalization lookup.
+        optimizer: Optional action optimizer (e.g., TimeParameterizationMPC).
         host: Bind address.
         port: Bind port.
         device: CUDA device.
@@ -244,6 +246,12 @@ def create_server(
             d = denormalize_action(
                 dict(action=actions_np[0], task_suite_name=task_suite_name))
             actions = torch.from_numpy(d[None].astype(np.float32))
+
+        if optimizer is not None:
+            actions_np = actions.cpu().numpy()
+            actions_list = actions_np.tolist()
+            optimized_actions = optimizer.optimize(actions_list)
+            actions = torch.from_numpy(np.array(optimized_actions, dtype=np.float32))
 
         action_bytes = serialize_actions(actions)
 

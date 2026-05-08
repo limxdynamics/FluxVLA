@@ -393,3 +393,54 @@ def adarms_norm_kernel(x_ptr, style_ptr, normed_x_ptr, gate_ptr,
                 gate_ptr + row_x_offset + cols,
                 s_gate.to(tl.bfloat16),
                 mask=mask)
+
+
+
+@triton.jit
+def adarms_norm_kernel_rowwise(
+    x_ptr,
+    adarms_mod_ptr,
+    normed_x_ptr,
+    gate_ptr,
+    seq_len: tl.constexpr,
+    features: tl.constexpr,
+    adarms_mod_stride: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+):
+    '''
+    # 输入：x (seq_len, features)
+    # 输出：normed_x, gate
+
+    # 对于每一行 i：
+    RMS_i = sqrt(mean(x_i²) + 1e-6)
+    x_norm_i = x_i / RMS_i
+
+    # 应用 modulation（每行有独立的 scale, shift, gate）
+    normed_x_i = x_norm_i * (1 + scale_i) + shift_i
+    gate_i = gate_i  # 直接输出，用于后续的门控机制
+    '''
+
+    pid = tl.program_id(0)
+    psize = tl.num_programs(0)
+    for i in range(pid, seq_len, psize):
+        row_x_offset = i * features
+        sum_sq = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
+        for j in range(0, features, BLOCK_SIZE):
+            cols = j + tl.arange(0, BLOCK_SIZE)
+            mask = cols < features
+            x_val = tl.load(x_ptr + row_x_offset + cols, mask=mask, other=0.0).to(tl.float32)
+            sum_sq += x_val * x_val
+
+        rms_factor = tl.rsqrt(tl.sum(sum_sq) / features + 1e-6)
+        row_adarms_mod_offset = i * adarms_mod_stride
+        for j in range(0, features, BLOCK_SIZE):
+            cols = j + tl.arange(0, BLOCK_SIZE)
+            mask = cols < features
+            x_val = tl.load(x_ptr + row_x_offset + cols, mask=mask, other=0.0).to(tl.float32)
+            x_norm = x_val * rms_factor
+            s_scale = tl.load(adarms_mod_ptr + row_adarms_mod_offset + cols, mask=mask, other=0.0).to(tl.float32)
+            s_shift = tl.load(adarms_mod_ptr + row_adarms_mod_offset + features + cols, mask=mask, other=0.0).to(tl.float32)
+            s_gate = tl.load(adarms_mod_ptr + row_adarms_mod_offset + 2 * features + cols, mask=mask, other=0.0).to(tl.float32)
+            output_val = x_norm * (1.0 + s_scale) + s_shift
+            tl.store(normed_x_ptr + row_x_offset + cols, output_val.to(tl.bfloat16), mask=mask)
+            tl.store(gate_ptr + row_x_offset + cols, s_gate.to(tl.bfloat16), mask=mask)
