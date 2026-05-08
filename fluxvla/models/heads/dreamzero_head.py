@@ -15,6 +15,7 @@
 import logging
 import os
 from functools import partial
+from importlib import import_module
 from typing import Callable, Dict, Optional, TypeAlias
 
 import torch
@@ -33,11 +34,16 @@ logger = logging.getLogger(__name__)
 def _import_dreamzero_modules():
     """Lazily import DreamZero modules so the rest of fluxvla still works
     even when optional dependencies (flash-attn, etc.) are missing."""
-    from fluxvla.models.third_party_models.dreamzero.modules.flow_match_scheduler import \
-        FlowMatchScheduler  # noqa: E501
-    from fluxvla.models.third_party_models.dreamzero.modules.wan_video_dit_action_casual_chunk import \
-        CausalWanModel  # noqa: E501
-    return CausalWanModel, FlowMatchScheduler
+    flow_match_module = import_module(
+        'fluxvla.models.third_party_models.dreamzero.modules.'
+        'flow_match_scheduler')
+    wan_chunk_module = import_module(
+        'fluxvla.models.third_party_models.dreamzero.modules.'
+        'wan_video_dit_action_casual_chunk')
+    return (
+        wan_chunk_module.CausalWanModel,
+        flow_match_module.FlowMatchScheduler,
+    )
 
 
 def _ensure_file(path, hf_filename):
@@ -109,6 +115,11 @@ class DreamZeroHead(nn.Module):
         noise_beta_alpha: float = 1.5,
         noise_beta_beta: float = 1.0,
         noise_s: float = 0.999,
+        decouple_video_action_noise: bool = False,
+        video_noise_beta_alpha: float = 3.0,
+        video_noise_beta_beta: float = 1.0,
+        decouple_inference_noise: bool = False,
+        video_inference_final_noise: float = 0.8,
         num_inference_steps: int = 4,
         pretrained_name_or_path: Optional[str] = None,
         use_gradient_checkpointing: bool = True,
@@ -161,6 +172,11 @@ class DreamZeroHead(nn.Module):
 
         # ----- noise distributions -----
         self.beta_dist = Beta(noise_beta_alpha, noise_beta_beta)
+        self.decouple_video_action_noise = decouple_video_action_noise
+        self.video_beta_dist = Beta(video_noise_beta_alpha,
+                                    video_noise_beta_beta)
+        self.decouple_inference_noise = decouple_inference_noise
+        self.video_inference_final_noise = video_inference_final_noise
 
         # ----- load pretrained weights -----
         if pretrained_name_or_path is not None:
@@ -246,8 +262,21 @@ class DreamZeroHead(nn.Module):
         noise = noise.transpose(1, 2)
         latents = latents.transpose(1, 2)
 
-        timestep_id = torch.randint(0, self.scheduler.num_train_timesteps,
-                                    (noise.shape[0], noise.shape[1]))
+        # Video timestep sampling
+        # Decoupled mode: video uses Beta distribution biased towards
+        # HIGH noise.
+        # Standard mode: uniform sampling over full range
+        if self.decouple_video_action_noise:
+            video_noise_ratio = self.video_beta_dist.sample(
+                (noise.shape[0], noise.shape[1])).to(noise.device)
+            timestep_id = ((1.0 - video_noise_ratio) *
+                           self.scheduler.num_train_timesteps).long()
+            timestep_id = torch.clamp(timestep_id, 0,
+                                      self.scheduler.num_train_timesteps - 1)
+            timestep_id = timestep_id.cpu()
+        else:
+            timestep_id = torch.randint(0, self.scheduler.num_train_timesteps,
+                                        (noise.shape[0], noise.shape[1]))
 
         # Align block timesteps
         timestep_id_block = timestep_id[:,
@@ -273,19 +302,27 @@ class DreamZeroHead(nn.Module):
             latents, noise, timestep).transpose(1, 2)
 
         # --- Action noise ---
+        # Decoupled mode: action uses independent uniform sampling over
+        # full range.
+        # Standard mode: action timestep is coupled with video timestep.
         noise_action = torch.randn_like(actions)
-        timestep_action_id = timestep_id_block.repeat(
-            1,
-            1,
-            actions.shape[1] // (noise.shape[1] - 1) if
-            (noise.shape[1] - 1) > 0 else 1,
-        )
-        timestep_action_id = timestep_action_id.reshape(
-            timestep_action_id.shape[0], -1)
-        if timestep_action_id.shape[1] != actions.shape[1]:
+        if self.decouple_video_action_noise:
             timestep_action_id = torch.randint(
                 0, self.scheduler.num_train_timesteps,
                 (actions.shape[0], actions.shape[1]))
+        else:
+            timestep_action_id = timestep_id_block.repeat(
+                1,
+                1,
+                actions.shape[1] // (noise.shape[1] - 1) if
+                (noise.shape[1] - 1) > 0 else 1,
+            )
+            timestep_action_id = timestep_action_id.reshape(
+                timestep_action_id.shape[0], -1)
+            if timestep_action_id.shape[1] != actions.shape[1]:
+                timestep_action_id = torch.randint(
+                    0, self.scheduler.num_train_timesteps,
+                    (actions.shape[0], actions.shape[1]))
 
         timestep_action = self.scheduler.timesteps[timestep_action_id].to(
             device)
@@ -521,8 +558,11 @@ class DreamZeroHead(nn.Module):
         latents_shape: tuple[int, int, int, int],
         num_inference_steps: int,
     ) -> torch.Tensor:
-        from fluxvla.models.third_party_models.dreamzero.modules.flow_unipc_multistep_scheduler import \
-            FlowUniPCMultistepScheduler  # noqa: E501
+        scheduler_module = import_module(
+            'fluxvla.models.third_party_models.dreamzero.modules.'
+            'flow_unipc_multistep_scheduler')
+        FlowUniPCMultistepScheduler = (
+            scheduler_module.FlowUniPCMultistepScheduler)
 
         device = states.device
         b = states.shape[0]
@@ -569,6 +609,20 @@ class DreamZeroHead(nn.Module):
             device=device,
             shift=5.0,
         )
+
+        # Decoupled inference: video sigmas end at video_final_noise instead
+        # of 0. Video stays noisy while action fully denoises. This matches
+        # the training distribution from decouple_video_action_noise.
+        if self.decouple_inference_noise:
+            video_final_noise = self.video_inference_final_noise
+            sigma_max = sample_scheduler.sigmas[0].item()
+            sample_scheduler.sigmas = (
+                sample_scheduler.sigmas *
+                (sigma_max - video_final_noise) / sigma_max +
+                video_final_noise)
+            sample_scheduler.timesteps = (
+                sample_scheduler.sigmas[:-1] *
+                self.scheduler.num_train_timesteps).to(torch.int64)
 
         y_future_start = min(current_start_frame, ys.shape[2])
         y_future_end = min(current_start_frame + denoise_frames, ys.shape[2])

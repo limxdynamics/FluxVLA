@@ -84,6 +84,11 @@ model = dict(
         noise_beta_alpha=1.5,
         noise_beta_beta=1.0,
         noise_s=0.999,
+        decouple_video_action_noise=True,
+        video_noise_beta_alpha=3.0,
+        video_noise_beta_beta=1.0,
+        decouple_inference_noise=True,
+        video_inference_final_noise=0.8,
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
