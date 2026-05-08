@@ -38,7 +38,7 @@ authors:
 title: "FluxVLA: An Open-Source Vision-Language-Action Model Library for Embodied AI"
 version: 1.0.0
 doi: 10.5281/zenodo.20049506
-date-released: 2026-05-08
+date-released: 2026-04-08
 url: "https://github.com/FluxVLA/FluxVLA"
 keywords:
   - "Embodied AI"
