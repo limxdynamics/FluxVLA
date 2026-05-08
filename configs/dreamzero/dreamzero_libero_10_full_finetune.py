@@ -217,7 +217,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
-        img_buffer_len=5,
+        img_buffer_len=1,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',

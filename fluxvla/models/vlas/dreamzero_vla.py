@@ -212,10 +212,13 @@ class DreamZeroVLA(BaseVLA):
         video = images
 
         if self.use_cache:
+            # Calculate observed latent frames for cache management
             observed_video_frames = video.shape[2]
             observed_latent_frames = 1 + max(0, observed_video_frames - 1) // 4
-            if observed_video_frames <= 1:
-                reset_history = True
+
+            # Only reset cache when explicitly requested (e.g., new episode)
+            # Do NOT reset based on frame count alone, as single-frame input
+            # is the standard inference mode for DreamZero
             if reset_history:
                 self.vla_head.reset_inference_state()
 
