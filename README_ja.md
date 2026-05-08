@@ -589,25 +589,39 @@ pip install triton==3.2.0
 
 </details>
 
+## コントリビューション
+
+貢献の手順とガイドラインは [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) を参照してください。
+
+クイック約束（最小限）：
+
+- **先に相談**：新機能／新モデル／大きな変更は、まず GitHub Issue で目的・設計・範囲を共有してください。
+- **upstream からブランチ作成**：`upstream/main` を起点にし、`feat/`、`fix/`、`docs/` などの接頭辞を推奨します（詳細はガイド参照）。
+- **PR 前にチェック**：ローカルの pre-commit が通り、CI が green であることを確認してください。
+- **コミットメッセージ**：Conventional Commits を推奨します（例はガイド参照）。
+
 ## サポート
 
 本リポジトリを利用中に問題が発生した場合は、お気軽にご連絡ください。[mason@limxdynamics.com](mason@limxdynamics.com) と [wayne@limxdynamics.com](wayne@limxdynamics.com) まで直接お問い合わせいただくか、GitHub の issue からヘルプを依頼できます。
 
-## 🙏 謝辞
+## 🙏 引用・謝辞
 
-本プロジェクトは、以下のオープンソースプロジェクトおよびコミュニティの活動から恩恵を受けています。心より感謝いたします：
+FluxVLA を研究やプロジェクトで利用した場合は、以下の形式で引用してください：
 
-- [LeRobot](https://github.com/huggingface/lerobot)
-- [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)
-- [OpenVLA](https://github.com/openvla/openvla)
-- [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)
-- [LLaVA](https://github.com/haotian-liu/LLaVA)
-- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
-- [Qwen](https://github.com/QwenLM)
-- [Triton](https://github.com/triton-lang/triton)
-- [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)
-- [Training RTC](https://arxiv.org/pdf/2512.05964)
-- [Realtime-VLA](https://github.com/Dexmal/realtime-vla)
+```bibtex
+@software{Li_FluxVLA_Engine_A_2026,
+  author  = {Li, Yinhao and Mao, Weixin and Lan, Zihan and Rong, Jikun and Zhu, Minzhao and Mao, Yiming and Shen, Bowen and Huang, Xu},
+  title   = {{FluxVLA Engine: A One-Stop VLA Engineering Platform for Embodied Intelligence}},
+  year    = {2026},
+  month   = apr,
+  version = {1.0.0},
+  doi     = {10.5281/zenodo.20049506},
+  url     = {https://github.com/FluxVLA/FluxVLA},
+  license = {Apache-2.0},
+}
+```
+
+**謝辞:** 本プロジェクトは、以下のオープンソースプロジェクトおよびコミュニティの活動から恩恵を受けています。心より感謝いたします：[LeRobot](https://github.com/huggingface/lerobot)、[NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)、[OpenVLA](https://github.com/openvla/openvla)、[OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)、[LLaVA](https://github.com/haotian-liu/LLaVA)、[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)、[Qwen](https://github.com/QwenLM)、[Triton](https://github.com/triton-lang/triton)、[RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)、[Training RTC](https://arxiv.org/pdf/2512.05964)、[Realtime-VLA](https://github.com/Dexmal/realtime-vla)。もし謝辞に漏れがありましたら、issue または pull request でお知らせください。適切に謝辞へ反映します。
 
 ## ロードマップ
 

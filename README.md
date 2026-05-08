@@ -589,25 +589,39 @@ pip install triton==3.2.0
 
 </details>
 
+## Contributing
+
+Please see the contribution workflow and guidelines in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
+
+Quick conventions:
+
+- **Discuss first**: for new features/models or other large changes, please open a GitHub Issue to align on scope and design.
+- **Branch from upstream**: create your branch from `upstream/main` and use prefixes like `feat/`, `fix/`, `docs/`, etc. (details in the contributing guide).
+- **Run checks before PR**: make sure local pre-commit passes and CI is green.
+- **Commit messages**: we recommend Conventional Commits (examples in the contributing guide).
+
 ## Support
 
 If you encounter any issues while using this repository, feel free to contact us. You can reach us directly at [mason@limxdynamics.com](mason@limxdynamics.com) and [wayne@limxdynamics.com](wayne@limxdynamics.com), or open a GitHub issue for help.
 
-## 🙏 Acknowledgements
+## 🙏 Citation & Acknowledgements
 
-This project benefits from the following open-source projects and community efforts. Thanks to:
+If you use FluxVLA in your research or projects, please cite it as:
 
-- [LeRobot](https://github.com/huggingface/lerobot)
-- [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)
-- [OpenVLA](https://github.com/openvla/openvla)
-- [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)
-- [LLaVA](https://github.com/haotian-liu/LLaVA)
-- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
-- [Qwen](https://github.com/QwenLM)
-- [Triton](https://github.com/triton-lang/triton)
-- [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)
-- [Training RTC](https://arxiv.org/pdf/2512.05964)
-- [Realtime-VLA](https://github.com/Dexmal/realtime-vla)
+```bibtex
+@software{Li_FluxVLA_Engine_A_2026,
+  author  = {Li, Yinhao and Mao, Weixin and Lan, Zihan and Rong, Jikun and Zhu, Minzhao and Mao, Yiming and Shen, Bowen and Huang, Xu},
+  title   = {{FluxVLA Engine: A One-Stop VLA Engineering Platform for Embodied Intelligence}},
+  year    = {2026},
+  month   = apr,
+  version = {1.0.0},
+  doi     = {10.5281/zenodo.20049506},
+  url     = {https://github.com/FluxVLA/FluxVLA},
+  license = {Apache-2.0},
+}
+```
+
+**Acknowledgements:** This project benefits from the following open-source projects and community efforts. Thanks to: [LeRobot](https://github.com/huggingface/lerobot), [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main), [OpenVLA](https://github.com/openvla/openvla), [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi), [LLaVA](https://github.com/haotian-liu/LLaVA), [DeepSpeed](https://github.com/deepspeedai/DeepSpeed), [Qwen](https://github.com/QwenLM), [Triton](https://github.com/triton-lang/triton), [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix), [Training RTC](https://arxiv.org/pdf/2512.05964), and [Realtime-VLA](https://github.com/Dexmal/realtime-vla). If we missed your project or contribution, please open an issue or pull request so we can properly acknowledge it.
 
 ## Roadmap
 

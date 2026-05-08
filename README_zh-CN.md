@@ -589,25 +589,39 @@ pip install triton==3.2.0
 
 </details>
 
+## 贡献指南
+
+贡献流程与规范请见：[贡献指南](docs/CONTRIBUTING.md#简体中文)。
+
+快速约定：
+
+- **先讨论再动手**：新功能/新模型/较大改动，优先在 GitHub Issue 里沟通设计与范围。
+- **从上游主分支开新分支**：基于 `upstream/main` 创建分支，命名建议 `feat/`、`fix/`、`docs/` 等前缀（详见贡献指南）。
+- **提交前跑检查**：确保本地 pre-commit 通过、CI 为绿后再提 PR。
+- **提交信息规范**：建议使用 Conventional Commits（示例见贡献指南）。
+
 ## 支持
 
 如果你在使用本仓库时遇到问题，欢迎联系我们。你可以直接联系 [mason@limxdynamics.com](mason@limxdynamics.com) 和 [wayne@limxdynamics.com](wayne@limxdynamics.com)，或在 Github 提交 issue 获取帮助。
 
-## 🙏 致谢
+## 🙏 引用与致谢
 
-本项目受益于以下开源项目与社区工作，在此一并致谢：
+如果你在学术研究或工程项目中使用了 FluxVLA，欢迎引用我们：
 
-- [LeRobot](https://github.com/huggingface/lerobot)
-- [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)
-- [OpenVLA](https://github.com/openvla/openvla)
-- [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)
-- [LLaVA](https://github.com/haotian-liu/LLaVA)
-- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
-- [Qwen](https://github.com/QwenLM)
-- [Triton](https://github.com/triton-lang/triton)
-- [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)
-- [Training RTC](https://arxiv.org/pdf/2512.05964)
-- [Realtime-VLA](https://github.com/Dexmal/realtime-vla)
+```bibtex
+@software{FluxVLA2026,
+  author  = {Li, Yinhao and Mao, Weixin and Lan, Zihan and Rong, Jikun and Zhu, Minzhao and Mao, Yiming and Shen, Bowen and Huang, Xu},
+  title   = {{FluxVLA Engine: A One-Stop VLA Engineering Platform for Embodied Intelligence}},
+  year    = {2026},
+  month   = apr,
+  version = {1.0.0},
+  doi     = {10.5281/zenodo.20049506},
+  url     = {https://github.com/FluxVLA/FluxVLA},
+  license = {Apache-2.0},
+}
+```
+
+**致谢**：本项目受益于以下开源项目与社区工作，在此一并致谢：[LeRobot](https://github.com/huggingface/lerobot)、[NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)、[OpenVLA](https://github.com/openvla/openvla)、[OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)、[LLaVA](https://github.com/haotian-liu/LLaVA)、[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)、[Qwen](https://github.com/QwenLM)、[Triton](https://github.com/triton-lang/triton)、[RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)、[Training RTC](https://arxiv.org/pdf/2512.05964)、[Realtime-VLA](https://github.com/Dexmal/realtime-vla)。如果我们不慎遗漏了您的项目或贡献，请提交 issue 或 pull request，以便我们能够给予您应有的致谢。
 
 ## 路线图
 
