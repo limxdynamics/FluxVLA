@@ -31,6 +31,7 @@ PI0_CKPT_PATH = './checkpoints/pi0_base/model.safetensors'
 PI05_CKPT_PATH = './checkpoints/pi05_base/model.safetensors'
 GR00T_CKPT_PATH = './checkpoints/GR00T-N1.5-3B'
 DREAMZERO_CKPT_PATH = './checkpoints/DreamZero-AgiBot'
+SMOLVLA_CKPT_PATH = './checkpoints/smolvla_base/model.safetensors'
 OPENVLA_DATA_DIR = 'test/data/models/vlas/openvla'
 LLAVAVLA_DATA_DIR = 'test/data/models/vlas/llavavla'
 GR00T_DATA_DIR = 'test/data/models/vlas/gr00t'
@@ -1075,3 +1076,374 @@ class TestDreamZero(unittest.TestCase):
                 pred_actions.float().cpu().numpy(),
                 pred_actions_ref,
                 atol=1e-2))
+
+
+@pytest.mark.skipif(
+    not os.path.exists(SMOLVLA_CKPT_PATH),
+    reason=f'Checkpoint not found: {SMOLVLA_CKPT_PATH}')
+class TestSmolVLAFlowMatching(unittest.TestCase):
+
+    def setUp(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        self.cfg = dict(
+            type='SmolVLAFlowMatching',
+            vlm_backbone=dict(
+                type='SmolVLMBackbone',
+                vision_config=dict(
+                    hidden_size=768,
+                    num_hidden_layers=12,
+                    num_attention_heads=12,
+                    image_size=512,
+                    patch_size=16,
+                    intermediate_size=3072,
+                    hidden_act='gelu_pytorch_tanh',
+                    layer_norm_eps=1e-6,
+                ),
+                text_config=dict(
+                    hidden_size=960,
+                    num_hidden_layers=32,
+                    num_attention_heads=15,
+                    num_key_value_heads=5,
+                    head_dim=64,
+                    intermediate_size=2560,
+                    vocab_size=49280,
+                    rms_norm_eps=1e-5,
+                    hidden_act='silu',
+                    max_position_embeddings=8192,
+                ),
+                scale_factor=4,
+                num_vlm_layers=16,
+            ),
+            llm_expert=dict(
+                type='SmolVLMExpert',
+                hidden_size=720,
+                num_hidden_layers=16,
+                num_attention_heads=15,
+                num_key_value_heads=5,
+                head_dim=64,
+                intermediate_size=-1,
+                vocab_size=49280,
+                attention_bias=False,
+                rms_norm_eps=1e-5,
+                hidden_act='silu',
+                max_position_embeddings=8192,
+                attention_mode='cross_attn',
+                vlm_kv_dim=320,
+                self_attn_every_n_layers=2,
+            ),
+            state_proj=dict(type='LinearProjector', in_dim=32, out_dim=960),
+            action_in_proj=dict(
+                type='LinearProjector', in_dim=32, out_dim=720),
+            action_out_proj=dict(
+                type='LinearProjector', in_dim=720, out_dim=32),
+            action_time_mlp_in=dict(
+                type='LinearProjector', in_dim=1440, out_dim=720),
+            action_time_mlp_out=dict(
+                type='LinearProjector', in_dim=720, out_dim=720),
+            freeze_vlm_backbone=True,
+            max_action_dim=32,
+            ori_action_dim=7,
+            chunk_size=50,
+            num_steps=10,
+            add_image_special_tokens=False,
+            use_cache=True,
+            pretrained_name_or_path=SMOLVLA_CKPT_PATH,
+            name_mapping={
+                'vlm_backbone.vlm': 'model.vlm_with_expert.vlm.model',
+                'llm_expert.expert': 'model.vlm_with_expert.lm_expert',
+                'state_proj.projector': 'model.state_proj',
+                'action_in_proj.projector': 'model.action_in_proj',
+                'action_out_proj.projector': 'model.action_out_proj',
+                'action_time_mlp_in.projector': 'model.action_time_mlp_in',
+                'action_time_mlp_out.projector': 'model.action_time_mlp_out',
+            })
+        set_seed_everywhere(0)
+        self.vla = build_vla_from_cfg(self.cfg).cuda()
+        self.vla.from_pretrained()
+        self.vla.eval()
+
+    def _load_images(self):
+        """Load single uint8 image and reconstruct (B, N_cam*3, H, W)."""
+        img = np.load(
+            'test/data/models/vlas/smolvla/image.npy')  # (3,H,W) uint8
+        img_t = torch.from_numpy(img).float() / 255.0  # (3, H, W)
+        B, N_cam = 2, 2
+        images = img_t[None].repeat(B * N_cam, 1, 1, 1)  # (B*N_cam, 3, H, W)
+        return images.reshape(B, N_cam * 3, img.shape[1], img.shape[2]).cuda()
+
+    def test_prefix_forward(self):
+        images = self._load_images()
+        img_masks = np.load(
+            'test/data/models/vlas/smolvla/img_masks.npy', allow_pickle=True)
+        img_masks = torch.from_numpy(img_masks).cuda()
+        lang_tokens = np.load(
+            'test/data/models/vlas/smolvla/lang_tokens.npy', allow_pickle=True)
+        lang_tokens = torch.from_numpy(lang_tokens).cuda()
+        lang_masks = np.load(
+            'test/data/models/vlas/smolvla/lang_masks.npy', allow_pickle=True)
+        lang_masks = torch.from_numpy(lang_masks).cuda()
+        states = np.load(
+            'test/data/models/vlas/smolvla/states.npy', allow_pickle=True)
+        states = torch.from_numpy(states).cuda()
+        embs_target = np.load(
+            'test/data/models/vlas/smolvla/prefix_embs.npy', allow_pickle=True)
+        pad_masks_target = np.load(
+            'test/data/models/vlas/smolvla/prefix_pad_masks.npy',
+            allow_pickle=True)
+        att_masks_target = np.load(
+            'test/data/models/vlas/smolvla/prefix_att_masks.npy',
+            allow_pickle=True)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                embs, pad_masks, att_masks = self.vla.embed_prefix(
+                    images=images,
+                    img_masks=img_masks,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    states=states)
+        embs_np = embs.float().cpu().detach().numpy()[:, ::10, ::10]
+        embs_diff = np.abs(embs_np - embs_target)
+        pad_np = pad_masks.float().cpu().detach().numpy()
+        att_np = att_masks.float().cpu().detach().numpy()
+        print(f'\n[prefix] embs max_diff={embs_diff.max():.6f}'
+              f', mean_diff={embs_diff.mean():.6f}')
+        print(f'[prefix] pad_masks max_diff='
+              f'{np.max(np.abs(pad_np - pad_masks_target)):.6f}')
+        print(f'[prefix] att_masks max_diff='
+              f'{np.max(np.abs(att_np - att_masks_target)):.6f}')
+        self.assertTrue(np.allclose(embs_np, embs_target, atol=5e-1))
+        self.assertTrue(
+            np.allclose(pad_masks.float().cpu().detach().numpy(),
+                        pad_masks_target))
+        self.assertTrue(
+            np.allclose(att_masks.float().cpu().detach().numpy(),
+                        att_masks_target))
+
+    def test_suffix_forward(self):
+        time = np.load(
+            'test/data/models/vlas/smolvla/suffix_time.npy', allow_pickle=True)
+        time = torch.from_numpy(time).cuda()
+        x_t = np.load(
+            'test/data/models/vlas/smolvla/suffix_x_t.npy', allow_pickle=True)
+        x_t = torch.from_numpy(x_t).cuda()
+        suffix_embs_target = np.load(
+            'test/data/models/vlas/smolvla/suffix_embs.npy', allow_pickle=True)
+        suffix_pad_masks_target = np.load(
+            'test/data/models/vlas/smolvla/suffix_pad_masks.npy',
+            allow_pickle=True)
+        suffix_att_masks_target = np.load(
+            'test/data/models/vlas/smolvla/suffix_att_masks.npy',
+            allow_pickle=True)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                (
+                    suffix_embs,
+                    suffix_pad_masks,
+                    suffix_att_masks,
+                ) = self.vla.embed_suffix(x_t, time)
+
+        suffix_embs_np = suffix_embs.float().cpu().detach().numpy()[:, :, ::10]
+        s_diff = np.abs(suffix_embs_np - suffix_embs_target)
+        s_pad_np = suffix_pad_masks.float().cpu().detach().numpy()
+        s_att_np = suffix_att_masks.float().cpu().detach().numpy()
+        print(f'\n[suffix] embs max_diff={s_diff.max():.6f}'
+              f', mean_diff={s_diff.mean():.6f}')
+        print(f'[suffix] pad_masks max_diff='
+              f'{np.max(np.abs(s_pad_np - suffix_pad_masks_target)):.6f}')
+        print(f'[suffix] att_masks max_diff='
+              f'{np.max(np.abs(s_att_np - suffix_att_masks_target)):.6f}')
+        self.assertTrue(
+            np.allclose(suffix_embs_np, suffix_embs_target, atol=1e-2))
+        self.assertTrue(
+            np.allclose(suffix_pad_masks.float().cpu().detach().numpy(),
+                        suffix_pad_masks_target))
+        self.assertTrue(
+            np.allclose(suffix_att_masks.float().cpu().detach().numpy(),
+                        suffix_att_masks_target))
+
+    def test_forward(self):
+        from fluxvla.engines.utils.model_utils import make_att_2d_masks
+        images = self._load_images()
+        img_masks = np.load(
+            'test/data/models/vlas/smolvla/img_masks.npy', allow_pickle=True)
+        img_masks = torch.from_numpy(img_masks).cuda()
+        lang_tokens = np.load(
+            'test/data/models/vlas/smolvla/lang_tokens.npy', allow_pickle=True)
+        lang_tokens = torch.from_numpy(lang_tokens).cuda()
+        lang_masks = np.load(
+            'test/data/models/vlas/smolvla/lang_masks.npy', allow_pickle=True)
+        lang_masks = torch.from_numpy(lang_masks).cuda()
+        states = np.load(
+            'test/data/models/vlas/smolvla/states.npy', allow_pickle=True)
+        states = torch.from_numpy(states).cuda()
+        time = np.load(
+            'test/data/models/vlas/smolvla/suffix_time.npy', allow_pickle=True)
+        time = torch.from_numpy(time).cuda()
+        x_t = np.load(
+            'test/data/models/vlas/smolvla/suffix_x_t.npy', allow_pickle=True)
+        x_t = torch.from_numpy(x_t).cuda()
+        actions_target = np.load(
+            'test/data/models/vlas/smolvla/actions.npy', allow_pickle=True)
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                (
+                    prefix_embs,
+                    prefix_pad_masks,
+                    prefix_att_masks,
+                ) = self.vla.embed_prefix(
+                    images=images,
+                    img_masks=img_masks,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    states=states,
+                )
+
+                (
+                    suffix_embs,
+                    suffix_pad_masks,
+                    suffix_att_masks,
+                ) = self.vla.embed_suffix(x_t, time)
+
+                pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks],
+                                      dim=1)
+                att_masks = torch.cat([prefix_att_masks, suffix_att_masks],
+                                      dim=1)
+
+                att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
+                position_ids = torch.cumsum(pad_masks, dim=1) - 1
+
+                suffix_out, _ = self.vla.forward_model(
+                    attention_mask=att_2d_masks,
+                    position_ids=position_ids,
+                    past_key_values=None,
+                    inputs_embeds=[prefix_embs, suffix_embs],
+                    use_cache=False)
+
+                suffix_out = suffix_out[:, -self.vla.chunk_size:]
+                suffix_out = suffix_out.to(dtype=torch.float32)
+                actions = self.vla.action_out_proj(suffix_out)
+
+                actions_np = actions.float().cpu().detach().numpy()
+                a_diff = np.abs(actions_np - actions_target)
+                print(f'\n[forward] actions max_diff='
+                      f'{a_diff.max():.6f}'
+                      f', mean_diff={a_diff.mean():.6f}')
+                self.assertTrue(
+                    np.allclose(actions_np, actions_target, atol=1e-1))
+
+    def test_predict_actions(self):
+        images = self._load_images()
+        img_masks = np.load(
+            'test/data/models/vlas/smolvla/img_masks.npy', allow_pickle=True)
+        img_masks = torch.from_numpy(img_masks).cuda()
+        lang_tokens = np.load(
+            'test/data/models/vlas/smolvla/lang_tokens.npy', allow_pickle=True)
+        lang_tokens = torch.from_numpy(lang_tokens).cuda()
+        lang_masks = np.load(
+            'test/data/models/vlas/smolvla/lang_masks.npy', allow_pickle=True)
+        lang_masks = torch.from_numpy(lang_masks).cuda()
+        noise = np.load(
+            'test/data/models/vlas/smolvla/noise.npy', allow_pickle=True)
+        noise = torch.from_numpy(noise).cuda()
+        states = np.load(
+            'test/data/models/vlas/smolvla/states.npy', allow_pickle=True)
+        states = torch.from_numpy(states).cuda()
+        pred_actions_target = np.load(
+            'test/data/models/vlas/smolvla/pred_actions.npy',
+            allow_pickle=True)
+
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                actions = self.vla.predict_action(
+                    images=images,
+                    states=states,
+                    img_masks=img_masks,
+                    lang_tokens=lang_tokens,
+                    lang_masks=lang_masks,
+                    noise=noise)
+
+        pred_np = actions.float().cpu().detach().numpy()
+        p_diff = np.abs(pred_np - pred_actions_target)
+        print(f'\n[predict] pred_actions max_diff='
+              f'{p_diff.max():.6f}'
+              f', mean_diff={p_diff.mean():.6f}')
+        self.assertTrue(np.allclose(pred_np, pred_actions_target, atol=5e-1))
+
+    def test_vlm_output_consistency(self):
+        """Verify that joint forward and prefill+decode produce consistent
+        suffix outputs."""
+        from fluxvla.engines.utils.model_utils import make_att_2d_masks
+        images = self._load_images()
+        img_masks = np.load(
+            'test/data/models/vlas/smolvla/img_masks.npy', allow_pickle=True)
+        img_masks = torch.from_numpy(img_masks).cuda()
+        lang_tokens = np.load(
+            'test/data/models/vlas/smolvla/lang_tokens.npy', allow_pickle=True)
+        lang_tokens = torch.from_numpy(lang_tokens).cuda()
+        lang_masks = np.load(
+            'test/data/models/vlas/smolvla/lang_masks.npy', allow_pickle=True)
+        lang_masks = torch.from_numpy(lang_masks).cuda()
+        states = np.load(
+            'test/data/models/vlas/smolvla/states.npy', allow_pickle=True)
+        states = torch.from_numpy(states).cuda()
+        time = np.load(
+            'test/data/models/vlas/smolvla/suffix_time.npy', allow_pickle=True)
+        time = torch.from_numpy(time).cuda()
+        x_t = np.load(
+            'test/data/models/vlas/smolvla/suffix_x_t.npy', allow_pickle=True)
+        x_t = torch.from_numpy(x_t).cuda()
+
+        with torch.no_grad():
+            with torch.autocast('cuda', dtype=torch.bfloat16, enabled=True):
+                prefix_embs, prefix_pad_masks, prefix_att_masks = (
+                    self.vla.embed_prefix(images, img_masks, lang_tokens,
+                                          lang_masks, states))
+                suffix_embs, suffix_pad_masks, suffix_att_masks = (
+                    self.vla.embed_suffix(x_t, time))
+
+                # Path 1: joint forward (training path)
+                pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks],
+                                      dim=1)
+                att_masks = torch.cat([prefix_att_masks, suffix_att_masks],
+                                      dim=1)
+                joint_att_2d = make_att_2d_masks(pad_masks, att_masks)
+                joint_pos_ids = torch.cumsum(pad_masks, dim=1) - 1
+                suffix_out_joint, _ = self.vla.forward_model(
+                    joint_att_2d, joint_pos_ids, [prefix_embs, suffix_embs])
+
+                # Path 2: prefill + decode (inference path)
+                prefix_att_2d = make_att_2d_masks(prefix_pad_masks,
+                                                  prefix_att_masks)
+                prefix_pos_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+                _, past_kv = self.vla.forward_model(
+                    prefix_att_2d,
+                    prefix_pos_ids, [prefix_embs, None],
+                    use_cache=True)
+
+                suffix_len = suffix_pad_masks.shape[1]
+                batch_size = prefix_pad_masks.shape[0]
+                prefix_len = prefix_pad_masks.shape[1]
+                prefix_pad_2d = prefix_pad_masks[:, None, :].expand(
+                    batch_size, suffix_len, prefix_len)
+                suffix_att_2d = make_att_2d_masks(suffix_pad_masks,
+                                                  suffix_att_masks)
+                decode_att = torch.cat([prefix_pad_2d, suffix_att_2d], dim=2)
+                prefix_offsets = torch.sum(prefix_pad_masks, dim=-1)[:, None]
+                decode_pos = (
+                    prefix_offsets + torch.cumsum(suffix_pad_masks, dim=1) - 1)
+                suffix_out_decode, _ = self.vla.forward_model(
+                    decode_att,
+                    decode_pos, [None, suffix_embs],
+                    past_key_values=past_kv,
+                    use_cache=True)
+
+        out_joint = suffix_out_joint.float().cpu().detach().numpy()
+        out_decode = suffix_out_decode.float().cpu().detach().numpy()
+        max_diff = np.max(np.abs(out_joint - out_decode))
+        mean_diff = np.mean(np.abs(out_joint - out_decode))
+        print(f'\nSuffix output consistency: max_diff={max_diff:.6f}, '
+              f'mean_diff={mean_diff:.6f}')
+        self.assertTrue(
+            np.allclose(out_joint, out_decode, atol=1e-1),
+            f'Suffix outputs diverge: max_diff={max_diff}')
