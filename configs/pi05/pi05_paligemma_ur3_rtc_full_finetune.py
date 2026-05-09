@@ -14,6 +14,12 @@
 
 model = dict(
     type='PI05FlowMatching',
+    rtc_training_config=dict(
+        enabled=True,
+        max_delay=7,
+        distribution='exponential',  # 'exponential' (recommended) or 'uniform'
+        temperature=1.0,  # only used for 'exponential'; larger = flatter
+    ),
     llm_backbone=dict(
         type='ConditionGemmaModel',
         adarms_cond_dim=None,
@@ -185,7 +191,6 @@ runner = dict(
     learning_rate=5e-5,
     weight_decay=0.01,
     max_grad_norm=1.0,
-    sharding_strategy='no-shard',
     collator=dict(
         type='DictCollator',
         keys=[
@@ -215,6 +220,13 @@ runner = dict(
 
 inference = dict(
     type='URInferenceRunner',
+    async_execution=True,
+    execute_horizon=10,
+    rtc_config=dict(
+        enabled=True,
+        method='prefix',
+        prefix_len=5,
+    ),
     seed=7,
     task_descriptions={
         '1': 'grasp the stopper of the dark-colored wide-mouth bottle',

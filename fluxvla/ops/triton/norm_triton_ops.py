@@ -408,16 +408,16 @@ def adarms_norm_kernel_rowwise(
     BLOCK_SIZE: tl.constexpr,
 ):
     '''
-    # 输入：x (seq_len, features)
-    # 输出：normed_x, gate
+    # Input: x (seq_len, features)
+    # Output: normed_x, gate
 
-    # 对于每一行 i：
+    # For each row i:
     RMS_i = sqrt(mean(x_i²) + 1e-6)
     x_norm_i = x_i / RMS_i
 
-    # 应用 modulation（每行有独立的 scale, shift, gate）
+    # Apply modulation (each row has independent scale, shift, gate)
     normed_x_i = x_norm_i * (1 + scale_i) + shift_i
-    gate_i = gate_i  # 直接输出，用于后续的门控机制
+    gate_i = gate_i  # Output directly, used for subsequent gating mechanism
     '''
 
     pid = tl.program_id(0)

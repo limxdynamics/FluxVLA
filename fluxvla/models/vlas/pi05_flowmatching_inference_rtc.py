@@ -9,14 +9,38 @@ from fluxvla.ops.atomic_ops import (AttnMultiKey, adarms_norm_style_proj, adarms
                                     layer_norm_matmul_bias_gelu,
                                     layer_norm_QKV_matmul_bias, matmul_attn_v,
                                     matmul_bias_res, matmul_bias_silu,
-                                    matmul_bias_small, matmul_gate,
+                                    matmul_bias_small, matmul_gate, matmul_small_gate,
+                                    matmul_small_res_gate,
                                     matmul_qkv_rope, matmul_res,
                                     matmul_res_gate, matmul_split_k_bias_res,
-                                    rms_matmul_gate, rms_matmul_qkv_rope)
+                                    rms_matmul_gate, rms_matmul_qkv_rope, matmul_k_1024_2560_qkv_rope, adarms_matmul_k_1024_32_bias_res_rowwise)
 from fluxvla.ops.triton.attention_triton_ops import (
     matmul_abT_scale, softmax_kernel_masklen, softmax_kernel_prefix_suffix)
 # yapf: enable
 from .pi05_flowmatching import PI05FlowMatching
+
+
+def _swish(x: torch.Tensor) -> torch.Tensor:
+    return x * torch.sigmoid(x)
+
+
+def _posemb_sincos_torch(t: torch.Tensor,
+                         embedding_dim: int = 1024,
+                         min_period: float = 4e-3,
+                         max_period: float = 4.0) -> torch.Tensor:
+    fraction = torch.linspace(
+        0.0, 1.0, embedding_dim // 2, dtype=torch.float32, device=t.device)
+    period = min_period * (max_period / min_period)**fraction
+    sinusoid_input = t[:, None] * (1.0 / period)[None, :] * (2.0 * math.pi)
+    return torch.cat(
+        [torch.sin(sinusoid_input),
+         torch.cos(sinusoid_input)], dim=-1)
+
+
+def _apply_prefill_mask(buffers) -> None:
+    buffers['diffusion_noise'].mul_(buffers['prefill_inv_mask'])
+    buffers['diffusion_noise'].add_(buffers['prefill_actions'] *
+                                    buffers['prefill_mask'])
 
 
 def vision_encoder(weights, buffers, num_views, num_vit_layers=27):
@@ -152,26 +176,12 @@ def transformer_encoder(weights,
                 out_features=2048)
 
 
-def transformer_decoder(weights,
-                        buffers,
-                        encoder_seq_len,
-                        num_decoder_layers=18,
-                        num_steps=10):
+def transformer_decoder_rtc(weights,
+                            buffers,
+                            encoder_seq_len,
+                            num_decoder_layers=18,
+                            num_steps=10):
     for step in range(num_steps):
-        matmul_bias_silu(
-            weights['decoder_time_embeds'][step].view(1, -1),
-            weights['decoder_time_mlp_in_w'],
-            weights['decoder_time_mlp_in_b'],
-            buffers['decoder_x_buf'],
-            in_features=1024,
-            out_features=1024)
-        matmul_bias_silu(
-            buffers['decoder_x_buf'],
-            weights['decoder_time_mlp_out_w'],
-            weights['decoder_time_mlp_out_b'],
-            buffers['decoder_time_emb'],
-            in_features=1024,
-            out_features=1024)
         matmul_bias_small(
             buffers['diffusion_noise'],
             weights['decoder_action_in_proj_w'],
@@ -181,22 +191,17 @@ def transformer_decoder(weights,
             out_features=1024,
             BLOCK_SIZE_N=32,
             BLOCK_SIZE_M=32,
-            BLOCK_SIZE_K=32)
+            BLOCK_SIZE_K=32,
+        )
         seq_len = buffers['decoder_x'].shape[0]
-
         for i in range(num_decoder_layers):
-            adarms_norm_style_proj(
+            adarms_norm_mod_proj_rowwise(
                 buffers['decoder_x'],
-                buffers['decoder_time_emb'],
-                weights['decoder_pre_attn_norm_mod_w'][i],
-                weights['decoder_pre_attn_norm_mod_b'][i],
+                buffers['decoder_adarms_mod_attn'][step, i],
                 buffers['x_normed_buf'],
                 buffers['gate_buf'],
-                buffers['decoder_style'],
-                hidden_dim=1024,
-                style_dim=3072)
-
-            matmul_qkv_rope(
+            )
+            matmul_k_1024_2560_qkv_rope(
                 buffers['x_normed_buf'],
                 weights['decoder_attn_qkv_w'][i],
                 buffers['decoder_rope_weights'],
@@ -205,10 +210,7 @@ def transformer_decoder(weights,
                                      seq_len],
                 buffers['encoder_V'][i, encoder_seq_len:encoder_seq_len +
                                      seq_len],
-                hidden_dim=1024,
-                head_dim=256,
-                num_kv_heads=8)
-
+            )
             total_queries = buffers['decoder_q_buf'].shape[0]
             prefix_keys = encoder_seq_len
             suffix_keys = seq_len
@@ -227,8 +229,7 @@ def transformer_decoder(weights,
                                   BLOCK_SIZE_M=32,
                                   BLOCK_SIZE_N=32,
                                   BLOCK_SIZE_K=64)
-
-            softmax_kernel_prefix_suffix[((total_queries + 3) // 4, )](
+            softmax_kernel_prefix_suffix[((total_queries + 3) // 4,)](
                 buffers['decoder_logits_buf'],
                 total_queries,
                 prefix_keys,
@@ -236,44 +237,36 @@ def transformer_decoder(weights,
                 buffers['valid_encoder_len'],
                 buffers['decoder_attn_buf'],
                 BLOCK_SIZE_M=4,
-                BLOCK_SIZE=1024)
-
+                BLOCK_SIZE=1024,
+            )
             matmul_attn_v(
                 buffers['decoder_attn_buf'],
                 buffers['encoder_V'][i, :encoder_seq_len + seq_len],
                 buffers['decoder_q_buf'],
                 head_dim=256)
-
             matmul_res_gate(
                 buffers['decoder_q_buf'].view(-1, 2048),
                 weights['decoder_attn_o_w'][i],
                 buffers['decoder_x'],
                 buffers['gate_buf'],
                 in_features=2048,
-                out_features=1024,
-                BLOCK_SIZE_N=32,
-                BLOCK_SIZE_M=32,
-                BLOCK_SIZE_K=128)
-
-            adarms_norm_style_proj(
+                out_features=1024)
+            adarms_norm_mod_proj_rowwise(
                 buffers['decoder_x'],
-                buffers['decoder_time_emb'],
-                weights['decoder_pre_ffn_norm_mod_w'][i],
-                weights['decoder_pre_ffn_norm_mod_b'][i],
+                buffers['decoder_adarms_mod_ffn'][step, i],
                 buffers['x_normed_buf'],
                 buffers['gate_buf'],
-                buffers['decoder_style'],
-                hidden_dim=1024,
-                style_dim=3072)
-
-            matmul_gate(
+            )
+            seq_len = buffers['decoder_x'].shape[0]
+            matmul_small_gate[((seq_len + 127) // 128, (4096 + 63) // 64)](
                 buffers['x_normed_buf'],
                 weights['decoder_ffn_gate_w'][i],
                 weights['decoder_ffn_up_w'][i],
                 buffers['decoder_hidden'],
-                in_features=1024,
-                intermediate_dim=4096)
-
+                seq_len,
+                1024,
+                4096,
+            )
             matmul_res_gate(
                 buffers['decoder_hidden'],
                 weights['decoder_ffn_down_w'][i],
@@ -285,157 +278,31 @@ def transformer_decoder(weights,
                 BLOCK_SIZE_M=32,
                 BLOCK_SIZE_K=256)
 
-        seq_len = buffers['decoder_x'].shape[0]
-        adarms_norm_style_proj(
+        adarms_matmul_k_1024_32_bias_res_rowwise(
             buffers['decoder_x'],
-            buffers['decoder_time_emb'],
-            weights['decoder_final_norm_mod_w'],
-            weights['decoder_final_norm_mod_b'],
             buffers['x_normed_buf'],
             buffers['gate_buf'],
-            buffers['decoder_style'],
-            hidden_dim=1024,
-            style_dim=3072)
-
-        matmul_bias_small(
-            buffers['x_normed_buf'],
+            buffers['decoder_adarms_mod_final'][step],
             weights['decoder_action_out_proj_w'],
             weights['decoder_action_out_proj_b'],
-            buffers['decoder_action_buf'],
-            in_features=1024,
-            out_features=32,
-            BLOCK_SIZE_N=16,
-            BLOCK_SIZE_M=16,
-            BLOCK_SIZE_K=256)
-
-        buffers['diffusion_noise'].add_(
-            buffers['decoder_action_buf'], alpha=-1.0 / num_steps)
-
-
-
-def transformer_decoder_rtc(weights, buffers, encoder_seq_len, num_steps=10):
-    for step in range(num_steps):
-        
-        # matmul_k_32_1024_bias(
-        #     buffers["diffusion_noise"],
-        #     weights["decoder_action_in_proj_w"],
-        #     weights["decoder_action_in_proj_b"],
-        #     buffers["decoder_x"],
-        # )
-
-        matmul_bias_small(
-            buffers["diffusion_noise"],
-            weights["decoder_action_in_proj_w"],
-            weights["decoder_action_in_proj_b"],
-            buffers["decoder_x"],
-            in_features=32,
-            out_features=1024,
-            BLOCK_SIZE_N=32,
-            BLOCK_SIZE_M=32,
-            BLOCK_SIZE_K=32,
-        )
-        seq_len = buffers["decoder_x"].shape[0]
-        for i in range(18):
-            adarms_norm_mod_proj_rowwise(
-                buffers["decoder_x"],
-                buffers["decoder_adarms_mod_attn"][step, i],
-                buffers["x_normed_buf"],
-                buffers["gate_buf"],
-            )
-            matmul_k_1024_2560_qkv_rope(
-                buffers["x_normed_buf"],
-                weights["decoder_attn_qkv_w"][i],
-                buffers["decoder_rope_weights"],
-                buffers["decoder_q_buf"],
-                buffers["encoder_K"][i, encoder_seq_len : encoder_seq_len + seq_len],
-                buffers["encoder_V"][i, encoder_seq_len : encoder_seq_len + seq_len],
-            )
-            total_queries = buffers["decoder_q_buf"].shape[0]
-            prefix_keys = encoder_seq_len
-            suffix_keys = seq_len
-            total_keys = prefix_keys + suffix_keys
-
-            matmul_abT_scale[(((total_queries + 31) // 32) * ((total_keys + 31) // 32),)](
-                buffers["decoder_q_buf"],
-                buffers["encoder_K"][i, : encoder_seq_len + seq_len],
-                buffers["decoder_logits_buf"],
-                total_queries,
-                total_keys,
-                256,
-                256**-0.5,
-                BLOCK_SIZE_M=32,
-                BLOCK_SIZE_N=32,
-                BLOCK_SIZE_K=64,
-            )
-            softmax_kernel_prefix_suffix[((total_queries + 3) // 4,)](
-                buffers["decoder_logits_buf"],
-                total_queries,
-                prefix_keys,
-                suffix_keys,
-                buffers["valid_encoder_len"],
-                buffers["decoder_attn_buf"],
-                BLOCK_SIZE_M=4,
-                BLOCK_SIZE=1024,
-            )
-            matmul_k8_n_256(
-                buffers["decoder_attn_buf"],
-                buffers["encoder_V"][i, : encoder_seq_len + seq_len],
-                buffers["decoder_q_buf"],
-            )
-            matmul_k_2048_1024_gate(
-                buffers["decoder_q_buf"].view(-1, 2048),
-                weights["decoder_attn_o_w"][i],
-                buffers["decoder_x"],
-                buffers["gate_buf"],
-            )
-            adarms_norm_mod_proj_rowwise(
-                buffers["decoder_x"],
-                buffers["decoder_adarms_mod_ffn"][step, i],
-                buffers["x_normed_buf"],
-                buffers["gate_buf"],
-            )
-            seq_len = buffers["decoder_x"].shape[0]
-            matmul_small_gate[((seq_len + 127) // 128, (4096 + 63) // 64)](
-                buffers["x_normed_buf"],
-                weights["decoder_ffn_gate_w"][i],
-                weights["decoder_ffn_up_w"][i],
-                buffers["decoder_hidden"],
-                seq_len,
-                1024,
-                4096,
-            )
-            matmul_k_4096_1024_gate(
-                buffers["decoder_hidden"],
-                weights["decoder_ffn_down_w"][i],
-                buffers["decoder_x"],
-                buffers["gate_buf"],
-            )
-
-        adarms_matmul_k_1024_32_bias_res_rowwise(
-            buffers["decoder_x"],
-            buffers["x_normed_buf"],
-            buffers["gate_buf"],
-            buffers["decoder_adarms_mod_final"][step],
-            weights["decoder_action_out_proj_w"],
-            weights["decoder_action_out_proj_b"],
-            buffers["diffusion_noise"],
-            buffers["diffusion_noise"],
+            buffers['diffusion_noise'],
+            buffers['diffusion_noise'],
         )
         _apply_prefill_mask(buffers)
 
 
-def pi05_model(weights,
-               buffers,
-               num_views,
-               encoder_seq_len,
-               num_vit_layers=27,
-               num_encoder_layers=18,
-               num_decoder_layers=18,
-               num_steps=10):
+def pi05rtc_model(weights,
+                  buffers,
+                  num_views,
+                  encoder_seq_len,
+                  num_vit_layers=27,
+                  num_encoder_layers=18,
+                  num_decoder_layers=18,
+                  num_steps=10):
     vision_encoder(weights, buffers, num_views, num_vit_layers)
     transformer_encoder(weights, buffers, encoder_seq_len, num_encoder_layers)
-    transformer_decoder(weights, buffers, encoder_seq_len, num_decoder_layers,
-                        num_steps)
+    transformer_decoder_rtc(weights, buffers, encoder_seq_len,
+                            num_decoder_layers, num_steps)
 
 
 @VLAS.register_module()
@@ -531,10 +398,22 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             torch.zeros(dec, ad, dtype=bf, device=dev),
             'decoder_time_emb':
             torch.zeros(dec, dh, dtype=bf, device=dev),
-            'decoder_style':
-            torch.zeros(dec, ds, dtype=bf, device=dev),
-            'decoder_norm_factor_buf':
-            torch.zeros(dec, dtype=bf, device=dev),
+            "decoder_adarms_mod_attn":
+            torch.empty((self._num_steps, self._num_decoder_layers, dec,
+                         dh * 3),
+                        dtype=bf,
+                        device=dev),
+            "decoder_adarms_mod_ffn":
+            torch.empty((self._num_steps, self._num_decoder_layers, dec,
+                         dh * 3),
+                        dtype=bf,
+                        device=dev),
+            "decoder_adarms_mod_final":
+            torch.empty((self._num_steps, dec, dh * 3), dtype=bf, device=dev),
+            # 'decoder_style':
+            # torch.zeros(dec, ds, dtype=bf, device=dev),
+            # 'decoder_norm_factor_buf':
+            # torch.zeros(dec, dtype=bf, device=dev),
             'decoder_q_buf':
             torch.zeros(dec * nkv, hd, dtype=bf, device=dev),
             'decoder_logits_buf':
@@ -543,12 +422,18 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             torch.zeros(dec * nkv, enc + dec, dtype=bf, device=dev),
             'decoder_hidden':
             torch.zeros(dec, di, dtype=bf, device=dev),
-            'decode_split_k_buf':
-            torch.zeros(2, dec, dh, dtype=torch.float32, device=dev),
+            # 'decode_split_k_buf':
+            # torch.zeros(2, dec, dh, dtype=torch.float32, device=dev),
             'x_normed_buf':
             torch.zeros(dec, dh, dtype=bf, device=dev),
             'gate_buf':
             torch.zeros(dec, dh, dtype=bf, device=dev),
+            "prefill_actions":
+            torch.zeros((dec, ad), dtype=bf, device=dev),
+            "prefill_mask":                       
+            torch.zeros((dec, 1), dtype=bf, device=dev),
+            "prefill_inv_mask":                   
+            torch.ones((dec, 1), dtype=bf, device=dev),
             'diffusion_noise':
             torch.zeros(dec, ad, dtype=bf, device=dev),
         }
@@ -568,15 +453,134 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             self._rope_table[:prefix_alloc])
 
     def _get_decoder_rope_weights(self, prompt_len):
-        start = self.num_views * 256 + prompt_len - 1
+        start = self.num_views * 256 + prompt_len
         end = start + self._decoder_seq_len
         return self._rope_table[start:end]
 
+    def _build_adarms_mod_bases(self):
+        '''
+        precompute the time embeddings for each step
+        '''
+        t_embeds = []
+        for step in range(self._num_steps):
+            time_embed = self._triton_weights['decoder_time_embeds'][step].float(
+            )
+            time_embed = _swish(
+                torch.matmul(time_embed,
+                             self._triton_weights['decoder_time_mlp_in_w'].
+                             float()) +
+                self._triton_weights['decoder_time_mlp_in_b'].float())
+            time_embed = _swish(
+                torch.matmul(time_embed,
+                             self._triton_weights['decoder_time_mlp_out_w'].
+                             float()) +
+                self._triton_weights['decoder_time_mlp_out_b'].float())
+            t_embeds.append(time_embed)
+        self._time_step_emb = torch.stack(t_embeds, dim=0).to(torch.float32)
+
+        zero_embed = _posemb_sincos_torch(
+            torch.zeros(1, dtype=torch.float32, device='cuda'))[0]
+        zero_embed = _swish(
+            torch.matmul(zero_embed,
+                         self._triton_weights['decoder_time_mlp_in_w'].float())
+            + self._triton_weights['decoder_time_mlp_in_b'].float())
+        zero_embed = _swish(
+            torch.matmul(zero_embed,
+                         self._triton_weights['decoder_time_mlp_out_w'].float()
+                         ) + self._triton_weights['decoder_time_mlp_out_b'].
+            float())
+        self._time_zero_emb = zero_embed.to(torch.float32)
+
+        attn_w = self._triton_weights['decoder_pre_attn_norm_mod_w'].float()
+        attn_b = self._triton_weights['decoder_pre_attn_norm_mod_b'].float()
+        ffn_w = self._triton_weights['decoder_pre_ffn_norm_mod_w'].float()
+        ffn_b = self._triton_weights['decoder_pre_ffn_norm_mod_b'].float()
+        final_w = self._triton_weights['decoder_final_norm_mod_w'].float()
+        final_b = self._triton_weights['decoder_final_norm_mod_b'].float()
+
+        self._base_adarms_mod_attn_vec = (
+            torch.einsum('sd,ldh->slh', self._time_step_emb, attn_w) +
+            attn_b[None, :, :]).to(torch.bfloat16)
+        self._base_adarms_mod_ffn_vec = (
+            torch.einsum('sd,ldh->slh', self._time_step_emb, ffn_w) +
+            ffn_b[None, :, :]).to(torch.bfloat16)
+        self._base_adarms_mod_final_vec = (
+            torch.matmul(self._time_step_emb, final_w) +
+            final_b[None, :]).to(torch.bfloat16)
+
+        self._base_adarms_mod_attn_t0 = (
+            torch.einsum('d,ldh->lh', self._time_zero_emb, attn_w) +
+            attn_b).to(torch.bfloat16)
+        self._base_adarms_mod_ffn_t0 = (
+            torch.einsum('d,ldh->lh', self._time_zero_emb, ffn_w) +
+            ffn_b).to(torch.bfloat16)
+        self._base_adarms_mod_final_t0 = (
+            torch.matmul(self._time_zero_emb, final_w) +
+            final_b).to(torch.bfloat16)
+
+    def _update_runtime_adarms_mods(self, prefill_len: int):
+        '''
+        update the runtime adarms mods to timestep=0
+        '''
+        self._triton_bufs[
+            'decoder_adarms_mod_attn'][:] = self._base_adarms_mod_attn_vec[:, :,
+                                                                            None,
+                                                                            :]
+        self._triton_bufs[
+            'decoder_adarms_mod_ffn'][:] = self._base_adarms_mod_ffn_vec[:, :,
+                                                                          None,
+                                                                          :]
+        self._triton_bufs[
+            'decoder_adarms_mod_final'][:] = self._base_adarms_mod_final_vec[:,
+                                                                              None,
+                                                                              :]
+
+        if prefill_len > 0:
+            self._triton_bufs['decoder_adarms_mod_attn'][:, :, :prefill_len, :] = (
+                self._base_adarms_mod_attn_t0[None, :, None, :])
+            self._triton_bufs['decoder_adarms_mod_ffn'][:, :, :prefill_len, :] = (
+                self._base_adarms_mod_ffn_t0[None, :, None, :])
+            self._triton_bufs['decoder_adarms_mod_final'][:, :prefill_len, :] = (
+                self._base_adarms_mod_final_t0[None, None, :])
+
+    def _prepare_prefill(self, diffusion_noise, prefill_actions,
+                         action_prefill_len):
+        prefill_len = int(action_prefill_len or 0)
+        prefill_len = max(0, min(prefill_len, self._decoder_seq_len))
+
+        self._triton_bufs['prefill_actions'].zero_()
+        self._triton_bufs['prefill_mask'].zero_()
+        self._triton_bufs['prefill_inv_mask'].fill_(1)
+        if prefill_len == 0:
+            return 0
+        if prefill_actions is None:
+            raise ValueError('prefix_len > 0 requires prev_actions.')
+
+        pref = torch.as_tensor(
+            prefill_actions, device='cuda', dtype=torch.bfloat16)
+        if pref.ndim == 3:
+            pref = pref[0]
+        if pref.shape[-1] < self._action_dim:
+            pad = torch.zeros(
+                pref.shape[0],
+                self._action_dim - pref.shape[-1],
+                dtype=torch.bfloat16,
+                device=pref.device)
+            pref = torch.cat([pref, pad], dim=-1)
+
+        copy_len = min(prefill_len, int(pref.shape[0]), self._decoder_seq_len)
+        self._triton_bufs['prefill_actions'][:copy_len].copy_(pref[:copy_len])
+        self._triton_bufs['prefill_mask'][:copy_len].fill_(1)
+        self._triton_bufs['prefill_inv_mask'][:copy_len].fill_(0)
+        diffusion_noise[:copy_len].copy_(
+            self._triton_bufs['prefill_actions'][:copy_len])
+        return copy_len
+
     def _run_forward(self):
-        pi05_model(self._triton_weights, self._triton_bufs, self.num_views,
-                   self._encoder_seq_len, self._num_vit_layers,
-                   self._num_encoder_layers, self._num_decoder_layers,
-                   self._num_steps)
+        pi05rtc_model(self._triton_weights, self._triton_bufs, self.num_views,
+                      self._encoder_seq_len, self._num_vit_layers,
+                      self._num_encoder_layers, self._num_decoder_layers,
+                      self._num_steps)
 
     def _build_cuda_graph(self):
         print('[Triton Inference] Recording CUDA Graph ...')
@@ -595,8 +599,13 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         self._cuda_graph_ready = True
         print('[Triton Inference] CUDA Graph recorded successfully!')
 
-    def _triton_forward(self, images_nhwc, prompt_embeds, prompt_len,
-                        diffusion_noise):
+    def _triton_forward(self,
+                        images_nhwc,
+                        prompt_embeds,
+                        prompt_len,
+                        diffusion_noise,
+                        prev_actions=None,
+                        prefix_len: int = 0):
         """Run the full unified Triton inference pipeline.
 
         Args:
@@ -616,6 +625,9 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         self._triton_bufs['decoder_rope_weights'].copy_(
             self._get_decoder_rope_weights(prompt_len))
         self._triton_bufs['diffusion_noise'].copy_(diffusion_noise)
+        prefill_len = self._prepare_prefill(self._triton_bufs['diffusion_noise'],
+                                            prev_actions, prefix_len)
+        self._update_runtime_adarms_mods(prefill_len)
 
         if not self._cuda_graph_ready:
             self._build_cuda_graph()
@@ -631,6 +643,9 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
                        lang_masks=None,
                        past_key_values=None,
                        noise=None,
+                       prev_actions=None,
+                       prefix_len: int = 0,
+                       rtc_config: dict = None,
                        *args,
                        **kwargs):
         if not self._triton_ready:
@@ -659,16 +674,27 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
                 device=states.device)
         else:
             noise_t = noise[0].to(dtype=torch.bfloat16)
-        if noise_t.shape[-1] < 32:
+        if noise_t.shape[-1] < self._action_dim:
             pad = torch.zeros(
                 noise_t.shape[0],
-                32 - noise_t.shape[-1],
+                self._action_dim - noise_t.shape[-1],
                 dtype=torch.bfloat16,
                 device=noise_t.device)
             noise_t = torch.cat([noise_t, pad], dim=-1)
 
+        rtc_method = None
+        if prev_actions is not None and prefix_len > 0 and rtc_config:
+            if rtc_config.get('enabled', True):
+                rtc_method = rtc_config.get('method', 'prefix')
+        if rtc_method not in (None, 'prefix'):
+            raise NotImplementedError(
+                'PI05FlowMatchingRTCInference only supports prefix RTC.')
+
         denoised = self._triton_forward(images_nhwc, lang_emb, prompt_len,
-                                        noise_t)
+                                        noise_t,
+                                        prev_actions=prev_actions,
+                                        prefix_len=prefix_len
+                                        if rtc_method == 'prefix' else 0)
         result = denoised[:, :self.max_action_dim].unsqueeze(0).float()
 
         return result
@@ -725,8 +751,9 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             self.projector.prepare_triton(
                 prefix='encoder_multi_modal_projector'))
         self._triton_weights.update(self._prepare_action_time_triton())
-        self._triton_weights.update(
-            {'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
+        self._triton_weights.update({'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
+        self._triton_weights['decoder_action_out_proj_w'].mul_(-1.0 / float(num_steps))
+        self._triton_weights['decoder_action_out_proj_b'].mul_(-1.0 / float(num_steps))
 
         self._max_prompt_len = max_prompt_len
         self._num_steps = num_steps
@@ -763,6 +790,8 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
 
         self._init_buffers()
         self._init_rope_table()
+        self._build_adarms_mod_bases()
+        self._update_runtime_adarms_mods(prefill_len=0)
 
         self._cuda_graph = None
         self._cuda_graph_ready = False

@@ -456,7 +456,7 @@ class PI05FlowMatchingInference(PI05FlowMatching):
             self._rope_table[:prefix_alloc])
 
     def _get_decoder_rope_weights(self, prompt_len):
-        start = self.num_views * 256 + prompt_len - 1
+        start = self.num_views * 256 + prompt_len
         end = start + self._decoder_seq_len
         return self._rope_table[start:end]
 
