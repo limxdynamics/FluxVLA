@@ -479,9 +479,8 @@ class DreamZeroHead(nn.Module):
             return True
         if self.inference_ys.shape != ys.shape:
             return True
-        if not torch.equal(self.inference_clip_feas, clip_feas):
-            return True
-        if not torch.equal(self.inference_ys, ys):
+        local_attn_size = getattr(self.model, 'local_attn_size', -1)
+        if local_attn_size != -1 and self.current_start_frame >= local_attn_size:  # noqa: E501
             return True
         return False
 
@@ -841,9 +840,11 @@ class DreamZeroHead(nn.Module):
                 )
                 self.current_start_frame = 1
 
-            if (self.current_start_frame != 1 and observed_latent_frames > 1):
-                reference_latents = observed_latents[:, :, -self.
-                                                     num_frame_per_block:]
+            if self.current_start_frame != 1:
+                num_reference_frames = min(self.num_frame_per_block,
+                                           observed_latent_frames)
+                reference_latents = observed_latents[:, :,
+                                                     -num_reference_frames:]
                 reference_start_frame = max(
                     1,
                     self.current_start_frame - reference_latents.shape[2],
