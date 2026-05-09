@@ -16,13 +16,11 @@
 # DreamZero – LIBERO spatial full fine-tune config
 #
 # Video setup:
-#   frame_window_size = 9 (current frame + 8 future frames for
+#   frame_window_size = 33 (current frame + 32 future frames for
 #   dynamics supervision).  The first frame is the conditioning
-#   observation; the remaining frames are prediction targets for
-#   the video dynamics loss.
+#   observation; the remaining frames form 4 chunks of K=2 latent frames.
 #   VAE temporal compression: latent_frames = 1 + (T-1)//4
-#   T=9 → 3 latent frames → 1 conditioning + 2 = 1 block of
-#   num_frame_per_block=2.
+#   T=33 -> 9 latent frames -> 1 conditioning + 8 future latents.
 #
 # Image layout : 2 views (agentview + wrist) @ 128x128 each
 #                tiled vertically → 256×128
@@ -40,7 +38,7 @@
 _ckpt_root = './checkpoints'
 _tokenizer = _ckpt_root + '/Wan2.1-I2V-14B-480P/google/umt5-xxl'
 
-_frame_window_size = 9
+_frame_window_size = 33
 
 model = dict(
     type='DreamZeroVLA',
@@ -48,6 +46,7 @@ model = dict(
     frame_window_size=_frame_window_size,
     pretrained_name_or_path=  # noqa: E251
     _ckpt_root + '/DreamZero-AgiBot',
+    use_cache=True,
     vlm_backbone=dict(
         type='WanBackbone',
         text_encoder_path=None,
@@ -83,9 +82,16 @@ model = dict(
         noise_beta_alpha=1.5,
         noise_beta_beta=1.0,
         noise_s=0.999,
+        decouple_video_action_noise=False,
+        video_noise_beta_alpha=3.0,
+        video_noise_beta_beta=1.0,
+        decouple_inference_noise=False,
+        video_inference_final_noise=0.8,
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
+        cfg_scale=5.0,
+        max_chunk_size=4,
     ),
     name_mapping={
         'vla_head.model': 'action_head.model',
@@ -155,7 +161,7 @@ train_dataloader = dict(
                     frame_window_size=_frame_window_size,
                 ),
             ],
-            action_window_size=10,
+            action_window_size=40,
             action_key='action',
             use_delta=False,
             statistic_name='libero_spatial_no_noops',
@@ -216,6 +222,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
+        img_buffer_len=5,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',
@@ -244,6 +251,15 @@ eval = dict(
                     model_path=_tokenizer,
                 ),
                 max_len=512,
+                negative_prompt=(
+                    'Vibrant colors, overexposed, static, blurry details, '
+                    'text, subtitles, style, artwork, painting, image, still, '
+                    'grayscale, dull, worst quality, low quality, JPEG '
+                    'artifacts, ugly, mutilated, extra fingers, bad hands, '
+                    'bad face, deformed, disfigured, mutated limbs, fused '
+                    'fingers, stagnant image, cluttered background, three '
+                    'legs, many people in the background, walking backwards.'
+                ),  # noqa: E501
                 use_conversation=False,
             ),
             dict(
