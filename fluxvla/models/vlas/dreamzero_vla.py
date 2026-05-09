@@ -112,6 +112,54 @@ class DreamZeroVLA(BaseVLA):
                 action_masks, (0, pad_size), value=False)
         return action_masks
 
+    def _encode_wan_prompts(self, lang_tokens: torch.Tensor,
+                            lang_masks: torch.Tensor):
+        """Encode one or two prompts, preserving CFG prompt lists."""
+        if lang_tokens.ndim == 3:
+            assert lang_tokens.shape == lang_masks.shape, (
+                'lang_tokens and lang_masks must have the same shape')
+            return [
+                self.vlm_backbone.encode_prompt(
+                    lang_tokens[:, i, :].long(),
+                    lang_masks[:, i, :].long(),
+                ) for i in range(lang_tokens.shape[1])
+            ]
+        return self.vlm_backbone.encode_prompt(
+            lang_tokens.long(),
+            lang_masks.long(),
+        )
+
+    def _prepare_cache_observation_video(
+        self,
+        video: torch.Tensor,
+        initial_cache_fill: bool,
+    ) -> torch.Tensor:
+        """Prepare observed frames for DreamZero causal cache updates.
+
+        DreamZero pre-fills the cache from a single clean conditioning frame.
+        Later calls encode the recent real observations into exactly the
+        latent chunk used to refresh the KV cache, mirroring upstream
+        ``lazy_joint_video_action`` instead of padding observations with zeros.
+        """
+        if initial_cache_fill:
+            return video[:, :, :1]
+
+        num_frame_per_block = self.vla_head.num_frame_per_block
+        num_frames = video.shape[2]
+        if num_frames <= 1:
+            return video
+
+        if (num_frames - 1) // 4 == num_frame_per_block:
+            return video
+
+        frames_per_latent = max(1, num_frames // 4)
+        if frames_per_latent != num_frame_per_block:
+            repeat_factor = max(1, num_frame_per_block // frames_per_latent)
+            video = torch.repeat_interleave(video, repeat_factor, dim=2)
+
+        first_frame = video[:, :, 0:1]
+        return torch.cat([first_frame, video], dim=2)
+
     # ------------------------------------------------------------------
     # Forward (training)
     # ------------------------------------------------------------------
@@ -212,10 +260,6 @@ class DreamZeroVLA(BaseVLA):
         video = images
 
         if self.use_cache:
-            # Calculate observed latent frames for cache management
-            observed_video_frames = video.shape[2]
-            observed_latent_frames = 1 + max(0, observed_video_frames - 1) // 4
-
             # Only reset cache when explicitly requested (e.g., new episode)
             # Do NOT reset based on frame count alone, as single-frame input
             # is the standard inference mode for DreamZero
@@ -226,33 +270,64 @@ class DreamZeroVLA(BaseVLA):
             embodiment_ids = torch.zeros(
                 images.shape[0], dtype=torch.long, device=device)
 
-        # Pad video to training frame_window_size so that the number of
-        # latent frames (and thus image/action/state blocks) matches
-        # what the model was trained with.
         b, c, t_obs, h, w = video.shape
-        condition_image = None
-        if t_obs > 1:
-            condition_image = video[:, :, t_obs - 1:t_obs]
-        t_train = self.frame_window_size
-        if t_obs < t_train:
-            pad = video.new_zeros(b, c, t_train - t_obs, h, w)
-            video = torch.cat([video, pad], dim=2)
+        if self.use_cache:
+            local_attn_size = getattr(self.vla_head.model, 'local_attn_size',
+                                      -1)
+            cache_window_full = (
+                local_attn_size != -1
+                and self.vla_head.current_start_frame >= local_attn_size)
+            initial_cache_fill = reset_history or (
+                self.vla_head.current_start_frame == 0) or cache_window_full
+            video_for_latents = self._prepare_cache_observation_video(
+                video, initial_cache_fill)
 
-        # --- Encode with WanBackbone (vlm_backbone) ---
-        vlm_outputs = self.vlm_backbone(
-            video=video,
-            input_ids=lang_tokens.long().to(device),
-            attention_mask=lang_masks.long().to(device),
-            condition_image=condition_image,
-        )
-        prompt_embs = vlm_outputs['prompt_embs']
-        latents = vlm_outputs['latents']
-        clip_feas = vlm_outputs['clip_feas']
-        image_cond = vlm_outputs['image_cond']
+            # Upstream DreamZero keeps the image-to-video condition fixed for
+            # the episode and injects later real observations through KV cache.
+            # For 4/9-frame real-world chunks it uses the last frame as the
+            # condition image; otherwise the first frame is the canonical init.
+            if t_obs in (4, 9):
+                condition_image = video[:, :, -1:]
+            else:
+                condition_image = video[:, :, :1]
+
+            self.vlm_backbone.set_frozen_modules_to_eval_mode()
+            prompt_embs = self._encode_wan_prompts(
+                lang_tokens.to(device), lang_masks.to(device))
+            latents = self.vlm_backbone.encode_video(video_for_latents)
+            clip_feas, image_cond, _ = self.vlm_backbone.encode_image(
+                condition_image.transpose(1, 2),
+                self.frame_window_size,
+                h,
+                w,
+            )
+            observed_latent_frames = latents.shape[2]
+        else:
+            # Stateless inference keeps the previous behavior: pad video to the
+            # training horizon so image/action/state block shapes match the
+            # non-cache baseline.
+            condition_image = None
+            if t_obs > 1:
+                condition_image = video[:, :, t_obs - 1:t_obs]
+            t_train = self.frame_window_size
+            if t_obs < t_train:
+                pad = video.new_zeros(b, c, t_train - t_obs, h, w)
+                video = torch.cat([video, pad], dim=2)
+
+            # --- Encode with WanBackbone (vlm_backbone) ---
+            vlm_outputs = self.vlm_backbone(
+                video=video,
+                input_ids=lang_tokens.long().to(device),
+                attention_mask=lang_masks.long().to(device),
+                condition_image=condition_image,
+            )
+            prompt_embs = vlm_outputs['prompt_embs']
+            latents = vlm_outputs['latents']
+            clip_feas = vlm_outputs['clip_feas']
+            image_cond = vlm_outputs['image_cond']
 
         # Prepare states [B, num_state_tokens, D]
-        t_video = video.shape[2]
-        latent_frames = 1 + (t_video - 1) // 4
+        latent_frames = latents.shape[2]
         num_blocks = max(1, (latent_frames - 1) //
                          self.vla_head.num_frame_per_block)
         num_state_tokens = num_blocks * self.vla_head.num_state_per_block

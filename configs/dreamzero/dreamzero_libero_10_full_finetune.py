@@ -16,13 +16,11 @@
 # DreamZero – LIBERO-10 full fine-tune config
 #
 # Video setup:
-#   frame_window_size = 9 (current frame + 8 future frames for
+#   frame_window_size = 33 (current frame + 32 future frames for
 #   dynamics supervision).  The first frame is the conditioning
-#   observation; the remaining frames are prediction targets for
-#   the video dynamics loss.
+#   observation; the remaining frames form 4 chunks of K=2 latent frames.
 #   VAE temporal compression: latent_frames = 1 + (T-1)//4
-#   T=9 → 3 latent frames → 1 conditioning + 2 = 1 block of
-#   num_frame_per_block=2.
+#   T=33 -> 9 latent frames -> 1 conditioning + 8 future latents.
 #
 # Image layout : 2 views (agentview + wrist) @ 128x128 each
 #                tiled vertically → 256×128
@@ -84,15 +82,16 @@ model = dict(
         noise_beta_alpha=1.5,
         noise_beta_beta=1.0,
         noise_s=0.999,
-        decouple_video_action_noise=True,
+        decouple_video_action_noise=False,
         video_noise_beta_alpha=3.0,
         video_noise_beta_beta=1.0,
-        decouple_inference_noise=True,
+        decouple_inference_noise=False,
         video_inference_final_noise=0.8,
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
-        cfg_scale=2.0),
+        cfg_scale=5.0,
+        max_chunk_size=4),
     name_mapping={
         'vla_head.model': 'action_head.model',
         'vlm_backbone.text_encoder': 'action_head.text_encoder',
@@ -222,7 +221,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
-        img_buffer_len=1,
+        img_buffer_len=5,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',

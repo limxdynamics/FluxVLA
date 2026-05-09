@@ -475,9 +475,9 @@ class DreamZeroHead(nn.Module):
                 return True
             if not torch.equal(cached_prompt_emb, prompt_emb):
                 return True
-        if self.inference_clip_feas.shape != clip_feas.shape:
+        if self.inference_clip_feas.shape[0] != clip_feas.shape[0]:
             return True
-        if self.inference_ys.shape != ys.shape:
+        if self.inference_ys.shape[0] != ys.shape[0]:
             return True
         local_attn_size = getattr(self.model, 'local_attn_size', -1)
         if local_attn_size != -1 and self.current_start_frame >= local_attn_size:  # noqa: E501
@@ -874,8 +874,6 @@ class DreamZeroHead(nn.Module):
                 )
 
             denoise_frames = self.num_frame_per_block
-            if observed_latent_frames <= 1:
-                denoise_frames = 1
 
             noisy_actions = self._sample_action_block(
                 prompt_embs=prompt_embs,
