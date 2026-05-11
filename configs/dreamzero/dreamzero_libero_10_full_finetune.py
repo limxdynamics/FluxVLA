@@ -90,6 +90,65 @@ model = dict(
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
+        cfg_scale=5.0),
+    name_mapping={
+        'vla_head.model': 'action_head.model',
+        'vlm_backbone.text_encoder': 'action_head.text_encoder',
+        'vlm_backbone.image_encoder': 'action_head.image_encoder',
+        'vlm_backbone.vae': 'action_head.vae',
+    },
+)
+
+inference_model = dict(
+    type='DreamZeroVLA',
+    num_views=2,
+    frame_window_size=_frame_window_size,
+    pretrained_name_or_path=  # noqa: E251
+    _ckpt_root + '/DreamZero-AgiBot',
+    use_cache=True,
+    vlm_backbone=dict(
+        type='WanBackbone',
+        text_encoder_path=None,
+        image_encoder_path=None,
+        vae_path=None,
+        tiled=False,
+    ),
+    vla_head=dict(
+        type='DreamZeroHead',
+        # ----- action / state dims -----
+        action_dim=7,
+        max_action_dim=32,
+        action_horizon=10,
+        max_state_dim=64,
+        # ----- video / latent -----
+        num_frames=_frame_window_size,
+        num_frame_per_block=2,
+        num_action_per_block=10,
+        num_state_per_block=1,
+        frame_seqlen=128,
+        # ----- DiT architecture (Wan 14B) -----
+        hidden_size=1024,
+        input_embedding_dim=1536,
+        dit_dim=5120,
+        dit_ffn_dim=13824,
+        dit_num_heads=40,
+        dit_num_layers=40,
+        dit_freq_dim=256,
+        dit_in_dim=36,
+        dit_out_dim=16,
+        max_num_embodiments=32,
+        # ----- noise schedule -----
+        noise_beta_alpha=1.5,
+        noise_beta_beta=1.0,
+        noise_s=0.999,
+        decouple_video_action_noise=False,
+        video_noise_beta_alpha=3.0,
+        video_noise_beta_beta=1.0,
+        decouple_inference_noise=False,
+        video_inference_final_noise=0.8,
+        num_inference_steps=16,
+        # ----- pretrained paths -----
+        use_gradient_checkpointing=True,
         cfg_scale=5.0,
         max_chunk_size=4),
     name_mapping={
