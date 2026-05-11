@@ -27,20 +27,25 @@ class VLMBackbone(nn.Module):
     def __init__(self,
                  vlm_backbone_id: str,
                  vlm_config: Dict,
-                 vlm_path: Optional[str] = None):
+                 vlm_path: Optional[str] = None,
+                 **kwargs):
         super().__init__()
         self.vlm_backbone_id = vlm_backbone_id
+        self.vlm_path = vlm_path
         vlm_cls = VLM_BACKBONE_CONFIGS[vlm_backbone_id]['model_cls']
         vlm_cfg = VLM_BACKBONE_CONFIGS[vlm_backbone_id]['config']
         if vlm_config is None:
             assert vlm_path is not None, 'vlm_config must be provided if vlm_pretrained_config is specified'  # noqa: E501
             vlm_config = vlm_cfg.from_pretrained(vlm_path)
-            self.vlm = vlm_cls.from_pretrained(vlm_path, config=vlm_config)
+            self.vlm = vlm_cls.from_pretrained(
+                vlm_path, config=vlm_config, **kwargs)
         else:
             vlm_config = vlm_cfg(**vlm_config)
             if vlm_path is not None:
-                self.vlm = vlm_cls.from_pretrained(vlm_path, config=vlm_config)
+                self.vlm = vlm_cls.from_pretrained(
+                    vlm_path, config=vlm_config, **kwargs)
             else:
+                # Build from config only (e.g., modular vision+LLM loading).
                 self.vlm = vlm_cls(config=vlm_config)
 
         self.config = self.vlm.config

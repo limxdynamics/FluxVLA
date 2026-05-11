@@ -17,6 +17,11 @@ from .paligemma import PaliGemma  # noqa: F401, F403
 from .qwen2_5_vl import QWen2_5VL  # noqa: F401, F403
 
 try:
+    from .qwen3_vl import Qwen3VL  # noqa: F401, F403
+except ImportError:
+    Qwen3VL = None  # noqa: F401, F403
+
+try:
     from .wan_backbone import WanBackbone  # noqa: F401
 except ImportError:
     pass

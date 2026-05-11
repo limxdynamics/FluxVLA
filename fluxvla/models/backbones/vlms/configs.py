@@ -15,6 +15,14 @@
 from transformers import (PaliGemmaConfig, PaliGemmaForConditionalGeneration,
                           Qwen2_5_VLConfig, Qwen2_5_VLForConditionalGeneration)
 
+try:
+    from transformers import Qwen3VLConfig, Qwen3VLForConditionalGeneration
+    _HAS_QWEN3_VL = True
+except ImportError:
+    Qwen3VLConfig = None
+    Qwen3VLForConditionalGeneration = None
+    _HAS_QWEN3_VL = False
+
 VLM_BACKBONE_CONFIGS = dict(
     paligemma_3b_pt_224=dict(
         model_id='paligemma-3b-pt-224',
@@ -26,3 +34,31 @@ VLM_BACKBONE_CONFIGS = dict(
         config=Qwen2_5_VLConfig,
         model_cls=Qwen2_5_VLForConditionalGeneration,
     ))
+
+if _HAS_QWEN3_VL:
+    VLM_BACKBONE_CONFIGS.update({
+        'qwen3_0.6b_vl_pt':
+        dict(
+            model_id='qwen3-vl-0.6b_pt',
+            config=Qwen3VLConfig,
+            model_cls=Qwen3VLForConditionalGeneration,
+        ),
+        'qwen3_2b_vl_pt':
+        dict(
+            model_id='qwen3-vl-2b_pt',
+            config=Qwen3VLConfig,
+            model_cls=Qwen3VLForConditionalGeneration,
+        ),
+        'qwen3_4b_vl_pt':
+        dict(
+            model_id='qwen3-vl_pt',
+            config=Qwen3VLConfig,
+            model_cls=Qwen3VLForConditionalGeneration,
+        ),
+        'qwen3_8b_vl_pt':
+        dict(
+            model_id='qwen3-vl-8b_pt',
+            config=Qwen3VLConfig,
+            model_cls=Qwen3VLForConditionalGeneration,
+        ),
+    })

@@ -54,7 +54,12 @@ class PaliGemma(VLMBackbone):
         # To handle fsdp wrapping problem.
         self.embed_tokens = nn.Embedding(vlm_config['vocab_size'],
                                          vlm_config['hidden_size'])
-        del self.vlm.language_model.embed_tokens
+        language_model = getattr(self.vlm, 'language_model', None) or getattr(
+            self.vlm.model, 'language_model', None)
+        if language_model is None:
+            language_model = self.vlm.model
+        if hasattr(language_model, 'embed_tokens'):
+            del language_model.embed_tokens
         self.use_llm = use_llm
 
     def forward(self,
@@ -84,9 +89,18 @@ class PaliGemma(VLMBackbone):
         img_masks = img_masks.permute(1, 0)
         for image, img_mask in zip(images, img_masks):
             if hasattr(self.vlm, 'get_image_features'):
-                img_emb = self.vlm.get_image_features(image)
+                img_emb_out = self.vlm.get_image_features(image)
             else:
-                img_emb = self.vlm.model.get_image_features(image)
+                img_emb_out = self.vlm.model.get_image_features(image)
+            if isinstance(img_emb_out, torch.Tensor):
+                img_emb = img_emb_out
+            elif (hasattr(img_emb_out, 'pooler_output')
+                  and getattr(img_emb_out, 'pooler_output', None) is not None):
+                img_emb = img_emb_out.pooler_output
+            elif hasattr(img_emb_out, 'last_hidden_state'):
+                img_emb = img_emb_out.last_hidden_state
+            else:
+                img_emb = img_emb_out
             # Normalize image embeddings
             img_emb_dim = img_emb.shape[-1]
             img_emb = img_emb * torch.tensor(
