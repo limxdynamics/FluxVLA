@@ -242,7 +242,8 @@ class DDPTrainRunner(BaseTrainRunner):
                 f'|-> Gradient Accumulation Steps = {self.grad_accumulation_steps}\n\n'  # noqa: E501
                 f'|-> Gradient Checkpointing = {self.enable_gradient_checkpointing}\n'  # noqa: E501
                 f'|-> Mixed Precision Training = {self.enable_mixed_precision_training}\n'  # noqa: E501
-                f'     |-> Dtype = {self.mixed_precision_dtype}\n')
+                f'     |-> Dtype = {self.mixed_precision_dtype}\n'  # noqa: E221,E501
+            )
 
     def clip_grad_norm(self):
         """Clip gradient norm for DDP model."""
@@ -296,10 +297,10 @@ class DDPTrainRunner(BaseTrainRunner):
             os.makedirs(checkpoint_dir, exist_ok=True)
 
             # Create checkpoint filename (unified format)
-            checkpoint_name = f'step-{global_step:06d}-epoch-{epoch:03d}'
+            checkpoint_name = f'step-{global_step:06d}-epoch-{epoch:03d}'  # noqa: E231,E501
 
             if train_loss is not None:
-                checkpoint_name += f'-loss={train_loss:.4f}'
+                checkpoint_name += f'-loss={train_loss:.4f}'  # noqa: E231
             checkpoint_name += '.pt'
 
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
@@ -525,13 +526,14 @@ class DDPTrainRunner(BaseTrainRunner):
             if param_name not in current_name_to_idx:
                 if overwatch.is_rank_zero():
                     overwatch.debug(
-                        f'Parameter {param_name} not found in current model')
+                        f'Parameter {param_name} not found in current model'  # noqa: E713,E501
+                    )
                 continue
 
             if ckpt_state_idx not in checkpoint_state:
                 if overwatch.is_rank_zero():
                     overwatch.debug(
-                        f'State index {ckpt_state_idx} not found in checkpoint'
+                        f'State index {ckpt_state_idx} not found in checkpoint'  # noqa: E713,E501
                     )
                 continue
 
@@ -752,7 +754,8 @@ class DDPTrainRunner(BaseTrainRunner):
             overwatch.info(f'Loading checkpoint from: {checkpoint_path}')
 
         checkpoint = torch.load(
-            checkpoint_path, map_location=f'cuda:{self.device_id}')
+            checkpoint_path,
+            map_location=f'cuda:{self.device_id}')  # noqa: E231,E501
 
         # Load model state dict (DDP-specific)
         if 'model' in checkpoint:

@@ -271,9 +271,10 @@ class SARMRewardModel(BaseVLA):
         """Compute SARM training losses and progress predictions.
 
         Args:
-            images (torch.Tensor): Observation image sequence. Expected shape is
-                ``[B, T, C, H, W]`` for one camera or ``[B, T, N, C, H, W]``
-                for ``N`` cameras. A missing camera dimension is inserted.
+            images (torch.Tensor): Observation image sequence. Expected shape
+                is ``[B, T, C, H, W]`` for one camera or
+                ``[B, T, N, C, H, W]`` for ``N`` cameras. A missing camera
+                dimension is inserted.
             text_input_ids (torch.Tensor): Token ids for the task text, shape
                 ``[B, L]``.
             text_attention_mask (torch.Tensor): Attention mask for the task
