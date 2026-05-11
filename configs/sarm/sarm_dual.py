@@ -12,7 +12,10 @@ current_transforms = [
     dict(type='PadStates', max_state_dim=32),
     dict(
         type='TokenizeText',
-        model_name_or_path=clip_pretrained_name_or_path,
+        tokenizer=dict(
+            type='PretrainedTokenizer',
+            model_path=clip_pretrained_name_or_path,
+        ),
         max_length=77),
 ]
 

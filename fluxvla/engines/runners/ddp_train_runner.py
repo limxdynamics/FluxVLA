@@ -231,9 +231,7 @@ class DDPTrainRunner(BaseTrainRunner):
             static_graph=True)
 
         if overwatch.is_rank_zero():
-            dtype_line = '{}|-> Dtype = {}\n'.format(
-                ' ' * 5, self.mixed_precision_dtype)
-            setup_message = (
+            overwatch.info(
                 'DDP =>> Finalized Training Setup:\n'
                 f'|-> Training Mode = {self.training_mode}\n'
                 f'|-> Max Epochs = {self.max_epochs}\n'
@@ -244,8 +242,7 @@ class DDPTrainRunner(BaseTrainRunner):
                 f'|-> Gradient Accumulation Steps = {self.grad_accumulation_steps}\n\n'  # noqa: E501
                 f'|-> Gradient Checkpointing = {self.enable_gradient_checkpointing}\n'  # noqa: E501
                 f'|-> Mixed Precision Training = {self.enable_mixed_precision_training}\n'  # noqa: E501
-                f'{dtype_line}')
-            overwatch.info(setup_message)
+                f'     |-> Dtype = {self.mixed_precision_dtype}\n')
 
     def clip_grad_norm(self):
         """Clip gradient norm for DDP model."""
@@ -299,11 +296,10 @@ class DDPTrainRunner(BaseTrainRunner):
             os.makedirs(checkpoint_dir, exist_ok=True)
 
             # Create checkpoint filename (unified format)
-            checkpoint_name = 'step-{:06d}-epoch-{:03d}'.format(
-                global_step, epoch)
+            checkpoint_name = f'step-{global_step:06d}-epoch-{epoch:03d}'
 
             if train_loss is not None:
-                checkpoint_name += '-loss={:.4f}'.format(train_loss)
+                checkpoint_name += f'-loss={train_loss:.4f}'
             checkpoint_name += '.pt'
 
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_name)
@@ -529,13 +525,14 @@ class DDPTrainRunner(BaseTrainRunner):
             if param_name not in current_name_to_idx:
                 if overwatch.is_rank_zero():
                     overwatch.debug(
-                        f'Current model is missing parameter {param_name}')
+                        f'Parameter {param_name} not found in current model')
                 continue
 
             if ckpt_state_idx not in checkpoint_state:
                 if overwatch.is_rank_zero():
                     overwatch.debug(
-                        f'Checkpoint is missing state index {ckpt_state_idx}')
+                        f'State index {ckpt_state_idx} not found in checkpoint'
+                    )
                 continue
 
             current_idx = current_name_to_idx[param_name]
@@ -755,7 +752,7 @@ class DDPTrainRunner(BaseTrainRunner):
             overwatch.info(f'Loading checkpoint from: {checkpoint_path}')
 
         checkpoint = torch.load(
-            checkpoint_path, map_location='cuda:{}'.format(self.device_id))
+            checkpoint_path, map_location=f'cuda:{self.device_id}')
 
         # Load model state dict (DDP-specific)
         if 'model' in checkpoint:

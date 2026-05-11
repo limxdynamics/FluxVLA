@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torchvision
 
-from fluxvla.datasets.parquet_dataset import ParquetDataset
+from fluxvla.datasets.parquet_dataset_v3 import ParquetDatasetV3
 from fluxvla.datasets.utils.sarm_utils import (apply_rewind_augmentation,
                                                compute_absolute_indices,
                                                find_stage_and_tau,
@@ -30,8 +30,8 @@ from fluxvla.engines import DATASETS
 
 
 @DATASETS.register_module()
-class SARMDataset(ParquetDataset):
-    """SARM dataset built on top of :class:`ParquetDataset`.
+class SARMDataset(ParquetDatasetV3):
+    """SARM dataset built on top of :class:`ParquetDatasetV3`.
 
     It reuses the base class for loading dataset metadata and the concatenated
     Hugging Face parquet dataset, and layers SARM-specific logic on top:
@@ -76,7 +76,7 @@ class SARMDataset(ParquetDataset):
         rewind_reserve = max_rewind_steps if training else 0
         self.total_frames = 1 + n_obs_steps + rewind_reserve
 
-        # ParquetDataset base class already loaded ``self.info``,
+        # ParquetDatasetV3 base class already loaded ``self.info``,
         # ``self.tasks`` (as list[task_index -> task text]),
         # ``self.episodes`` (flat), ``self.dataset`` (HF dataset concatenated
         # across data roots), ``self.dataset_cumulative_sizes`` and

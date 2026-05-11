@@ -16,10 +16,8 @@ import os
 from typing import Dict, List, Optional
 
 import numpy as np
-from transformers import AutoTokenizer
 
 from fluxvla.engines import TRANSFORMS
-from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 
 @TRANSFORMS.register_module()
@@ -420,13 +418,13 @@ class LiberoPromptFromInputs:
 class TokenizeText:
 
     def __init__(self,
-                 model_name_or_path: str,
+                 tokenizer: Dict,
                  max_length: int = 77,
                  text_key: str = 'task_description',
                  output_ids_key: str = 'text_input_ids',
                  output_attention_mask_key: str = 'text_attention_mask'):
-        resolved_path = resolve_hf_local_path(model_name_or_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(resolved_path)
+        from fluxvla.engines import build_tokenizer_from_cfg
+        self.tokenizer = build_tokenizer_from_cfg(tokenizer)
         self.max_length = max_length
         self.text_key = text_key
         self.output_ids_key = output_ids_key

@@ -290,9 +290,9 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 - 如果目录里明明有多个 MP4，但所有 episode 仍都指向 `file-000.mp4`，那就是错误的 metadata，应先修正再使用。
 
-- SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+- SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm.md](docs/sarm.md)。
 
-- 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README_zh-CN.md](tools/sarm_annotate/README_zh-CN.md)。
+- 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md)。
 
 </details>
 
@@ -301,7 +301,7 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 若使用 fluxvla 在私有数据集上训练，需要先将原始数据（如 ALOHA 双臂机器人采集的 HDF5 文件）转换为 LeRobot Dataset v2.1 格式。详细的转换步骤请参考 [数据转换指南](docs/data_convert.md)。
 
-对 SARM 而言，只要补齐所需的 SARM 标注列，FluxVLA 同时兼容 LeRobot v2.1 与 v3.x 数据集。SARM 需要的元信息格式见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+对 SARM 而言，只要补齐所需的 SARM 标注列，FluxVLA 同时兼容 LeRobot v2.1 与 v3.x 数据集。SARM 需要的元信息格式见 [docs/sarm.md](docs/sarm.md)。
 
 转换后的数据集目录结构如下：
 
@@ -339,7 +339,7 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 下载所需预训练 checkpoint 并放到 `./checkpoints` 目录。请根据配置仅下载你需要的 checkpoint。
 
-如果使用 SARM 工作流，通常至少需要一个 CLIP checkpoint 用于训练 / 推理；如果要用 VLM 自动标注，还需要官方 SARM 使用的 Qwen3-VL checkpoint。详细用法见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+如果使用 SARM 工作流，通常至少需要一个 CLIP checkpoint 用于训练 / 推理；如果要用 VLM 自动标注，还需要官方 SARM 使用的 Qwen3-VL checkpoint。详细用法见 [docs/sarm.md](docs/sarm.md)。
 
 <details>
 <summary><b>VLA 模型</b></summary>
@@ -437,7 +437,7 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 <details>
 <summary><b>支持 SARM 工作流</b></summary>
 
-- 支持 [SARM](https://github.com/xdofai/opensarm) 的训练、标注与 progress 推理，并兼容 LeRobot v2.1/v3.x 数据集。详情见 [docs/sarm_zh-CN.md](docs/sarm_zh-CN.md)。
+- 支持 [SARM](https://github.com/xdofai/opensarm) 的训练、标注与 progress 推理，并兼容 LeRobot v2.1/v3.x 数据集。详情见 [docs/sarm.md](docs/sarm.md)。
 
 </details>
 

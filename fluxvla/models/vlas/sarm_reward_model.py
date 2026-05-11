@@ -34,6 +34,19 @@ overwatch = initialize_overwatch(__name__)
 
 @VLAS.register_module()
 class SARMRewardModel(BaseVLA):
+    """Stage-aware reward model for long-horizon robot manipulation.
+
+    The model predicts task progress from a sequence of camera frames, CLIP
+    text tokens, and robot states. Each prediction is represented as a stage
+    index plus an in-stage progress value, then normalized with the configured
+    temporal proportions into a scalar progress value in ``[0, 1]``.
+
+    ``annotation_mode`` controls which supervision heads are trained:
+
+    * ``single_stage``: train only the sparse head with one ``task`` stage.
+    * ``dense_only``: train the sparse single-stage head and a dense head.
+    * ``dual``: train both sparse multi-stage and dense multi-stage heads.
+    """
 
     def __init__(self,
                  annotation_mode: str = 'single_stage',
@@ -159,6 +172,15 @@ class SARMRewardModel(BaseVLA):
         return self.annotation_mode in ['dense_only', 'dual']
 
     def freeze_backbones(self) -> None:
+        """Apply SARM-specific freeze policy to the trainable backbone.
+
+        ``SARMRewardModel`` only owns ``llm_backbone`` as a trainable module.
+        ``freeze_llm_backbone`` freezes that whole backbone. When the backbone
+        remains trainable, ``freeze_clip_backbone`` can still freeze the CLIP
+        image/text encoder while leaving the SARM transformer heads trainable.
+        ``trainable_module_keys`` is refreshed to match the resulting parameter
+        state used by the runner/checkpoint utilities.
+        """
         backbone = self._backbone()
         backbone.requires_grad_(not self.freeze_llm_backbone)
         if self.freeze_clip_backbone:
@@ -246,6 +268,34 @@ class SARMRewardModel(BaseVLA):
                 sparse_targets: torch.Tensor,
                 dense_targets: Optional[torch.Tensor] = None,
                 **kwargs) -> Dict[str, torch.Tensor]:
+        """Compute SARM training losses and progress predictions.
+
+        Args:
+            images (torch.Tensor): Observation image sequence. Expected shape is
+                ``[B, T, C, H, W]`` for one camera or ``[B, T, N, C, H, W]``
+                for ``N`` cameras. A missing camera dimension is inserted.
+            text_input_ids (torch.Tensor): Token ids for the task text, shape
+                ``[B, L]``.
+            text_attention_mask (torch.Tensor): Attention mask for the task
+                text, shape ``[B, L]``.
+            states (torch.Tensor): Robot state sequence, shape ``[B, T, D]``.
+                It is padded to ``max_state_dim`` before being encoded.
+            lengths (torch.Tensor): Valid frame count for each sample, shape
+                ``[B]``. Losses ignore frames at or after this length.
+            sparse_targets (torch.Tensor): Sparse target progress encoded as
+                ``stage_index + tau``, shape ``[B, T]``.
+            dense_targets (torch.Tensor, optional): Dense target progress with
+                the same encoding and shape as ``sparse_targets``. Required for
+                dense losses in ``dense_only`` and ``dual`` modes.
+
+        Returns:
+            Dict[str, torch.Tensor]: Always contains ``loss``,
+            ``sparse_stage_loss``, ``sparse_tau_loss``,
+            ``sparse_stage_acc``, and ``pred_progress``. In dual-head modes
+            with ``dense_targets``, also contains ``dense_stage_loss``,
+            ``dense_tau_loss``, ``dense_stage_acc``, and
+            ``pred_dense_progress``.
+        """
         del kwargs
         device = self._device()
         backbone = self._backbone()
@@ -307,6 +357,30 @@ class SARMRewardModel(BaseVLA):
                          head_mode: str = 'sparse',
                          return_all_frames: bool = False,
                          frame_index: Optional[int] = None) -> torch.Tensor:
+        """Predict normalized SARM progress for inference.
+
+        Args:
+            images (torch.Tensor): Observation image sequence with shape
+                ``[B, T, C, H, W]`` or ``[B, T, N, C, H, W]``.
+            text_input_ids (torch.Tensor): Token ids for task text, shape
+                ``[B, L]``.
+            text_attention_mask (torch.Tensor): Task text attention mask,
+                shape ``[B, L]``.
+            states (torch.Tensor): Robot state sequence, shape ``[B, T, D]``.
+            lengths (torch.Tensor, optional): Valid frame counts, shape
+                ``[B]``. If omitted, every frame in ``images`` is valid.
+            head_mode (str): Which prediction head to use, either ``sparse``
+                or ``dense``.
+            return_all_frames (bool): If ``True``, return progress for every
+                frame as ``[B, T]``. Otherwise return one frame per sample.
+            frame_index (int, optional): Frame to return when
+                ``return_all_frames`` is ``False``. Defaults to
+                ``self.n_obs_steps``.
+
+        Returns:
+            torch.Tensor: Normalized progress. Shape is ``[B, T]`` when
+            ``return_all_frames`` is ``True`` and ``[B]`` otherwise.
+        """
         device = self._device()
         backbone = self._backbone()
         if images.dim() == 5:
