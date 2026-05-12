@@ -16,6 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 from torch.utils.data import IterableDataset
 
 from fluxvla.engines import (DATASETS, build_dataset_from_cfg,
@@ -458,16 +459,28 @@ class DistributedRepeatingDataset(IterableDataset):
         pass
 
     def __iter__(self):
+        # Incorporate DataLoader worker info so that data is split
+        # across both distributed processes AND per-process workers.
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is not None:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+        else:
+            worker_id = 0
+            num_workers = 1
+
+        # Effective world: distributed processes × per-process workers
+        total_world = self.world_size * num_workers
+        total_rank = self.rank * num_workers + worker_id
+
         epoch = 0
         while True:
-            # Create indices for the entire virtual concatenated dataset
             indices = np.arange(self.total_len)
             if self.shuffle:
                 rng = np.random.default_rng(self.seed + epoch)
                 rng.shuffle(indices)
 
-            # Distribute the indices across the world size
-            shard = indices[self.rank::self.world_size].tolist()
+            shard = indices[total_rank::total_world].tolist()
 
             for idx in shard:
                 yield self._get_item_from_global_idx(idx)
