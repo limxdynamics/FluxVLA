@@ -278,9 +278,16 @@ eval = dict(
     seed=7,
     enable_mixed_precision_training=True,
     mixed_precision_dtype='bf16',
-    dataset=dict(
+    dataset=dict[str, str | int
+                 | list[dict[str, str | list[str]]
+                        | dict[str, str | list[list[int]] | list[list[float]]]
+                        | dict[str, str | int]
+                        | dict[str, str | dict[str, str] | int]]]
+    (
         type='LiberoParquetEvalDataset',
-        img_buffer_len=9,
+        # Keep the eval input at 4 observed RGB frames; DreamZeroVLA repeats
+        # them to 8 and prepends the first frame before VAE, matching upstream.
+        img_buffer_len=4,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',
