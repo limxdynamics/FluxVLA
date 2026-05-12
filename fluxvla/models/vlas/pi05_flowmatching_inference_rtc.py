@@ -4,16 +4,21 @@ import torch
 
 from fluxvla.engines import VLAS
 # yapf: disable
-from fluxvla.ops.atomic_ops import (AttnMultiKey, adarms_norm_style_proj, adarms_norm_mod_proj_rowwise,
-                                    conv2d_embed_res, layer_norm_matmul_bias,
+from fluxvla.ops.atomic_ops import (AttnMultiKey,
+                                    adarms_matmul_k_1024_32_bias_res_rowwise,
+                                    adarms_norm_mod_proj_rowwise,
+                                    adarms_norm_style_proj, conv2d_embed_res,
+                                    layer_norm_matmul_bias,
                                     layer_norm_matmul_bias_gelu,
                                     layer_norm_QKV_matmul_bias, matmul_attn_v,
                                     matmul_bias_res, matmul_bias_silu,
-                                    matmul_bias_small, matmul_gate, matmul_small_gate,
-                                    matmul_small_res_gate,
+                                    matmul_bias_small, matmul_gate,
+                                    matmul_k_1024_2560_qkv_rope,
                                     matmul_qkv_rope, matmul_res,
-                                    matmul_res_gate, matmul_split_k_bias_res,
-                                    rms_matmul_gate, rms_matmul_qkv_rope, matmul_k_1024_2560_qkv_rope, adarms_matmul_k_1024_32_bias_res_rowwise)
+                                    matmul_res_gate, matmul_small_gate,
+                                    matmul_small_res_gate,
+                                    matmul_split_k_bias_res, rms_matmul_gate,
+                                    rms_matmul_qkv_rope)
 from fluxvla.ops.triton.attention_triton_ops import (
     matmul_abT_scale, softmax_kernel_masklen, softmax_kernel_prefix_suffix)
 # yapf: enable
@@ -32,9 +37,9 @@ def _posemb_sincos_torch(t: torch.Tensor,
         0.0, 1.0, embedding_dim // 2, dtype=torch.float32, device=t.device)
     period = min_period * (max_period / min_period)**fraction
     sinusoid_input = t[:, None] * (1.0 / period)[None, :] * (2.0 * math.pi)
-    return torch.cat(
-        [torch.sin(sinusoid_input),
-         torch.cos(sinusoid_input)], dim=-1)
+    return torch.cat([torch.sin(sinusoid_input),
+                      torch.cos(sinusoid_input)],
+                     dim=-1)
 
 
 def _apply_prefill_mask(buffers) -> None:
@@ -229,7 +234,7 @@ def transformer_decoder_rtc(weights,
                                   BLOCK_SIZE_M=32,
                                   BLOCK_SIZE_N=32,
                                   BLOCK_SIZE_K=64)
-            softmax_kernel_prefix_suffix[((total_queries + 3) // 4,)](
+            softmax_kernel_prefix_suffix[((total_queries + 3) // 4, )](
                 buffers['decoder_logits_buf'],
                 total_queries,
                 prefix_keys,
@@ -398,17 +403,17 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             torch.zeros(dec, ad, dtype=bf, device=dev),
             'decoder_time_emb':
             torch.zeros(dec, dh, dtype=bf, device=dev),
-            "decoder_adarms_mod_attn":
-            torch.empty((self._num_steps, self._num_decoder_layers, dec,
-                         dh * 3),
-                        dtype=bf,
-                        device=dev),
-            "decoder_adarms_mod_ffn":
-            torch.empty((self._num_steps, self._num_decoder_layers, dec,
-                         dh * 3),
-                        dtype=bf,
-                        device=dev),
-            "decoder_adarms_mod_final":
+            'decoder_adarms_mod_attn':
+            torch.empty(
+                (self._num_steps, self._num_decoder_layers, dec, dh * 3),
+                dtype=bf,
+                device=dev),
+            'decoder_adarms_mod_ffn':
+            torch.empty(
+                (self._num_steps, self._num_decoder_layers, dec, dh * 3),
+                dtype=bf,
+                device=dev),
+            'decoder_adarms_mod_final':
             torch.empty((self._num_steps, dec, dh * 3), dtype=bf, device=dev),
             # 'decoder_style':
             # torch.zeros(dec, ds, dtype=bf, device=dev),
@@ -428,11 +433,11 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             torch.zeros(dec, dh, dtype=bf, device=dev),
             'gate_buf':
             torch.zeros(dec, dh, dtype=bf, device=dev),
-            "prefill_actions":
+            'prefill_actions':
             torch.zeros((dec, ad), dtype=bf, device=dev),
-            "prefill_mask":                       
+            'prefill_mask':
             torch.zeros((dec, 1), dtype=bf, device=dev),
-            "prefill_inv_mask":                   
+            'prefill_inv_mask':
             torch.ones((dec, 1), dtype=bf, device=dev),
             'diffusion_noise':
             torch.zeros(dec, ad, dtype=bf, device=dev),
@@ -463,17 +468,17 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         '''
         t_embeds = []
         for step in range(self._num_steps):
-            time_embed = self._triton_weights['decoder_time_embeds'][step].float(
-            )
+            time_embed = self._triton_weights['decoder_time_embeds'][
+                step].float()
             time_embed = _swish(
-                torch.matmul(time_embed,
-                             self._triton_weights['decoder_time_mlp_in_w'].
-                             float()) +
+                torch.matmul(
+                    time_embed,
+                    self._triton_weights['decoder_time_mlp_in_w'].float()) +
                 self._triton_weights['decoder_time_mlp_in_b'].float())
             time_embed = _swish(
-                torch.matmul(time_embed,
-                             self._triton_weights['decoder_time_mlp_out_w'].
-                             float()) +
+                torch.matmul(
+                    time_embed,
+                    self._triton_weights['decoder_time_mlp_out_w'].float()) +
                 self._triton_weights['decoder_time_mlp_out_b'].float())
             t_embeds.append(time_embed)
         self._time_step_emb = torch.stack(t_embeds, dim=0).to(torch.float32)
@@ -481,14 +486,14 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         zero_embed = _posemb_sincos_torch(
             torch.zeros(1, dtype=torch.float32, device='cuda'))[0]
         zero_embed = _swish(
-            torch.matmul(zero_embed,
-                         self._triton_weights['decoder_time_mlp_in_w'].float())
-            + self._triton_weights['decoder_time_mlp_in_b'].float())
+            torch.matmul(zero_embed, self.
+                         _triton_weights['decoder_time_mlp_in_w'].float()) +
+            self._triton_weights['decoder_time_mlp_in_b'].float())
         zero_embed = _swish(
-            torch.matmul(zero_embed,
-                         self._triton_weights['decoder_time_mlp_out_w'].float()
-                         ) + self._triton_weights['decoder_time_mlp_out_b'].
-            float())
+            torch.matmul(
+                zero_embed,
+                self._triton_weights['decoder_time_mlp_out_w'].float()) +
+            self._triton_weights['decoder_time_mlp_out_b'].float())
         self._time_zero_emb = zero_embed.to(torch.float32)
 
         attn_w = self._triton_weights['decoder_pre_attn_norm_mod_w'].float()
@@ -505,18 +510,18 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             torch.einsum('sd,ldh->slh', self._time_step_emb, ffn_w) +
             ffn_b[None, :, :]).to(torch.bfloat16)
         self._base_adarms_mod_final_vec = (
-            torch.matmul(self._time_step_emb, final_w) +
-            final_b[None, :]).to(torch.bfloat16)
+            torch.matmul(self._time_step_emb, final_w) + final_b[None, :]).to(
+                torch.bfloat16)
 
         self._base_adarms_mod_attn_t0 = (
             torch.einsum('d,ldh->lh', self._time_zero_emb, attn_w) +
             attn_b).to(torch.bfloat16)
         self._base_adarms_mod_ffn_t0 = (
-            torch.einsum('d,ldh->lh', self._time_zero_emb, ffn_w) +
-            ffn_b).to(torch.bfloat16)
+            torch.einsum('d,ldh->lh', self._time_zero_emb, ffn_w) + ffn_b).to(
+                torch.bfloat16)
         self._base_adarms_mod_final_t0 = (
-            torch.matmul(self._time_zero_emb, final_w) +
-            final_b).to(torch.bfloat16)
+            torch.matmul(self._time_zero_emb, final_w) + final_b).to(
+                torch.bfloat16)
 
     def _update_runtime_adarms_mods(self, prefill_len: int):
         '''
@@ -524,24 +529,24 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         '''
         self._triton_bufs[
             'decoder_adarms_mod_attn'][:] = self._base_adarms_mod_attn_vec[:, :,
-                                                                            None,
-                                                                            :]
+                                                                           None, :]
         self._triton_bufs[
             'decoder_adarms_mod_ffn'][:] = self._base_adarms_mod_ffn_vec[:, :,
-                                                                          None,
-                                                                          :]
+                                                                         None, :]
         self._triton_bufs[
             'decoder_adarms_mod_final'][:] = self._base_adarms_mod_final_vec[:,
-                                                                              None,
-                                                                              :]
+                                                                             None, :]
 
         if prefill_len > 0:
-            self._triton_bufs['decoder_adarms_mod_attn'][:, :, :prefill_len, :] = (
-                self._base_adarms_mod_attn_t0[None, :, None, :])
-            self._triton_bufs['decoder_adarms_mod_ffn'][:, :, :prefill_len, :] = (
-                self._base_adarms_mod_ffn_t0[None, :, None, :])
-            self._triton_bufs['decoder_adarms_mod_final'][:, :prefill_len, :] = (
-                self._base_adarms_mod_final_t0[None, None, :])
+            self._triton_bufs[
+                'decoder_adarms_mod_attn'][:, :, :prefill_len, :] = (
+                    self._base_adarms_mod_attn_t0[None, :, None, :])
+            self._triton_bufs[
+                'decoder_adarms_mod_ffn'][:, :, :prefill_len, :] = (
+                    self._base_adarms_mod_ffn_t0[None, :, None, :])
+            self._triton_bufs[
+                'decoder_adarms_mod_final'][:, :prefill_len, :] = (
+                    self._base_adarms_mod_final_t0[None, None, :])
 
     def _prepare_prefill(self, diffusion_noise, prefill_actions,
                          action_prefill_len):
@@ -625,8 +630,8 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         self._triton_bufs['decoder_rope_weights'].copy_(
             self._get_decoder_rope_weights(prompt_len))
         self._triton_bufs['diffusion_noise'].copy_(diffusion_noise)
-        prefill_len = self._prepare_prefill(self._triton_bufs['diffusion_noise'],
-                                            prev_actions, prefix_len)
+        prefill_len = self._prepare_prefill(
+            self._triton_bufs['diffusion_noise'], prev_actions, prefix_len)
         self._update_runtime_adarms_mods(prefill_len)
 
         if not self._cuda_graph_ready:
@@ -693,11 +698,13 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             raise NotImplementedError(
                 'PI05FlowMatchingRTCInference only supports prefix RTC.')
 
-        denoised = self._triton_forward(images_nhwc, lang_emb, prompt_len,
-                                        noise_t,
-                                        prev_actions=prev_actions,
-                                        prefix_len=prefix_len
-                                        if rtc_method == 'prefix' else 0)
+        denoised = self._triton_forward(
+            images_nhwc,
+            lang_emb,
+            prompt_len,
+            noise_t,
+            prev_actions=prev_actions,
+            prefix_len=prefix_len if rtc_method == 'prefix' else 0)
         result = denoised[:, :self.max_action_dim].unsqueeze(0).float()
 
         return result
@@ -729,10 +736,9 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
                 self._triton_weights[key] = value.contiguous().cuda()
 
     def _offload_eager_modules_to_cpu(self):
-        for name in (
-                'vision_backbone', 'llm_backbone', 'llm_expert', 'projector',
-                'action_in_proj', 'action_out_proj', 'time_mlp_in',
-                'time_mlp_out'):
+        for name in ('vision_backbone', 'llm_backbone', 'llm_expert',
+                     'projector', 'action_in_proj', 'action_out_proj',
+                     'time_mlp_in', 'time_mlp_out'):
             module = getattr(self, name, None)
             if module is not None and hasattr(module, 'cpu'):
                 module.cpu()
@@ -770,10 +776,13 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             self.projector.prepare_triton(
                 prefix='encoder_multi_modal_projector'))
         self._triton_weights.update(self._prepare_action_time_triton())
-        self._triton_weights.update({'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
+        self._triton_weights.update(
+            {'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
         self._move_triton_weights_to_cuda()
-        self._triton_weights['decoder_action_out_proj_w'].mul_(-1.0 / float(num_steps))
-        self._triton_weights['decoder_action_out_proj_b'].mul_(-1.0 / float(num_steps))
+        self._triton_weights['decoder_action_out_proj_w'].mul_(
+            -1.0 / float(num_steps))
+        self._triton_weights['decoder_action_out_proj_b'].mul_(
+            -1.0 / float(num_steps))
 
         self._max_prompt_len = max_prompt_len
         self._num_steps = num_steps

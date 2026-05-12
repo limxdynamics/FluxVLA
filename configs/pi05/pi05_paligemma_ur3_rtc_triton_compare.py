@@ -1,4 +1,5 @@
 import copy
+
 # Copyright 2026 Limx Dynamics
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -131,12 +132,13 @@ model = dict(
 )
 
 inference_model = copy.deepcopy(model)
-inference_model.update(dict(
-    type='PI05FlowMatchingRTCInference',
-    num_views=2,
-    triton_max_prompt_len=48,
-    num_steps=10,
-))
+inference_model.update(
+    dict(
+        type='PI05FlowMatchingRTCInference',
+        num_views=2,
+        triton_max_prompt_len=48,
+        num_steps=10,
+    ))
 inference_model['llm_backbone']['type'] = 'ConditionGemmaInferenceModel'
 inference_model['vision_backbone']['type'] = 'SigLIPViTBackboneInference'
 inference_model['projector']['type'] = 'LinearProjectorInference'

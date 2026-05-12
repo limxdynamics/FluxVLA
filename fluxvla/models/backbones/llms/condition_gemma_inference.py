@@ -127,11 +127,10 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                                       T.contiguous().bfloat16())
                 pre_attn_mod_b.append(
                     layer.input_layernorm.dense.bias.data.bfloat16())
-                pre_ffn_mod_w.append(
-                    layer.post_attention_layernorm.dense.weight.data.T.
-                    contiguous().bfloat16())
-                pre_ffn_mod_b.append(layer.post_attention_layernorm.dense.bias.
-                                     data.bfloat16())
+                pre_ffn_mod_w.append(layer.post_attention_layernorm.dense.
+                                     weight.data.T.contiguous().bfloat16())
+                pre_ffn_mod_b.append(
+                    layer.post_attention_layernorm.dense.bias.data.bfloat16())
 
                 q_w = layer.self_attn.q_proj.weight.data.float()
                 k_w = layer.self_attn.k_proj.weight.data.float()
@@ -143,12 +142,12 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 attn_qkv_w.append(qkv_w.bfloat16())
                 attn_o_w.append(o_w.T.contiguous().bfloat16())
 
-                ffn_gate_w.append(layer.mlp.gate_proj.weight.data.T.contiguous(
-                ).bfloat16())
-                ffn_up_w.append(layer.mlp.up_proj.weight.data.T.contiguous().
-                                bfloat16())
-                ffn_down_w.append(layer.mlp.down_proj.weight.data.T.contiguous(
-                ).bfloat16())
+                ffn_gate_w.append(
+                    layer.mlp.gate_proj.weight.data.T.contiguous().bfloat16())
+                ffn_up_w.append(
+                    layer.mlp.up_proj.weight.data.T.contiguous().bfloat16())
+                ffn_down_w.append(
+                    layer.mlp.down_proj.weight.data.T.contiguous().bfloat16())
 
             weights['decoder_attn_qkv_w'] = torch.stack(attn_qkv_w)
             weights['decoder_attn_o_w'] = torch.stack(attn_o_w)

@@ -9,6 +9,5 @@ class LinearProjectorInference(LinearProjector):
         return {
             f'{prefix}_w':
             self.projector.weight.data.T.contiguous().bfloat16(),
-            f'{prefix}_b':
-            self.projector.bias.data.bfloat16(),
+            f'{prefix}_b': self.projector.bias.data.bfloat16(),
         }

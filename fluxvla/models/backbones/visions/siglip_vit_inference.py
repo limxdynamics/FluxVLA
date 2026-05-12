@@ -70,18 +70,14 @@ class SigLIPViTBackboneInference(SigLIPViTBackbone):
             pre_ffn_norm_w.append(layer.layer_norm2.weight.data)
             pre_ffn_norm_b.append(layer.layer_norm2.bias.data)
 
-        weights['vision_attn_qkv_w'] = (
-            torch.stack(attn_qkv_w).bfloat16())
-        weights['vision_attn_qkv_b'] = (
-            torch.stack(attn_qkv_b).bfloat16())
+        weights['vision_attn_qkv_w'] = (torch.stack(attn_qkv_w).bfloat16())
+        weights['vision_attn_qkv_b'] = (torch.stack(attn_qkv_b).bfloat16())
         weights['vision_attn_o_w'] = (torch.stack(attn_o_w).bfloat16())
         weights['vision_attn_o_b'] = (torch.stack(attn_o_b).bfloat16())
         weights['vision_ffn_up_w'] = (torch.stack(ffn_up_w).bfloat16())
         weights['vision_ffn_up_b'] = (torch.stack(ffn_up_b).bfloat16())
-        weights['vision_ffn_down_w'] = (
-            torch.stack(ffn_down_w).bfloat16())
-        weights['vision_ffn_down_b'] = (
-            torch.stack(ffn_down_b).bfloat16())
+        weights['vision_ffn_down_w'] = (torch.stack(ffn_down_w).bfloat16())
+        weights['vision_ffn_down_b'] = (torch.stack(ffn_down_b).bfloat16())
         weights['vision_pre_attn_norm_w'] = (
             torch.stack(pre_attn_norm_w).bfloat16())
         weights['vision_pre_attn_norm_b'] = (

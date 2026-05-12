@@ -277,7 +277,6 @@ inference = dict(
 - Choosing `prefix_len` larger than the action chunk length.
 - Setting `triton_max_prompt_len` smaller than the real prompt length.
 
-
 ## 10. Memory note: A100 vs RTX 4090
 
 Measured on LimVLA-3 with:
