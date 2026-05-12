@@ -17,14 +17,14 @@ class SigLIPViTBackboneInference(SigLIPViTBackbone):
         # Patch Embedding: [out, in, kH, kW] → [kH, kW, in, out]
         patch_w = embed.patch_embedding.weight.data  # [1152, 3, 14, 14]
         weights['vision_patch_embedding_w'] = (
-            patch_w.permute(2, 3, 1, 0).contiguous().bfloat16().cuda())
+            patch_w.permute(2, 3, 1, 0).contiguous().bfloat16())
         if embed.patch_embedding.bias is not None:
             weights['vision_patch_embedding_b'] = (
-                embed.patch_embedding.bias.data.bfloat16().cuda())
+                embed.patch_embedding.bias.data.bfloat16())
 
         # Position Embedding
         weights['vision_position_embedding'] = (
-            embed.position_embedding.weight.data.bfloat16().cuda())
+            embed.position_embedding.weight.data.bfloat16())
 
         # Transformer layers
         attn_qkv_w, attn_qkv_b = [], []
@@ -71,31 +71,31 @@ class SigLIPViTBackboneInference(SigLIPViTBackbone):
             pre_ffn_norm_b.append(layer.layer_norm2.bias.data)
 
         weights['vision_attn_qkv_w'] = (
-            torch.stack(attn_qkv_w).bfloat16().cuda())
+            torch.stack(attn_qkv_w).bfloat16())
         weights['vision_attn_qkv_b'] = (
-            torch.stack(attn_qkv_b).bfloat16().cuda())
-        weights['vision_attn_o_w'] = (torch.stack(attn_o_w).bfloat16().cuda())
-        weights['vision_attn_o_b'] = (torch.stack(attn_o_b).bfloat16().cuda())
-        weights['vision_ffn_up_w'] = (torch.stack(ffn_up_w).bfloat16().cuda())
-        weights['vision_ffn_up_b'] = (torch.stack(ffn_up_b).bfloat16().cuda())
+            torch.stack(attn_qkv_b).bfloat16())
+        weights['vision_attn_o_w'] = (torch.stack(attn_o_w).bfloat16())
+        weights['vision_attn_o_b'] = (torch.stack(attn_o_b).bfloat16())
+        weights['vision_ffn_up_w'] = (torch.stack(ffn_up_w).bfloat16())
+        weights['vision_ffn_up_b'] = (torch.stack(ffn_up_b).bfloat16())
         weights['vision_ffn_down_w'] = (
-            torch.stack(ffn_down_w).bfloat16().cuda())
+            torch.stack(ffn_down_w).bfloat16())
         weights['vision_ffn_down_b'] = (
-            torch.stack(ffn_down_b).bfloat16().cuda())
+            torch.stack(ffn_down_b).bfloat16())
         weights['vision_pre_attn_norm_w'] = (
-            torch.stack(pre_attn_norm_w).bfloat16().cuda())
+            torch.stack(pre_attn_norm_w).bfloat16())
         weights['vision_pre_attn_norm_b'] = (
-            torch.stack(pre_attn_norm_b).bfloat16().cuda())
+            torch.stack(pre_attn_norm_b).bfloat16())
         weights['vision_pre_ffn_norm_w'] = (
-            torch.stack(pre_ffn_norm_w).bfloat16().cuda())
+            torch.stack(pre_ffn_norm_w).bfloat16())
         weights['vision_pre_ffn_norm_b'] = (
-            torch.stack(pre_ffn_norm_b).bfloat16().cuda())
+            torch.stack(pre_ffn_norm_b).bfloat16())
 
         # Vision final norm
         assert hasattr(
             vm, 'post_layernorm'), 'SigLIP model must have post_layernorm'
         weights['vision_final_norm_w'] = (
-            vm.post_layernorm.weight.data.bfloat16().cuda())
+            vm.post_layernorm.weight.data.bfloat16())
         weights['vision_final_norm_b'] = (
-            vm.post_layernorm.bias.data.bfloat16().cuda())
+            vm.post_layernorm.bias.data.bfloat16())
         return weights

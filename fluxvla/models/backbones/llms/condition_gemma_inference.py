@@ -28,7 +28,8 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
       uses adaptive (input-dependent) normalization.
 
     All returned tensors are bf16, column-major (transposed),
-    contiguous, and on CUDA — ready to be consumed by
+    contiguous, and kept on CPU until the VLA inference wrapper moves
+    final Triton weights to CUDA — ready to be consumed by
     :meth:`PI05FlowMatchingInference.prepare_triton_inference`.
 
     Args:
@@ -89,20 +90,20 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
 
                 q_w, k_w = self._apply_rope_format_conversion(q_w, k_w)
                 qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1)
-                attn_qkv_w.append(qkv_w.bfloat16().cuda())
-                attn_o_w.append(o_w.T.contiguous().bfloat16().cuda())
+                attn_qkv_w.append(qkv_w.bfloat16())
+                attn_o_w.append(o_w.T.contiguous().bfloat16())
 
                 gate_w = layer.mlp.gate_proj.weight.data.float()
                 up_w = layer.mlp.up_proj.weight.data.float()
-                down_w = layer.mlp.down_proj.weight.data.float()
+                down_w = layer.mlp.down_proj.weight.data
 
                 ffn_scale = (1 + pre_ffn_norm).unsqueeze(0)
                 gate_w = gate_w * ffn_scale
                 up_w = up_w * ffn_scale
 
-                ffn_gate_w.append(gate_w.T.contiguous().bfloat16().cuda())
-                ffn_up_w.append(up_w.T.contiguous().bfloat16().cuda())
-                ffn_down_w.append(down_w.T.contiguous().bfloat16().cuda())
+                ffn_gate_w.append(gate_w.T.contiguous().bfloat16())
+                ffn_up_w.append(up_w.T.contiguous().bfloat16())
+                ffn_down_w.append(down_w.T.contiguous().bfloat16())
 
             weights['encoder_attn_qkv_w'] = torch.stack(attn_qkv_w)
             weights['encoder_attn_o_w'] = torch.stack(attn_o_w)
@@ -123,14 +124,14 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 layer = expert[i]
 
                 pre_attn_mod_w.append(layer.input_layernorm.dense.weight.data.
-                                      T.contiguous().bfloat16().cuda())
+                                      T.contiguous().bfloat16())
                 pre_attn_mod_b.append(
-                    layer.input_layernorm.dense.bias.data.bfloat16().cuda())
+                    layer.input_layernorm.dense.bias.data.bfloat16())
                 pre_ffn_mod_w.append(
                     layer.post_attention_layernorm.dense.weight.data.T.
-                    contiguous().bfloat16().cuda())
+                    contiguous().bfloat16())
                 pre_ffn_mod_b.append(layer.post_attention_layernorm.dense.bias.
-                                     data.bfloat16().cuda())
+                                     data.bfloat16())
 
                 q_w = layer.self_attn.q_proj.weight.data.float()
                 k_w = layer.self_attn.k_proj.weight.data.float()
@@ -139,15 +140,15 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
 
                 q_w, k_w = self._apply_rope_format_conversion(q_w, k_w)
                 qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1)
-                attn_qkv_w.append(qkv_w.bfloat16().cuda())
-                attn_o_w.append(o_w.T.contiguous().bfloat16().cuda())
+                attn_qkv_w.append(qkv_w.bfloat16())
+                attn_o_w.append(o_w.T.contiguous().bfloat16())
 
                 ffn_gate_w.append(layer.mlp.gate_proj.weight.data.T.contiguous(
-                ).bfloat16().cuda())
+                ).bfloat16())
                 ffn_up_w.append(layer.mlp.up_proj.weight.data.T.contiguous().
-                                bfloat16().cuda())
+                                bfloat16())
                 ffn_down_w.append(layer.mlp.down_proj.weight.data.T.contiguous(
-                ).bfloat16().cuda())
+                ).bfloat16())
 
             weights['decoder_attn_qkv_w'] = torch.stack(attn_qkv_w)
             weights['decoder_attn_o_w'] = torch.stack(attn_o_w)
@@ -164,7 +165,7 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 torch.stack(pre_ffn_mod_b))
 
             weights['decoder_final_norm_mod_w'] = (
-                self.norm.dense.weight.data.T.contiguous().bfloat16().cuda())
+                self.norm.dense.weight.data.T.contiguous().bfloat16())
             weights['decoder_final_norm_mod_b'] = (
-                self.norm.dense.bias.data.bfloat16().cuda())
+                self.norm.dense.bias.data.bfloat16())
         return weights

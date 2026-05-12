@@ -277,7 +277,54 @@ inference = dict(
 - Choosing `prefix_len` larger than the action chunk length.
 - Setting `triton_max_prompt_len` smaller than the real prompt length.
 
-## 10. Summary
+
+## 10. Memory note: A100 vs RTX 4090
+
+Measured on LimVLA-3 with:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python scripts/compare_pi05_rtc_vs_triton.py \
+    --config configs/pi05/pi05_paligemma_ur3_rtc_triton_compare.py \
+    --device cuda:0 \
+    --dtype bf16 \
+    --prompt-len 32 \
+    --prefix-len 5 \
+    --state-dim 32
+```
+
+A100 80GB memory sampling result:
+
+```text
+baseline_mib = 15215
+peak_mib     = 53646
+delta_mib    = 38431
+```
+
+Interpretation:
+
+- The test peaked at about `53.6GB` total used memory on GPU0.
+- The incremental memory over the pre-existing baseline was about `38.4GB`.
+- This is larger than the available memory of a 24GB RTX 4090, so OOM on 4090 is expected for this current implementation.
+
+Why checkpoint size is misleading:
+
+- A checkpoint around 1GB is just serialized parameter storage.
+- Runtime memory includes the loaded PyTorch module weights, Triton-reformatted weights, temporary fp32 conversion tensors, transposed contiguous copies, `torch.stack()` copies, static inference buffers, attention/logits buffers, and CUDA Graph capture memory.
+- During `prepare_triton()`, weights such as `ffn_down_w` can briefly exist in multiple forms at once: original module weight, fp32 temp, transposed contiguous bf16 tensor, list entries, and final stacked tensor.
+
+Why A100 works but 4090 OOMs:
+
+- A100 has 80GB memory, so a ~54GB peak fits.
+- RTX 4090 has 24GB memory, so the current Triton preparation path can exceed memory before graph replay starts.
+
+Main optimization direction:
+
+- Replace list + `torch.stack()` weight preparation with preallocated destination tensors and per-layer `copy_()`.
+- Avoid unnecessary `.float()` temporaries where bf16 is sufficient.
+- Release or CPU-offload the original eager model weights after Triton weights are prepared if the eager path is not needed.
+- Reduce static dimensions when possible, especially `triton_max_prompt_len`, `num_views`, `chunk_size`, and `num_steps`.
+
+## 11. Summary
 
 The shortest correct mental model is:
 

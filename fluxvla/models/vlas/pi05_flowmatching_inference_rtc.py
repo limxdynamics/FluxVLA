@@ -662,8 +662,11 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         prompt_len = (
             int(lang_masks[0].sum().item())
             if lang_masks is not None else lang_tokens.shape[1])
-        lang_emb = self.llm_backbone.embed_tokens(lang_tokens[0, :prompt_len])
-        lang_emb = (lang_emb * math.sqrt(lang_emb.shape[-1])).bfloat16()
+        embed_device = self.llm_backbone.embed_tokens.weight.device
+        prompt_tokens = lang_tokens[0, :prompt_len].to(embed_device)
+        lang_emb = self.llm_backbone.embed_tokens(prompt_tokens)
+        lang_emb = (lang_emb * math.sqrt(lang_emb.shape[-1])).to(
+            device='cuda', dtype=torch.bfloat16)
 
         chunk_size = self.n_action_steps
         if noise is None:
@@ -720,6 +723,22 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             time_val = time_val + dt
         return torch.cat(time_embs, dim=0)
 
+    def _move_triton_weights_to_cuda(self):
+        for key, value in list(self._triton_weights.items()):
+            if torch.is_tensor(value) and value.device.type != 'cuda':
+                self._triton_weights[key] = value.contiguous().cuda()
+
+    def _offload_eager_modules_to_cpu(self):
+        for name in (
+                'vision_backbone', 'llm_backbone', 'llm_expert', 'projector',
+                'action_in_proj', 'action_out_proj', 'time_mlp_in',
+                'time_mlp_out'):
+            module = getattr(self, name, None)
+            if module is not None and hasattr(module, 'cpu'):
+                module.cpu()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def _prepare_action_time_triton(self) -> dict:
         weights = {}
         weights.update(
@@ -752,6 +771,7 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
                 prefix='encoder_multi_modal_projector'))
         self._triton_weights.update(self._prepare_action_time_triton())
         self._triton_weights.update({'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
+        self._move_triton_weights_to_cuda()
         self._triton_weights['decoder_action_out_proj_w'].mul_(-1.0 / float(num_steps))
         self._triton_weights['decoder_action_out_proj_b'].mul_(-1.0 / float(num_steps))
 
@@ -788,6 +808,7 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
             num_views * self._vit_num_patches + max_prompt_len)
         self._decoder_seq_len = chunk_size
 
+        self._offload_eager_modules_to_cpu()
         self._init_buffers()
         self._init_rope_table()
         self._build_adarms_mod_bases()
