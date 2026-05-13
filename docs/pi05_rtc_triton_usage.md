@@ -305,6 +305,33 @@ Interpretation:
 - The incremental memory over the pre-existing baseline was about `38.4GB`.
 - This is larger than the available memory of a 24GB RTX 4090, so OOM on 4090 is expected for this current implementation.
 
+
+### Single Triton memory profile after CPU prepare optimization
+
+Use the single-model profile script when you want deployment-like memory numbers without constructing the normal baseline model:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python scripts/profile_pi05_rtc_triton_memory.py \
+    --config configs/pi05/pi05_paligemma_ur3_rtc_triton_compare.py \
+    --device cuda:0 \
+    --dtype bf16 \
+    --prompt-len 32 \
+    --prefix-len 5 \
+    --state-dim 32
+```
+
+Measured on LimVLA-3 A100 after moving Triton weight preparation to CPU and replacing `ConditionGemmaInferenceModel.prepare_triton()` list+`torch.stack()` with preallocated per-layer copies:
+
+```text
+baseline_before_mib          = 15215
+single_triton_peak_mib       = 22000
+single_triton_delta_mib      = 6785
+first_predict_ms             = 14669.0  # includes CPU prepare + H2D weight copy + CUDA Graph recording
+replay_predict_ms            = 37.8
+```
+
+This is the more relevant number for 24GB cards than the compare script. The compare script intentionally builds both normal and Triton models and therefore has a much higher peak.
+
 Why checkpoint size is misleading:
 
 - A checkpoint around 1GB is just serialized parameter storage.

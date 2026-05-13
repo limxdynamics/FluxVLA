@@ -69,8 +69,11 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
         if role == 'llm':
             llm = self.layers
             n = len(self.layers)
-            attn_qkv_w, attn_o_w = [], []
-            ffn_gate_w, ffn_up_w, ffn_down_w = [], [], []
+            encoder_attn_qkv_w = None
+            encoder_attn_o_w = None
+            encoder_ffn_gate_w = None
+            encoder_ffn_up_w = None
+            encoder_ffn_down_w = None
 
             for i in range(n):
                 layer = llm[i]
@@ -81,7 +84,7 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 q_w = layer.self_attn.q_proj.weight.data.float()
                 k_w = layer.self_attn.k_proj.weight.data.float()
                 v_w = layer.self_attn.v_proj.weight.data.float()
-                o_w = layer.self_attn.o_proj.weight.data.float()
+                o_w = layer.self_attn.o_proj.weight.data
 
                 scale = (1 + pre_attn_norm).unsqueeze(0)
                 q_w = q_w * scale
@@ -89,79 +92,122 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 v_w = v_w * scale
 
                 q_w, k_w = self._apply_rope_format_conversion(q_w, k_w)
-                qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1)
-                attn_qkv_w.append(qkv_w.bfloat16())
-                attn_o_w.append(o_w.T.contiguous().bfloat16())
+                qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1).bfloat16()
+                o_w = o_w.T.contiguous().bfloat16()
 
                 gate_w = layer.mlp.gate_proj.weight.data.float()
                 up_w = layer.mlp.up_proj.weight.data.float()
                 down_w = layer.mlp.down_proj.weight.data
 
                 ffn_scale = (1 + pre_ffn_norm).unsqueeze(0)
-                gate_w = gate_w * ffn_scale
-                up_w = up_w * ffn_scale
+                gate_w = (gate_w * ffn_scale).T.contiguous().bfloat16()
+                up_w = (up_w * ffn_scale).T.contiguous().bfloat16()
+                down_w = down_w.T.contiguous().bfloat16()
 
-                ffn_gate_w.append(gate_w.T.contiguous().bfloat16())
-                ffn_up_w.append(up_w.T.contiguous().bfloat16())
-                ffn_down_w.append(down_w.T.contiguous().bfloat16())
+                if encoder_attn_qkv_w is None:
+                    encoder_attn_qkv_w = torch.empty(
+                        (n, *qkv_w.shape), dtype=torch.bfloat16)
+                    encoder_attn_o_w = torch.empty(
+                        (n, *o_w.shape), dtype=torch.bfloat16)
+                    encoder_ffn_gate_w = torch.empty(
+                        (n, *gate_w.shape), dtype=torch.bfloat16)
+                    encoder_ffn_up_w = torch.empty(
+                        (n, *up_w.shape), dtype=torch.bfloat16)
+                    encoder_ffn_down_w = torch.empty(
+                        (n, *down_w.shape), dtype=torch.bfloat16)
 
-            weights['encoder_attn_qkv_w'] = torch.stack(attn_qkv_w)
-            weights['encoder_attn_o_w'] = torch.stack(attn_o_w)
-            weights['encoder_ffn_gate_w'] = torch.stack(ffn_gate_w)
-            weights['encoder_ffn_up_w'] = torch.stack(ffn_up_w)
-            weights['encoder_ffn_down_w'] = torch.stack(ffn_down_w)
+                encoder_attn_qkv_w[i].copy_(qkv_w)
+                encoder_attn_o_w[i].copy_(o_w)
+                encoder_ffn_gate_w[i].copy_(gate_w)
+                encoder_ffn_up_w[i].copy_(up_w)
+                encoder_ffn_down_w[i].copy_(down_w)
+
+                del (pre_attn_norm, pre_ffn_norm, q_w, k_w, v_w, o_w, scale,
+                     qkv_w, gate_w, up_w, down_w, ffn_scale)
+
+            weights['encoder_attn_qkv_w'] = encoder_attn_qkv_w
+            weights['encoder_attn_o_w'] = encoder_attn_o_w
+            weights['encoder_ffn_gate_w'] = encoder_ffn_gate_w
+            weights['encoder_ffn_up_w'] = encoder_ffn_up_w
+            weights['encoder_ffn_down_w'] = encoder_ffn_down_w
 
         else:  # expert
             expert = self.layers
             n = len(self.layers)
-
-            attn_qkv_w, attn_o_w = [], []
-            ffn_gate_w, ffn_up_w, ffn_down_w = [], [], []
-            pre_attn_mod_w, pre_attn_mod_b = [], []
-            pre_ffn_mod_w, pre_ffn_mod_b = [], []
+            decoder_attn_qkv_w = None
+            decoder_attn_o_w = None
+            decoder_ffn_gate_w = None
+            decoder_ffn_up_w = None
+            decoder_ffn_down_w = None
+            decoder_pre_attn_norm_mod_w = None
+            decoder_pre_attn_norm_mod_b = None
+            decoder_pre_ffn_norm_mod_w = None
+            decoder_pre_ffn_norm_mod_b = None
 
             for i in range(n):
                 layer = expert[i]
 
-                pre_attn_mod_w.append(layer.input_layernorm.dense.weight.data.
-                                      T.contiguous().bfloat16())
-                pre_attn_mod_b.append(
-                    layer.input_layernorm.dense.bias.data.bfloat16())
-                pre_ffn_mod_w.append(layer.post_attention_layernorm.dense.
-                                     weight.data.T.contiguous().bfloat16())
-                pre_ffn_mod_b.append(
-                    layer.post_attention_layernorm.dense.bias.data.bfloat16())
+                pre_attn_mod_w = layer.input_layernorm.dense.weight.data.T.contiguous().bfloat16()
+                pre_attn_mod_b = layer.input_layernorm.dense.bias.data.bfloat16()
+                pre_ffn_mod_w = layer.post_attention_layernorm.dense.weight.data.T.contiguous().bfloat16()
+                pre_ffn_mod_b = layer.post_attention_layernorm.dense.bias.data.bfloat16()
 
                 q_w = layer.self_attn.q_proj.weight.data.float()
                 k_w = layer.self_attn.k_proj.weight.data.float()
                 v_w = layer.self_attn.v_proj.weight.data.float()
-                o_w = layer.self_attn.o_proj.weight.data.float()
+                o_w = layer.self_attn.o_proj.weight.data
 
                 q_w, k_w = self._apply_rope_format_conversion(q_w, k_w)
-                qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1)
-                attn_qkv_w.append(qkv_w.bfloat16())
-                attn_o_w.append(o_w.T.contiguous().bfloat16())
+                qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1).bfloat16()
+                o_w = o_w.T.contiguous().bfloat16()
 
-                ffn_gate_w.append(
-                    layer.mlp.gate_proj.weight.data.T.contiguous().bfloat16())
-                ffn_up_w.append(
-                    layer.mlp.up_proj.weight.data.T.contiguous().bfloat16())
-                ffn_down_w.append(
-                    layer.mlp.down_proj.weight.data.T.contiguous().bfloat16())
+                gate_w = layer.mlp.gate_proj.weight.data.T.contiguous().bfloat16()
+                up_w = layer.mlp.up_proj.weight.data.T.contiguous().bfloat16()
+                down_w = layer.mlp.down_proj.weight.data.T.contiguous().bfloat16()
 
-            weights['decoder_attn_qkv_w'] = torch.stack(attn_qkv_w)
-            weights['decoder_attn_o_w'] = torch.stack(attn_o_w)
-            weights['decoder_ffn_gate_w'] = torch.stack(ffn_gate_w)
-            weights['decoder_ffn_up_w'] = torch.stack(ffn_up_w)
-            weights['decoder_ffn_down_w'] = torch.stack(ffn_down_w)
-            weights['decoder_pre_attn_norm_mod_w'] = (
-                torch.stack(pre_attn_mod_w))
-            weights['decoder_pre_attn_norm_mod_b'] = (
-                torch.stack(pre_attn_mod_b))
-            weights['decoder_pre_ffn_norm_mod_w'] = (
-                torch.stack(pre_ffn_mod_w))
-            weights['decoder_pre_ffn_norm_mod_b'] = (
-                torch.stack(pre_ffn_mod_b))
+                if decoder_attn_qkv_w is None:
+                    decoder_attn_qkv_w = torch.empty(
+                        (n, *qkv_w.shape), dtype=torch.bfloat16)
+                    decoder_attn_o_w = torch.empty(
+                        (n, *o_w.shape), dtype=torch.bfloat16)
+                    decoder_ffn_gate_w = torch.empty(
+                        (n, *gate_w.shape), dtype=torch.bfloat16)
+                    decoder_ffn_up_w = torch.empty(
+                        (n, *up_w.shape), dtype=torch.bfloat16)
+                    decoder_ffn_down_w = torch.empty(
+                        (n, *down_w.shape), dtype=torch.bfloat16)
+                    decoder_pre_attn_norm_mod_w = torch.empty(
+                        (n, *pre_attn_mod_w.shape), dtype=torch.bfloat16)
+                    decoder_pre_attn_norm_mod_b = torch.empty(
+                        (n, *pre_attn_mod_b.shape), dtype=torch.bfloat16)
+                    decoder_pre_ffn_norm_mod_w = torch.empty(
+                        (n, *pre_ffn_mod_w.shape), dtype=torch.bfloat16)
+                    decoder_pre_ffn_norm_mod_b = torch.empty(
+                        (n, *pre_ffn_mod_b.shape), dtype=torch.bfloat16)
+
+                decoder_attn_qkv_w[i].copy_(qkv_w)
+                decoder_attn_o_w[i].copy_(o_w)
+                decoder_ffn_gate_w[i].copy_(gate_w)
+                decoder_ffn_up_w[i].copy_(up_w)
+                decoder_ffn_down_w[i].copy_(down_w)
+                decoder_pre_attn_norm_mod_w[i].copy_(pre_attn_mod_w)
+                decoder_pre_attn_norm_mod_b[i].copy_(pre_attn_mod_b)
+                decoder_pre_ffn_norm_mod_w[i].copy_(pre_ffn_mod_w)
+                decoder_pre_ffn_norm_mod_b[i].copy_(pre_ffn_mod_b)
+
+                del (pre_attn_mod_w, pre_attn_mod_b, pre_ffn_mod_w,
+                     pre_ffn_mod_b, q_w, k_w, v_w, o_w, qkv_w, gate_w,
+                     up_w, down_w)
+
+            weights['decoder_attn_qkv_w'] = decoder_attn_qkv_w
+            weights['decoder_attn_o_w'] = decoder_attn_o_w
+            weights['decoder_ffn_gate_w'] = decoder_ffn_gate_w
+            weights['decoder_ffn_up_w'] = decoder_ffn_up_w
+            weights['decoder_ffn_down_w'] = decoder_ffn_down_w
+            weights['decoder_pre_attn_norm_mod_w'] = decoder_pre_attn_norm_mod_w
+            weights['decoder_pre_attn_norm_mod_b'] = decoder_pre_attn_norm_mod_b
+            weights['decoder_pre_ffn_norm_mod_w'] = decoder_pre_ffn_norm_mod_w
+            weights['decoder_pre_ffn_norm_mod_b'] = decoder_pre_ffn_norm_mod_b
 
             weights['decoder_final_norm_mod_w'] = (
                 self.norm.dense.weight.data.T.contiguous().bfloat16())
