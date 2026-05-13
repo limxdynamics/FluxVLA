@@ -264,6 +264,7 @@ class LiberoEvalRunner:
                 # Setup
                 t = 0
                 replay_images = []
+                next_batch = None
                 if self.task_suite_name == 'libero_spatial':
                     max_steps = 220  # longest training demo has 193 steps
                 elif self.task_suite_name == 'libero_object':
@@ -288,13 +289,17 @@ class LiberoEvalRunner:
                             get_libero_dummy_action())
                         t += 1
                         continue
-                    obs['task_description'] = task_description
-                    obs['is_new_episode'] = is_new_episode
-                    batch, replay_img = self.dataset(obs)
+                    if next_batch is None:
+                        obs['task_description'] = task_description
+                        obs['is_new_episode'] = is_new_episode
+                        batch, replay_img = self.dataset(obs)
+                        if len(replay_images) == 0:
+                            replay_images.append(replay_img)
+                    else:
+                        batch = next_batch
+                        next_batch = None
                     is_new_episode = False
                     batch['unnorm_key'] = unnorm_key
-                    if len(replay_images) == 0:
-                        replay_images.append(replay_img)
                     with torch.autocast(
                             'cuda',
                             dtype=self.mixed_precision_dtype,
@@ -322,7 +327,9 @@ class LiberoEvalRunner:
                         replay_images.append(replay_img)
                         if done:
                             total_successes += 1
+                            next_batch = None
                             break
+                        next_batch = batch
                         t += 1
                     if done:
                         break

@@ -141,11 +141,13 @@ class DreamZeroVLA(BaseVLA):
         latent chunk used to refresh the KV cache, mirroring upstream
         ``lazy_joint_video_action`` instead of padding observations with zeros.
         """
-        if initial_cache_fill:
-            return video[:, :, :1]
-
         num_frame_per_block = self.vla_head.num_frame_per_block
         num_frames = video.shape[2]
+        if initial_cache_fill:
+            if num_frames in (4, 1 + 4 * num_frame_per_block):
+                return video[:, :, -1:]
+            return video[:, :, :1]
+
         if num_frames <= 1:
             return video
 
