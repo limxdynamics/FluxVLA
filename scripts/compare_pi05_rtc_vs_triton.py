@@ -233,11 +233,14 @@ def main():
     triton_cfg = resolve_triton_cfg(cfg)
 
     explicit_ckpt_path = resolve_checkpoint_path(args.ckpt_path)
-    normal_pretrained_path = resolve_checkpoint_path(
-        normal_cfg.get('pretrained_name_or_path'))
-    triton_pretrained_path = resolve_checkpoint_path(
-        triton_cfg.get('pretrained_name_or_path'))
-    num_views = int(triton_cfg.get('num_views', 0))
+    # normal_pretrained_path = resolve_checkpoint_path(
+    #     normal_cfg.get('pretrained_name_or_path'))
+    # triton_pretrained_path = resolve_checkpoint_path(
+    #     triton_cfg.get('pretrained_name_or_path'))
+    
+    normal_pretrained_path = resolve_checkpoint_path(args.ckpt_path)
+    triton_pretrained_path = resolve_checkpoint_path(args.ckpt_path)
+    num_views = int(triton_cfg.get('num_view', 0))
     if num_views <= 0:
         raise ValueError(f'Invalid num_views from inference config: {num_views}')
 

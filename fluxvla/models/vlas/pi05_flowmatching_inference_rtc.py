@@ -324,7 +324,7 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
     """
 
     def __init__(self,
-                 num_views=2,
+                 num_views=3,
                  triton_max_prompt_len=48,
                  num_steps=10,
                  *args,
