@@ -260,26 +260,28 @@ class DreamZeroVLA(BaseVLA):
         device = images.device
         # images: [B, C, T, H, W] (prepared by PrepareVideo)
         video = images
+        b, c, t_obs, h, w = video.shape
 
         if self.use_cache:
-            # Only reset cache when explicitly requested (e.g., new episode)
-            # Do NOT reset based on frame count alone, as single-frame input
-            # is the standard inference mode for DreamZero
-            if reset_history:
+            # Match upstream DreamZero causal inference: a single-frame input
+            # starts a fresh causal cache, not a continuation of old history.
+            reset_cache = reset_history or t_obs == 1
+            if reset_cache:
                 self.vla_head.reset_inference_state()
+        else:
+            reset_cache = reset_history
 
         if embodiment_ids is None:
             embodiment_ids = torch.zeros(
                 images.shape[0], dtype=torch.long, device=device)
 
-        b, c, t_obs, h, w = video.shape
         if self.use_cache:
             local_attn_size = getattr(self.vla_head.model, 'local_attn_size',
                                       -1)
             cache_window_full = (
                 local_attn_size != -1
                 and self.vla_head.current_start_frame >= local_attn_size)
-            initial_cache_fill = reset_history or (
+            initial_cache_fill = reset_cache or (
                 self.vla_head.current_start_frame == 0) or cache_window_full
             video_for_latents = self._prepare_cache_observation_video(
                 video, initial_cache_fill)
