@@ -395,7 +395,6 @@ def adarms_norm_kernel(x_ptr, style_ptr, normed_x_ptr, gate_ptr,
                 mask=mask)
 
 
-
 @triton.jit
 def adarms_norm_kernel_rowwise(
     x_ptr,
@@ -424,11 +423,13 @@ def adarms_norm_kernel_rowwise(
     psize = tl.num_programs(0)
     for i in range(pid, seq_len, psize):
         row_x_offset = i * features
-        sum_sq = tl.zeros((BLOCK_SIZE,), dtype=tl.float32)
+        sum_sq = tl.zeros((BLOCK_SIZE, ), dtype=tl.float32)
         for j in range(0, features, BLOCK_SIZE):
             cols = j + tl.arange(0, BLOCK_SIZE)
             mask = cols < features
-            x_val = tl.load(x_ptr + row_x_offset + cols, mask=mask, other=0.0).to(tl.float32)
+            x_val = tl.load(
+                x_ptr + row_x_offset + cols, mask=mask,
+                other=0.0).to(tl.float32)
             sum_sq += x_val * x_val
 
         rms_factor = tl.rsqrt(tl.sum(sum_sq) / features + 1e-6)
@@ -436,11 +437,25 @@ def adarms_norm_kernel_rowwise(
         for j in range(0, features, BLOCK_SIZE):
             cols = j + tl.arange(0, BLOCK_SIZE)
             mask = cols < features
-            x_val = tl.load(x_ptr + row_x_offset + cols, mask=mask, other=0.0).to(tl.float32)
+            x_val = tl.load(
+                x_ptr + row_x_offset + cols, mask=mask,
+                other=0.0).to(tl.float32)
             x_norm = x_val * rms_factor
-            s_scale = tl.load(adarms_mod_ptr + row_adarms_mod_offset + cols, mask=mask, other=0.0).to(tl.float32)
-            s_shift = tl.load(adarms_mod_ptr + row_adarms_mod_offset + features + cols, mask=mask, other=0.0).to(tl.float32)
-            s_gate = tl.load(adarms_mod_ptr + row_adarms_mod_offset + 2 * features + cols, mask=mask, other=0.0).to(tl.float32)
+            mod_base = adarms_mod_ptr + row_adarms_mod_offset
+            s_scale = tl.load(
+                mod_base + cols, mask=mask, other=0.0).to(tl.float32)
+            s_shift = tl.load(
+                mod_base + features + cols, mask=mask,
+                other=0.0).to(tl.float32)
+            s_gate = tl.load(
+                mod_base + 2 * features + cols, mask=mask,
+                other=0.0).to(tl.float32)
             output_val = x_norm * (1.0 + s_scale) + s_shift
-            tl.store(normed_x_ptr + row_x_offset + cols, output_val.to(tl.bfloat16), mask=mask)
-            tl.store(gate_ptr + row_x_offset + cols, s_gate.to(tl.bfloat16), mask=mask)
+            tl.store(
+                normed_x_ptr + row_x_offset + cols,
+                output_val.to(tl.bfloat16),
+                mask=mask)
+            tl.store(
+                gate_ptr + row_x_offset + cols,
+                s_gate.to(tl.bfloat16),
+                mask=mask)

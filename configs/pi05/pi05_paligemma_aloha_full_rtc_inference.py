@@ -180,10 +180,14 @@ inference_model = dict(
     ),
     proj_width=1024,
     n_action_steps=50,
-    action_in_proj=dict(type='LinearProjectorInference', in_dim=32, out_dim=1024),
-    action_out_proj=dict(type='LinearProjectorInference', in_dim=1024, out_dim=32),
-    time_mlp_in=dict(type='LinearProjectorInference', in_dim=1024, out_dim=1024),
-    time_mlp_out=dict(type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    action_in_proj=dict(
+        type='LinearProjectorInference', in_dim=32, out_dim=1024),
+    action_out_proj=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=32),
+    time_mlp_in=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    time_mlp_out=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
     max_action_dim=32,
     llm_expert=dict(
         type='ConditionGemmaInferenceModel',

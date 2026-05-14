@@ -76,18 +76,18 @@ class SigLIPViTBackboneInference(SigLIPViTBackbone):
             pre_ffn_norm_b = layer.layer_norm2.bias.data.bfloat16()
 
             if vision_attn_qkv_w is None:
-                vision_attn_qkv_w = torch.empty(
-                    (num_layers, *qkv_w.shape), dtype=torch.bfloat16)
-                vision_attn_qkv_b = torch.empty(
-                    (num_layers, *qkv_b.shape), dtype=torch.bfloat16)
-                vision_attn_o_w = torch.empty(
-                    (num_layers, *attn_o_w.shape), dtype=torch.bfloat16)
-                vision_attn_o_b = torch.empty(
-                    (num_layers, *attn_o_b.shape), dtype=torch.bfloat16)
-                vision_ffn_up_w = torch.empty(
-                    (num_layers, *ffn_up_w.shape), dtype=torch.bfloat16)
-                vision_ffn_up_b = torch.empty(
-                    (num_layers, *ffn_up_b.shape), dtype=torch.bfloat16)
+                vision_attn_qkv_w = torch.empty((num_layers, *qkv_w.shape),
+                                                dtype=torch.bfloat16)
+                vision_attn_qkv_b = torch.empty((num_layers, *qkv_b.shape),
+                                                dtype=torch.bfloat16)
+                vision_attn_o_w = torch.empty((num_layers, *attn_o_w.shape),
+                                              dtype=torch.bfloat16)
+                vision_attn_o_b = torch.empty((num_layers, *attn_o_b.shape),
+                                              dtype=torch.bfloat16)
+                vision_ffn_up_w = torch.empty((num_layers, *ffn_up_w.shape),
+                                              dtype=torch.bfloat16)
+                vision_ffn_up_b = torch.empty((num_layers, *ffn_up_b.shape),
+                                              dtype=torch.bfloat16)
                 vision_ffn_down_w = torch.empty(
                     (num_layers, *ffn_down_w.shape), dtype=torch.bfloat16)
                 vision_ffn_down_b = torch.empty(

@@ -305,7 +305,6 @@ Interpretation:
 - The incremental memory over the pre-existing baseline was about `38.4GB`.
 - This is larger than the available memory of a 24GB RTX 4090, so OOM on 4090 is expected for this current implementation.
 
-
 ### Single Triton memory profile after CPU prepare optimization
 
 Use the single-model profile script when you want deployment-like memory numbers without constructing the normal baseline model:

@@ -21,8 +21,11 @@ def __getattr__(name):
         'encode_predict_response',
     }
     _server = {'PolicyServer', 'create_server', 'serialize_actions'}
-    _optimizer = {'BaseOptimizer', 'PassThroughOptimizer', 'TimeParameterizationMPC'}
-    _optimizer = {"BaseOptimizer", "PassThroughOptimizer", "TimeParameterizationMPC"}
+    _optimizer = {
+        'BaseOptimizer',
+        'PassThroughOptimizer',
+        'TimeParameterizationMPC',
+    }
 
     if name in _public:
         from . import serializers
@@ -37,9 +40,9 @@ def __getattr__(name):
 
 
 __all__ = [
-    "BaseOptimizer",
-    "PassThroughOptimizer",
-    "TimeParameterizationMPC",
+    'BaseOptimizer',
+    'PassThroughOptimizer',
+    'TimeParameterizationMPC',
     'FORMAT_MSGPACK',
     'FORMAT_PROTOBUF',
     'MsgSerializer',

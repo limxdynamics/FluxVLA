@@ -105,16 +105,16 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 down_w = down_w.T.contiguous().bfloat16()
 
                 if encoder_attn_qkv_w is None:
-                    encoder_attn_qkv_w = torch.empty(
-                        (n, *qkv_w.shape), dtype=torch.bfloat16)
-                    encoder_attn_o_w = torch.empty(
-                        (n, *o_w.shape), dtype=torch.bfloat16)
-                    encoder_ffn_gate_w = torch.empty(
-                        (n, *gate_w.shape), dtype=torch.bfloat16)
-                    encoder_ffn_up_w = torch.empty(
-                        (n, *up_w.shape), dtype=torch.bfloat16)
-                    encoder_ffn_down_w = torch.empty(
-                        (n, *down_w.shape), dtype=torch.bfloat16)
+                    encoder_attn_qkv_w = torch.empty((n, *qkv_w.shape),
+                                                     dtype=torch.bfloat16)
+                    encoder_attn_o_w = torch.empty((n, *o_w.shape),
+                                                   dtype=torch.bfloat16)
+                    encoder_ffn_gate_w = torch.empty((n, *gate_w.shape),
+                                                     dtype=torch.bfloat16)
+                    encoder_ffn_up_w = torch.empty((n, *up_w.shape),
+                                                   dtype=torch.bfloat16)
+                    encoder_ffn_down_w = torch.empty((n, *down_w.shape),
+                                                     dtype=torch.bfloat16)
 
                 encoder_attn_qkv_w[i].copy_(qkv_w)
                 encoder_attn_o_w[i].copy_(o_w)
@@ -147,10 +147,13 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
             for i in range(n):
                 layer = expert[i]
 
-                pre_attn_mod_w = layer.input_layernorm.dense.weight.data.T.contiguous().bfloat16()
-                pre_attn_mod_b = layer.input_layernorm.dense.bias.data.bfloat16()
-                pre_ffn_mod_w = layer.post_attention_layernorm.dense.weight.data.T.contiguous().bfloat16()
-                pre_ffn_mod_b = layer.post_attention_layernorm.dense.bias.data.bfloat16()
+                attn_ln = layer.input_layernorm.dense
+                pre_attn_mod_w = (
+                    attn_ln.weight.data.T.contiguous().bfloat16())
+                pre_attn_mod_b = (attn_ln.bias.data.bfloat16())
+                ffn_ln = layer.post_attention_layernorm.dense
+                pre_ffn_mod_w = (ffn_ln.weight.data.T.contiguous().bfloat16())
+                pre_ffn_mod_b = (ffn_ln.bias.data.bfloat16())
 
                 q_w = layer.self_attn.q_proj.weight.data.float()
                 k_w = layer.self_attn.k_proj.weight.data.float()
@@ -161,21 +164,22 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 qkv_w = torch.cat([q_w.T, k_w.T, v_w.T], dim=1).bfloat16()
                 o_w = o_w.T.contiguous().bfloat16()
 
-                gate_w = layer.mlp.gate_proj.weight.data.T.contiguous().bfloat16()
-                up_w = layer.mlp.up_proj.weight.data.T.contiguous().bfloat16()
-                down_w = layer.mlp.down_proj.weight.data.T.contiguous().bfloat16()
+                mlp = layer.mlp
+                gate_w = (mlp.gate_proj.weight.data.T.contiguous().bfloat16())
+                up_w = (mlp.up_proj.weight.data.T.contiguous().bfloat16())
+                down_w = (mlp.down_proj.weight.data.T.contiguous().bfloat16())
 
                 if decoder_attn_qkv_w is None:
-                    decoder_attn_qkv_w = torch.empty(
-                        (n, *qkv_w.shape), dtype=torch.bfloat16)
-                    decoder_attn_o_w = torch.empty(
-                        (n, *o_w.shape), dtype=torch.bfloat16)
-                    decoder_ffn_gate_w = torch.empty(
-                        (n, *gate_w.shape), dtype=torch.bfloat16)
-                    decoder_ffn_up_w = torch.empty(
-                        (n, *up_w.shape), dtype=torch.bfloat16)
-                    decoder_ffn_down_w = torch.empty(
-                        (n, *down_w.shape), dtype=torch.bfloat16)
+                    decoder_attn_qkv_w = torch.empty((n, *qkv_w.shape),
+                                                     dtype=torch.bfloat16)
+                    decoder_attn_o_w = torch.empty((n, *o_w.shape),
+                                                   dtype=torch.bfloat16)
+                    decoder_ffn_gate_w = torch.empty((n, *gate_w.shape),
+                                                     dtype=torch.bfloat16)
+                    decoder_ffn_up_w = torch.empty((n, *up_w.shape),
+                                                   dtype=torch.bfloat16)
+                    decoder_ffn_down_w = torch.empty((n, *down_w.shape),
+                                                     dtype=torch.bfloat16)
                     decoder_pre_attn_norm_mod_w = torch.empty(
                         (n, *pre_attn_mod_w.shape), dtype=torch.bfloat16)
                     decoder_pre_attn_norm_mod_b = torch.empty(
@@ -196,16 +200,18 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
                 decoder_pre_ffn_norm_mod_b[i].copy_(pre_ffn_mod_b)
 
                 del (pre_attn_mod_w, pre_attn_mod_b, pre_ffn_mod_w,
-                     pre_ffn_mod_b, q_w, k_w, v_w, o_w, qkv_w, gate_w,
-                     up_w, down_w)
+                     pre_ffn_mod_b, q_w, k_w, v_w, o_w, qkv_w, gate_w, up_w,
+                     down_w)
 
             weights['decoder_attn_qkv_w'] = decoder_attn_qkv_w
             weights['decoder_attn_o_w'] = decoder_attn_o_w
             weights['decoder_ffn_gate_w'] = decoder_ffn_gate_w
             weights['decoder_ffn_up_w'] = decoder_ffn_up_w
             weights['decoder_ffn_down_w'] = decoder_ffn_down_w
-            weights['decoder_pre_attn_norm_mod_w'] = decoder_pre_attn_norm_mod_w
-            weights['decoder_pre_attn_norm_mod_b'] = decoder_pre_attn_norm_mod_b
+            weights['decoder_pre_attn_norm_mod_w'] = (
+                decoder_pre_attn_norm_mod_w)
+            weights['decoder_pre_attn_norm_mod_b'] = (
+                decoder_pre_attn_norm_mod_b)
             weights['decoder_pre_ffn_norm_mod_w'] = decoder_pre_ffn_norm_mod_w
             weights['decoder_pre_ffn_norm_mod_b'] = decoder_pre_ffn_norm_mod_b
 

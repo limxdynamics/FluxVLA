@@ -7,16 +7,12 @@ from fluxvla.engines import VLAS
 from fluxvla.ops.atomic_ops import (AttnMultiKey,
                                     adarms_matmul_k_1024_32_bias_res_rowwise,
                                     adarms_norm_mod_proj_rowwise,
-                                    adarms_norm_style_proj, conv2d_embed_res,
-                                    layer_norm_matmul_bias,
+                                    conv2d_embed_res, layer_norm_matmul_bias,
                                     layer_norm_matmul_bias_gelu,
                                     layer_norm_QKV_matmul_bias, matmul_attn_v,
-                                    matmul_bias_res, matmul_bias_silu,
-                                    matmul_bias_small, matmul_gate,
-                                    matmul_k_1024_2560_qkv_rope,
-                                    matmul_qkv_rope, matmul_res,
+                                    matmul_bias_res, matmul_bias_small,
+                                    matmul_k_1024_2560_qkv_rope, matmul_res,
                                     matmul_res_gate, matmul_small_gate,
-                                    matmul_small_res_gate,
                                     matmul_split_k_bias_res, rms_matmul_gate,
                                     rms_matmul_qkv_rope)
 from fluxvla.ops.triton.attention_triton_ops import (
@@ -353,7 +349,6 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         ei = self._enc_intermediate
         dh = self._dec_hidden
         di = self._dec_intermediate
-        ds = self._dec_style_dim
         hd = self._head_dim
         nkv = self._num_kv_heads
         ad = self._action_dim
@@ -527,15 +522,12 @@ class PI05FlowMatchingRTCInference(PI05FlowMatching):
         '''
         update the runtime adarms mods to timestep=0
         '''
-        self._triton_bufs[
-            'decoder_adarms_mod_attn'][:] = self._base_adarms_mod_attn_vec[:, :,
-                                                                           None, :]
-        self._triton_bufs[
-            'decoder_adarms_mod_ffn'][:] = self._base_adarms_mod_ffn_vec[:, :,
-                                                                         None, :]
-        self._triton_bufs[
-            'decoder_adarms_mod_final'][:] = self._base_adarms_mod_final_vec[:,
-                                                                             None, :]
+        self._triton_bufs['decoder_adarms_mod_attn'][:] = (
+            self._base_adarms_mod_attn_vec[:, :, None, :])
+        self._triton_bufs['decoder_adarms_mod_ffn'][:] = (
+            self._base_adarms_mod_ffn_vec[:, :, None, :])
+        self._triton_bufs['decoder_adarms_mod_final'][:] = (
+            self._base_adarms_mod_final_vec[:, None, :])
 
         if prefill_len > 0:
             self._triton_bufs[

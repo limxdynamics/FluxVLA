@@ -30,9 +30,12 @@ def parse_args():
     parser.add_argument(
         '--dtype', default='bf16', choices=['bf16', 'fp16', 'fp32'])
     parser.add_argument(
-        '--optimizer',default='passthrough',choices=['passthrough','time_mpc'])
-    parser.add_argument('--optimizer-horizon',type=int,default=20)
-    parser.add_argument('--dataset-key',
+        '--optimizer',
+        default='passthrough',
+        choices=['passthrough', 'time_mpc'])
+    parser.add_argument('--optimizer-horizon', type=int, default=20)
+    parser.add_argument(
+        '--dataset-key',
         default=None,
         choices=['inference', 'eval'],
         help='Config key to load dataset pipeline from')
@@ -114,9 +117,16 @@ def main():
     else:
         print('[serve] WARNING: No dataset pipeline found in config.')
 
-    dtype_map={'bf16':torch.bfloat16,'fp16':torch.float16,'fp32':torch.float32}
-    from .optimizer import PassThroughOptimizer,TimeParameterizationMPC
-    optimizer=TimeParameterizationMPC(horizon=args.optimizer_horizon)if args.optimizer=='time_mpc'else PassThroughOptimizer()
+    dtype_map = {
+        'bf16': torch.bfloat16,
+        'fp16': torch.float16,
+        'fp32': torch.float32,
+    }
+    from .optimizer import PassThroughOptimizer, TimeParameterizationMPC
+    if args.optimizer == 'time_mpc':
+        optimizer = TimeParameterizationMPC(horizon=args.optimizer_horizon)
+    else:
+        optimizer = PassThroughOptimizer()
     print(f'[serve] Using {optimizer.__class__.__name__}')
 
     from .zmq_server import create_server

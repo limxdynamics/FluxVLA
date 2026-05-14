@@ -286,9 +286,8 @@ class BaseInferenceRunner:
                 self.vla.to(device='cuda', dtype=self.mixed_precision_dtype)
             else:
                 if self.vla.__class__.__name__ in (
-                    'PI05FlowMatchingInference',
-                    'PI05FlowMatchingRTCInference'
-                ):
+                        'PI05FlowMatchingInference',
+                        'PI05FlowMatchingRTCInference'):
                     # load checkpoint to cpu, waiting to copy weights
                     pass
                 else:
@@ -361,7 +360,7 @@ class BaseInferenceRunner:
                     time0 = time.perf_counter()
                     raw_action = self._predict_action(inputs)
                     torch.cuda.synchronize()
-                    print(f"{time.perf_counter() - time0} s.")
+                    print(f'{time.perf_counter() - time0} s.')
 
                 actions = self._postprocess_actions(raw_action)
                 # print(f"actions : {actions}")

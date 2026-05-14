@@ -1,13 +1,14 @@
 from __future__ import annotations
-from abc import ABC
-from abc import abstractmethod
-from dataclasses import dataclass
 import time
+from abc import ABC, abstractmethod
+
 import numpy as np
 import osqp
 import scipy.sparse as sp
 
+
 class BaseOptimizer(ABC):
+
     @classmethod
     @abstractmethod
     def from_config(cls, inference_cfg):
@@ -19,6 +20,7 @@ class BaseOptimizer(ABC):
 
 
 class PassThroughOptimizer(BaseOptimizer):
+
     @classmethod
     def from_config(cls, inference_cfg):
         return cls()
@@ -26,7 +28,9 @@ class PassThroughOptimizer(BaseOptimizer):
     def optimize(self, action_list: list) -> list:
         return action_list
 
+
 class TimeParameterizationMPC(BaseOptimizer):
+
     @classmethod
     def from_config(cls, inference_cfg):
         return cls(
@@ -72,10 +76,10 @@ class TimeParameterizationMPC(BaseOptimizer):
 
     def solve_qp(self, k: int) -> np.ndarray:
         H = min(self.H, self.N - k - 1)
-        dp = self.dp[k : k + H]
+        dp = self.dp[k:k + H]
         dp_norm = np.linalg.norm(dp, axis=1)
-        scale_time = self.s_ref ** 2 + 1e-6
-        scale_acc = np.mean((dp_norm * self.s_ref) ** 2) + 1e-6
+        scale_time = self.s_ref**2 + 1e-6
+        scale_acc = np.mean((dp_norm * self.s_ref)**2) + 1e-6
         lambda_time = self.lambda_time / scale_time
         lambda_acc = self.lambda_acc / scale_acc
 
@@ -84,8 +88,8 @@ class TimeParameterizationMPC(BaseOptimizer):
         P += 2 * lambda_time * np.eye(n_var)
 
         for i in range(H - 1):
-            P[i, i] += 2 * lambda_acc * np.sum(dp[i] ** 2)
-            P[i + 1, i + 1] += 2 * lambda_acc * np.sum(dp[i + 1] ** 2)
+            P[i, i] += 2 * lambda_acc * np.sum(dp[i]**2)
+            P[i + 1, i + 1] += 2 * lambda_acc * np.sum(dp[i + 1]**2)
             P[i, i + 1] -= 2 * lambda_acc * np.dot(dp[i], dp[i + 1])
             P[i + 1, i] -= 2 * lambda_acc * np.dot(dp[i], dp[i + 1])
         P = sp.csc_matrix(P)
@@ -93,30 +97,36 @@ class TimeParameterizationMPC(BaseOptimizer):
         q = -2 * lambda_time * self.s_ref * np.ones(n_var)
 
         A = sp.eye(n_var)
-        l = self.s_min * np.ones(n_var)
-        u = self.s_max * np.ones(n_var)
+        lb = self.s_min * np.ones(n_var)
+        ub = self.s_max * np.ones(n_var)
 
         if self.v_max is not None:
             A_v = sp.eye(n_var)
             dp_norm = np.linalg.norm(dp, axis=1)
-            l_v = np.zeros(n_var)
-            u_v = self.v_max / (dp_norm + 1e-8)
+            lb_v = np.zeros(n_var)
+            ub_v = self.v_max / (dp_norm + 1e-8)
             A = sp.vstack([A, A_v])
-            l = np.concatenate([l, l_v])
-            u = np.concatenate([u, u_v])
+            lb = np.concatenate([lb, lb_v])
+            ub = np.concatenate([ub, ub_v])
 
         prob = osqp.OSQP()
-        prob.setup(P=P, q=q, A=A, l=l, u=u, verbose=False)
+        prob.setup(P=P, q=q, A=A, l=lb, u=ub, verbose=False)
         res = prob.solve()
-        if res.info.status != "solved":
-            raise RuntimeError("OSQP failed")
+        if res.info.status != 'solved':
+            raise RuntimeError('OSQP failed')
         return np.asarray(res.x, dtype=np.float64)
 
     def re_allocate(self, waypoints: np.ndarray, ts: np.ndarray) -> np.ndarray:
         ts_out = np.arange(len(waypoints)) * self.dt_ref
-        return np.apply_along_axis(lambda col: np.interp(ts_out, ts, col), axis=0, arr=waypoints)
+        return np.apply_along_axis(
+            lambda col: np.interp(ts_out, ts, col), axis=0, arr=waypoints)
 
-    def solve(self, waypoints: np.ndarray, st_roll: int, end_roll: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def solve(
+        self,
+        waypoints: np.ndarray,
+        st_roll: int,
+        end_roll: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         self.dp = waypoints[1:] - waypoints[:-1]
         self.N = len(self.dp)
         s_traj: list[float] = []
@@ -128,14 +138,16 @@ class TimeParameterizationMPC(BaseOptimizer):
             end = time.time()
             if self.logging:
                 print(end - st)
-            s_traj += s_opt[: self.solve_stride].tolist()
+            s_traj += s_opt[:self.solve_stride].tolist()
             k += self.solve_stride
 
-        s_traj = np.asarray(s_traj)[: (end_roll - st_roll)]
+        s_traj = np.asarray(s_traj)[:(end_roll - st_roll)]
         dt_traj = 1.0 / s_traj
         dt_traj = np.concatenate((dt_traj[:1], dt_traj, dt_traj[-1:]), axis=0)
         t = np.concatenate([[0.0], np.cumsum(dt_traj)])[:-1]
-        optim_wp = self.re_allocate(waypoints[st_roll:end_roll], t[:(end_roll-st_roll)])
+        wp_slice = waypoints[st_roll:end_roll]
+        t_slice = t[:(end_roll - st_roll)]
+        optim_wp = self.re_allocate(wp_slice, t_slice)
         return optim_wp, t, dt_traj
 
     def optimize(self, action_list: list) -> list:

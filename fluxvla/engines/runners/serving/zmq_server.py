@@ -251,7 +251,8 @@ def create_server(
             actions_np = actions.cpu().numpy()
             actions_list = actions_np.tolist()
             optimized_actions = optimizer.optimize(actions_list)
-            actions = torch.from_numpy(np.array(optimized_actions, dtype=np.float32))
+            actions = torch.from_numpy(
+                np.array(optimized_actions, dtype=np.float32))
 
         action_bytes = serialize_actions(actions)
 
