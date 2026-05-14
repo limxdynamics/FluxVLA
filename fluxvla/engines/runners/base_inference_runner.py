@@ -360,10 +360,10 @@ class BaseInferenceRunner:
                     time0 = time.perf_counter()
                     raw_action = self._predict_action(inputs)
                     torch.cuda.synchronize()
-                    print(f'{time.perf_counter() - time0} s.')
+                    print(f'prediction time :'
+                          f' {(time.perf_counter() - time0) * 1000} ms.')
 
                 actions = self._postprocess_actions(raw_action)
-                # print(f"actions : {actions}")
                 self._execute_actions(actions, rate)
 
                 self._prev_ctx = self._action_ctx

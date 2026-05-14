@@ -264,12 +264,12 @@ class AlohaInferenceRunner(BaseInferenceRunner):
             if self.execute_horizon is not None:
                 actions = actions[:self.execute_horizon]
 
-        # self.ros_operator.execute_trajectory(
-        #     actions[:, :7],
-        #     actions[:, 7:14],
-        #     dt=self.dt,
-        #     async_exec=self.async_execution,
-        #     base_velocity=actions[:, 14:16] if self.use_robot_base else None)
+        self.ros_operator.execute_trajectory(
+            actions[:, :7],
+            actions[:, 7:14],
+            dt=self.dt,
+            async_exec=self.async_execution,
+            base_velocity=actions[:, 14:16] if self.use_robot_base else None)
 
         if self.async_execution and self.execute_horizon is not None:
             time.sleep(self.execute_horizon * self.dt)
