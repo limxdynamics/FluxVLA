@@ -16,11 +16,11 @@
 # DreamZero – LIBERO-10 full fine-tune config
 #
 # Video setup:
-#   frame_window_size = 33 (current frame + 32 future frames for
+#   frame_window_size = 17 (current frame + 16 future frames for
 #   dynamics supervision).  The first frame is the conditioning
-#   observation; the remaining frames form 4 chunks of K=2 latent frames.
+#   observation; the remaining frames form 2 chunks of K=2 latent frames.
 #   VAE temporal compression: latent_frames = 1 + (T-1)//4
-#   T=33 -> 9 latent frames -> 1 conditioning + 8 future latents.
+#   T=17 -> 5 latent frames -> 1 conditioning + 4 future latents.
 #
 # Image layout : 2 views (agentview + wrist) @ 128x128 each
 #                tiled vertically → 256×128
@@ -38,7 +38,7 @@
 _ckpt_root = './checkpoints'
 _tokenizer = _ckpt_root + '/Wan2.1-I2V-14B-480P/google/umt5-xxl'
 
-_frame_window_size = 33
+_frame_window_size = 17
 
 model = dict(
     type='DreamZeroVLA',
@@ -91,7 +91,7 @@ model = dict(
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
         cfg_scale=5.0,
-        max_chunk_size=4),
+        max_chunk_size=2),
     name_mapping={
         'vla_head.model': 'action_head.model',
         'vlm_backbone.text_encoder': 'action_head.text_encoder',
@@ -160,7 +160,7 @@ train_dataloader = dict(
                     frame_window_size=_frame_window_size,
                 ),
             ],
-            action_window_size=40,
+            action_window_size=20,
             action_key='action',
             use_delta=False,
             statistic_name='libero_10_no_noops',
