@@ -381,55 +381,34 @@ class DreamZeroHead(nn.Module):
             action_loss=weighted_action_loss,
         )
 
-    def _create_kv_caches(
+    def _create_cache_pair(
         self,
         batch_size: int,
         dtype: torch.dtype,
         device: torch.device,
+        cache_seq_len: int,
     ) -> tuple[KVCacheType, KVCacheType]:
         """
-        Initialize a Per-GPU KV cache for the Wan model.
+        Initialize a pair of Per-GPU caches for the Wan model.
         Use the model's num_heads and head_dim (5B has 24 heads, 14B has 40).
         """
         num_heads = self.model.num_heads
         head_dim = self.model.dim // num_heads
-        kv_cache1: KVCacheType = []
-        kv_cache_neg: KVCacheType = []
+        cache: KVCacheType = []
+        cache_neg: KVCacheType = []
         for _ in range(self.model.num_layers):
-            kv_cache1.append(
-                torch.zeros([2, batch_size, 0, num_heads, head_dim],
-                            dtype=dtype,
-                            device=device), )
-            kv_cache_neg.append(
-                torch.zeros([2, batch_size, 0, num_heads, head_dim],
-                            dtype=dtype,
-                            device=device), )
+            cache.append(
+                torch.zeros(
+                    [2, batch_size, cache_seq_len, num_heads, head_dim],
+                    dtype=dtype,
+                    device=device), )
+            cache_neg.append(
+                torch.zeros(
+                    [2, batch_size, cache_seq_len, num_heads, head_dim],
+                    dtype=dtype,
+                    device=device), )
 
-        return kv_cache1, kv_cache_neg
-
-    def _create_crossattn_caches(
-            self, batch_size: int, dtype: torch.dtype,
-            device: torch.device) -> tuple[KVCacheType, KVCacheType]:
-        """
-        Initialize a Per-GPU cross-attention cache for the Wan model.
-        Use the model's num_heads and head_dim (5B has 24 heads, 14B has 40).
-        """
-        num_heads = self.model.num_heads
-        head_dim = self.model.dim // num_heads
-        crossattn_cache: KVCacheType = []
-        crossattn_cache_neg: KVCacheType = []
-
-        for _ in range(self.model.num_layers):
-            crossattn_cache.append(
-                torch.zeros([2, batch_size, 512, num_heads, head_dim],
-                            dtype=dtype,
-                            device=device), )
-            crossattn_cache_neg.append(
-                torch.zeros([2, batch_size, 512, num_heads, head_dim],
-                            dtype=dtype,
-                            device=device), )
-
-        return crossattn_cache, crossattn_cache_neg
+        return cache, cache_neg
 
     def reset_inference_state(self) -> None:
         self.inference_kv_cache = None
@@ -692,16 +671,18 @@ class DreamZeroHead(nn.Module):
         num_inference_steps: int,
         observed_latent_frames: int,
     ) -> torch.Tensor:
-        local_kv_cache, local_kv_cache_neg = self._create_kv_caches(
+        local_kv_cache, local_kv_cache_neg = self._create_cache_pair(
             batch_size=states.shape[0],
             dtype=latents.dtype,
             device=states.device,
+            cache_seq_len=0,
         )
         local_crossattn_cache, local_crossattn_cache_neg = (
-            self._create_crossattn_caches(
+            self._create_cache_pair(
                 batch_size=states.shape[0],
                 dtype=latents.dtype,
                 device=states.device,
+                cache_seq_len=512,
             ))
         observed_latents = latents[:, :, :observed_latent_frames]
         self._single_flowmatching_step(
@@ -801,17 +782,19 @@ class DreamZeroHead(nn.Module):
             if should_reset:
                 self.reset_inference_state()
                 prompt_embs = self._as_prompt_emb_list(prompt_embs)
-                cache_pair = self._create_kv_caches(
+                cache_pair = self._create_cache_pair(
                     batch_size=states.shape[0],
                     dtype=latents.dtype,
                     device=device,
+                    cache_seq_len=0,
                 )
                 self.inference_kv_cache, self.inference_kv_cache_neg = (
                     cache_pair)
-                crossattn_pair = self._create_crossattn_caches(
+                crossattn_pair = self._create_cache_pair(
                     batch_size=states.shape[0],
                     dtype=latents.dtype,
                     device=device,
+                    cache_seq_len=512,
                 )
                 (self.inference_crossattn_cache,
                  self.inference_crossattn_cache_neg) = crossattn_pair
@@ -823,24 +806,30 @@ class DreamZeroHead(nn.Module):
             assert self.inference_crossattn_cache is not None
             assert self.inference_crossattn_cache_neg is not None
 
-            if self.current_start_frame == 0:
+            kv_caches = [
+                self.inference_kv_cache,
+                self.inference_kv_cache_neg,
+            ]
+            crossattn_caches = [
+                self.inference_crossattn_cache,
+                self.inference_crossattn_cache_neg,
+            ]
+
+            is_initial_cache_fill = self.current_start_frame == 0
+            has_reference_history = self.current_start_frame > 1
+
+            if is_initial_cache_fill:
                 self._single_flowmatching_step(
                     prompt_embs=prompt_embs,
                     reference_latents=observed_latents[:, :, :1],
                     clip_feas=self.inference_clip_feas,
                     ys=self.inference_ys[:, :, :1],
                     start_frame=0,
-                    kv_caches=[
-                        self.inference_kv_cache, self.inference_kv_cache_neg
-                    ],
-                    crossattn_caches=[
-                        self.inference_crossattn_cache,
-                        self.inference_crossattn_cache_neg
-                    ],
+                    kv_caches=kv_caches,
+                    crossattn_caches=crossattn_caches,
                 )
                 self.current_start_frame = 1
-
-            if self.current_start_frame != 1:
+            elif has_reference_history:
                 num_reference_frames = min(self.num_frame_per_block,
                                            observed_latent_frames)
                 reference_latents = observed_latents[:, :,
@@ -864,13 +853,8 @@ class DreamZeroHead(nn.Module):
                     clip_feas=self.inference_clip_feas,
                     ys=y_reference,
                     start_frame=reference_start_frame,
-                    kv_caches=[
-                        self.inference_kv_cache, self.inference_kv_cache_neg
-                    ],
-                    crossattn_caches=[
-                        self.inference_crossattn_cache,
-                        self.inference_crossattn_cache_neg
-                    ],
+                    kv_caches=kv_caches,
+                    crossattn_caches=crossattn_caches,
                 )
 
             denoise_frames = self.num_frame_per_block
