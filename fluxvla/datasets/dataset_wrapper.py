@@ -47,8 +47,9 @@ class DistributedRepeatingDataset(IterableDataset):
             to collect statistics.
         name_mappings (dict, optional): Mappings for
             statistic names. Defaults to None.
-        shuffle (bool): Whether to shuffle the dataset
-            at each epoch.
+        shuffle (bool): Whether to shuffle the dataset.
+        reshuffle_each_epoch (bool): Whether to change the shuffle order
+            after each full pass over the local shard. Defaults to False.
         seed (int): Seed for random number generation.
         statistic_name (str): Name for the statistics collection.
         dim (int, optional): Target dimension for padding/copying data.
@@ -61,11 +62,13 @@ class DistributedRepeatingDataset(IterableDataset):
                  statistic_keys: List[str],
                  name_mappings: Dict = None,
                  shuffle: bool = True,
+                 reshuffle_each_epoch: bool = False,
                  seed: int = 42,
                  statistic_name: str = 'private',
                  dim: Optional[int] = None,
                  dataset_statistics: Optional[Dict] = None) -> None:
         self.shuffle = shuffle
+        self.reshuffle_each_epoch = reshuffle_each_epoch
         self.seed = seed
         self.statistic_name = statistic_name
         self.dim = dim
@@ -179,6 +182,7 @@ class DistributedRepeatingDataset(IterableDataset):
         # Get the rank and world size from the overwatch
         self.rank = overwatch.rank()
         self.world_size = overwatch.world_size()
+        self._epoch = 0
 
     def _get_item_from_global_idx(self, global_idx):
         """Get item from global index, handling single, list,
@@ -473,11 +477,11 @@ class DistributedRepeatingDataset(IterableDataset):
         total_world = self.world_size * num_workers
         total_rank = self.rank * num_workers + worker_id
 
-        epoch = 0
         while True:
             indices = np.arange(self.total_len)
             if self.shuffle:
-                rng = np.random.default_rng(self.seed + epoch)
+                epoch_offset = self._epoch if self.reshuffle_each_epoch else 0
+                rng = np.random.default_rng(self.seed + epoch_offset)
                 rng.shuffle(indices)
 
             shard = indices[total_rank::total_world].tolist()
@@ -485,7 +489,8 @@ class DistributedRepeatingDataset(IterableDataset):
             for idx in shard:
                 yield self._get_item_from_global_idx(idx)
 
-            epoch += 1
+            if self.reshuffle_each_epoch:
+                self._epoch += 1
 
     def __len__(self):
         """Return the total length of all datasets."""
