@@ -384,10 +384,12 @@ class TransformImage:
         stds: Optional[List[Tuple[float, float, float]]] = None,
         letterbox_fill: Optional[List[int]] = None,
         letterbox_pad_position: Optional[str] = None,
+        interpolation: str = 'bilinear',
         **kwargs: str,
     ) -> None:
         self.use_fused_vision_backbone = use_fused_vision_backbone
         self.image_resize_strategy = image_resize_strategy
+        self.interpolation = interpolation
 
         # Handle `None` default values
         input_sizes = [(3, 224, 224)] if input_sizes is None else input_sizes
@@ -413,7 +415,7 @@ class TransformImage:
         for idx in range(len(input_sizes)):
             self.resize_params.append({
                 'size': input_sizes[idx][-2:],
-                'interpolation': 'bilinear'
+                'interpolation': interpolation
             })
             self.crop_params.append({'output_size': input_sizes[idx][-2:]})
             self.normalize_params.append({
@@ -458,13 +460,17 @@ class TransformImage:
         if self.image_resize_strategy == 'resize-naive':
             # Resize without keeping the aspect ratio (naive resize)
             img_resized = img.resize(resize_param['size'],
-                                     Image.Resampling.BILINEAR)
+                                     self._get_pil_resampling(
+                                         resize_param['interpolation']))
         else:
             if self.do_letterbox:
-                img = self.letterbox_pad_transform(img, self.letterbox_fill)
+                img = self.letterbox_pad_transform(
+                    img, resize_param['size'], resize_param['interpolation'],
+                    self.letterbox_fill)
             # Resize the image
             img_resized = img.resize(resize_param['size'],
-                                     Image.Resampling.BILINEAR)
+                                     self._get_pil_resampling(
+                                         resize_param['interpolation']))
 
         # Center crop
         left = (img_resized.width - crop_param['output_size'][0]) // 2
@@ -518,14 +524,28 @@ class TransformImage:
 
         return np.concatenate(pixel_values)
 
+    @staticmethod
+    def _get_pil_resampling(interpolation: str) -> Image.Resampling:
+        interpolation = interpolation.lower()
+        if interpolation == 'bilinear':
+            return Image.Resampling.BILINEAR
+        if interpolation == 'bicubic':
+            return Image.Resampling.BICUBIC
+        if interpolation == 'lanczos':
+            return Image.Resampling.LANCZOS
+        if interpolation == 'nearest':
+            return Image.Resampling.NEAREST
+        raise ValueError(f'Unsupported interpolation: {interpolation}')
+
     def __call__(self, inputs: Dict, **kwargs) -> dict:
         images = inputs['pixel_values']
         inputs['pixel_values'] = torch.from_numpy(
             self.preprocess(images, **kwargs)).float()
         return inputs
 
-    def letterbox_pad_transform(self, img: Image.Image,
-                                fill_color: List[int]) -> Image.Image:
+    def letterbox_pad_transform(
+            self, img: Image.Image, size: Tuple[int, int], interpolation: str,
+            fill_color: Tuple[int, int, int]) -> Image.Image:
         """Apply letterbox padding to the image to fit the target size.
         This method resizes the image to fit within the target dimensions
         while maintaining the aspect ratio, and pads the remaining
@@ -534,15 +554,20 @@ class TransformImage:
 
         Args:
             img (Image.Image): The input image to be padded.
-            fill_color (List[int]): The RGB color to use for padding.
+            size (Tuple[int, int]): The target size as (width, height).
+            interpolation (str): Interpolation mode used for resizing.
+            fill_color (Tuple[int, int, int]): The RGB color to use
+                for padding.
+
         Returns:
             Image.Image: The padded image with the target dimensions.
         """
-        target_width, target_height = self.resize_params[0]['size']
+        target_width, target_height = size
         ratio = max(img.width / target_width, img.height / target_height)
         new_w = max(1, round(img.width / ratio))
         new_h = max(1, round(img.height / ratio))
-        img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+        img = img.resize((new_w, new_h),
+                         self._get_pil_resampling(interpolation))
         if isinstance(fill_color, list):
             fill_color = tuple(fill_color)
         new_img = Image.new('RGB', (target_width, target_height), fill_color)

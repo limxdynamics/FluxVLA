@@ -35,16 +35,29 @@ class PretrainedTokenizer:
         model_path: str,
         model_max_length: int = 2048,
         padding_side: str = 'right',
+        tokenizer_cls: Optional[str] = None,
     ) -> None:
         """Load tokenizer from a path or repo id and record the original argument."""  # noqa: E501
         # Avoid top-level import to reduce environment constraints
+        import transformers
         from transformers import AutoTokenizer
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_path,
-            model_max_length=model_max_length,
-            padding_side=padding_side,
-        )
+        if tokenizer_cls is None:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_path,
+                model_max_length=model_max_length,
+                padding_side=padding_side,
+            )
+        else:
+            tokenizer_type = getattr(transformers, tokenizer_cls, None)
+            if tokenizer_type is None:
+                raise ValueError(
+                    f'Unknown tokenizer class: {tokenizer_cls}')
+            self.tokenizer = tokenizer_type.from_pretrained(
+                model_path,
+                model_max_length=model_max_length,
+                padding_side=padding_side,
+            )
         self.model_path = model_path  # Keep original argument for source resolution  # noqa: E501
         self.copy_attrs_from_obj()
 

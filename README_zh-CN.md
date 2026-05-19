@@ -34,6 +34,7 @@ FluxVLA Engine是面向具身智能落地应用的全链路一体化工程平台
 | FluxVLA(Pi)                 |      98.6      |     99.0      |    97.8     |   96±1.0    |     97.85      |
 | FluxVLA(Qwen3VL 0.6B+GR00T) |      98.6      |     99.6      |    95.6     |  92.2±1.8   |     96.50      |
 | FluxVLA(DreamZero)          |      96.8      |     97.4      |  90.8±1.5   |    93.6     |     94.65      |
+| FluxVLA(XVLA)               |      98.8      |     99.8      |    96.8     |    93.2     |     97.15      |
 
 ## 📢 最新动态
 
@@ -308,6 +309,7 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 | PI0_base    | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_base)    |
 | PI05_base   | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_base)   |
 | PI05_libero | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_libero) |
+| X-VLA-PT    | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/X-VLA-PT) |
 
 </details>
 
@@ -360,7 +362,6 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_libero_10_full_finetune_bs64/*" --local-dir ./checkpoints/pi05_paligemma_libero_10_full_finetune_bs64
 ```
 
-</details>
 
 ## 🌟 特性
 

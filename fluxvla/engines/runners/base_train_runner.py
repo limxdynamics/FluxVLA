@@ -64,6 +64,18 @@ class BaseTrainRunner(ABC):
             Defaults to 'constant'.
         warmup_ratio (int, optional): Warm-up ratio for learning rate
             scheduler. Defaults to 0.
+        freeze_steps (int, optional): Number of initial steps during which
+            selected parameter groups are frozen. Defaults to 0.
+        warmup_steps (int, optional): Warm-up steps after freeze for
+            groupwise schedules. Defaults to 0.
+        lr_coef (float, optional): Learning rate multiplier for reduced-rate
+            parameter groups. Defaults to 1.0.
+        betas (tuple, optional): AdamW beta values. Defaults to (0.9, 0.999).
+        use_cosine_decay (bool, optional): Whether groupwise schedules use
+            cosine decay after warm-up. Defaults to False.
+        min_lr_ratio (float, optional): Minimum LR ratio for groupwise cosine
+            decay.
+            Defaults to 0.1.
         enable_gradient_checkpointing (bool, optional): Enable gradient
             checkpointing. Defaults to True.
         enable_mixed_precision_training (bool, optional): Enable mixed
@@ -92,8 +104,15 @@ class BaseTrainRunner(ABC):
                  lr_scheduler_type: str = 'constant',
                  lr_schedule: Optional[Dict[float, float]] = None,
                  warmup_ratio: int = 0,
+                 freeze_steps: int = 0,
+                 warmup_steps: int = 0,
+                 lr_coef: float = 1.0,
+                 betas: tuple = (0.9, 0.999),
+                 use_cosine_decay: bool = False,
+                 min_lr_ratio: float = 0.1,
                  enable_gradient_checkpointing: bool = True,
                  enable_mixed_precision_training: bool = True,
+                 convert_batch_float_to_mixed_precision: bool = True,
                  reduce_in_full_precision: bool = True,
                  mixed_precision_dtype: str = 'bf16',
                  tokenizer: Optional[Dict] = None,
@@ -139,8 +158,16 @@ class BaseTrainRunner(ABC):
         self.save_full_model = save_full_model
         self.lr_scheduler_type = lr_scheduler_type
         self.warmup_ratio = warmup_ratio
+        self.freeze_steps = freeze_steps
+        self.warmup_steps = warmup_steps
+        self.lr_coef = lr_coef
+        self.betas = tuple(float(b) for b in betas)
+        self.use_cosine_decay = use_cosine_decay
+        self.min_lr_ratio = min_lr_ratio
         self.enable_gradient_checkpointing = enable_gradient_checkpointing
         self.enable_mixed_precision_training = enable_mixed_precision_training
+        self.convert_batch_float_to_mixed_precision = \
+            convert_batch_float_to_mixed_precision
         self.reduce_in_full_precision = reduce_in_full_precision
         self.mixed_precision_dtype = str_to_dtype(mixed_precision_dtype)
         self.per_device_batch_size = cfg.train_dataloader.per_device_batch_size
@@ -169,6 +196,8 @@ class BaseTrainRunner(ABC):
         self.optimizer_state_loaded = False
         # Store lr_schedule for step-based scheduler
         self.lr_schedule = lr_schedule
+        self.weight_decay = None
+        self.num_training_steps = None
         self._active_dataloader = None
 
         # Lightweight Validation
@@ -245,44 +274,6 @@ class BaseTrainRunner(ABC):
         shutdown_fn = getattr(iterator, '_shutdown_workers', None)
         if callable(shutdown_fn):
             shutdown_fn()
-
-    def cleanup(self) -> None:
-        """Release training resources before launching evaluation."""
-        self._shutdown_dataloader(self._active_dataloader)
-        self._active_dataloader = None
-
-        if self.optimizer is not None:
-            try:
-                self.optimizer.zero_grad(set_to_none=True)
-            except TypeError:
-                self.optimizer.zero_grad()
-
-        if self.vla is not None:
-            try:
-                self.vla.zero_grad(set_to_none=True)
-            except TypeError:
-                self.vla.zero_grad()
-
-        self.optimizer = None
-        self.lr_scheduler = None
-        self.collator = None
-        self.tokenizer = None
-        self.vla = None
-        self._loss_accumulator.clear()
-
-        if hasattr(self, 'recent_losses'):
-            self.recent_losses.clear()
-
-        gc.collect()
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            ipc_collect = getattr(torch.cuda, 'ipc_collect', None)
-            if callable(ipc_collect):
-                try:
-                    ipc_collect()
-                except RuntimeError:
-                    pass
 
     @abstractmethod
     def save_checkpoint(
@@ -504,6 +495,7 @@ class BaseTrainRunner(ABC):
                 'step-based'.
         """
         # Calculate number of training steps
+        self.weight_decay = weight_decay
         n_train_examples = math.ceil(
             n_train_examples / self.global_batch_size) * self.global_batch_size
         if self.max_steps is None:
@@ -511,6 +503,7 @@ class BaseTrainRunner(ABC):
                                   self.max_epochs) // self.global_batch_size
         else:
             num_training_steps = self.max_steps
+        self.num_training_steps = num_training_steps
 
         if self.lr_scheduler_type == 'linear-warmup+cosine-decay':
             # Set warm-up steps (floor) based on `warmup_ratio`
@@ -629,9 +622,100 @@ class BaseTrainRunner(ABC):
             self.lr_scheduler = get_step_based_schedule(
                 self.optimizer, num_training_steps, lr_schedule)
 
+        elif self._uses_groupwise_lr_schedule():
+            param_groups = self._build_groupwise_param_groups(weight_decay)
+            self.optimizer = AdamW(param_groups, betas=self.betas)
+            self.lr_scheduler = get_constant_schedule(self.optimizer)
+            self._update_groupwise_lrs(self.metric.global_step)
+
         else:
             raise ValueError(f'Learning Rate Schedule with type '
                              f"'{self.lr_scheduler_type}' is not supported!")
+
+    def _get_log_lr(self) -> float:
+        if self._uses_groupwise_lr_schedule():
+            for group in self.optimizer.param_groups:
+                if group.get('name') == 'action_heads':
+                    return group['lr']
+        return self.lr_scheduler.get_last_lr()[0]
+
+    def _uses_groupwise_lr_schedule(self) -> bool:
+        return self.lr_scheduler_type == 'groupwise-freeze-warmup-cosine'
+
+    @staticmethod
+    def _canonicalize_param_name(name: str) -> str:
+        canonical_name = name
+        while canonical_name.startswith('module.'):
+            canonical_name = canonical_name.removeprefix('module.')
+        while canonical_name.startswith('_fsdp_wrapped_module.'):
+            canonical_name = canonical_name.removeprefix(
+                '_fsdp_wrapped_module.')
+        return canonical_name.replace('._fsdp_wrapped_module.', '.')
+
+    def _build_groupwise_param_groups(self, weight_decay=None):
+        strategy = getattr(self.vla, 'get_lr_param_group_strategy', None)
+        if callable(strategy):
+            param_groups = strategy(
+                learning_rate=self.learning_rate,
+                lr_coef=self.lr_coef,
+                weight_decay=weight_decay,
+                canonicalize_param_name=self._canonicalize_param_name,
+            )
+            if param_groups is not None:
+                return param_groups
+        raise ValueError(
+            'Groupwise LR schedule requires the model to implement '
+            '`get_lr_param_group_strategy(...)`.')
+
+    def _groupwise_lr_scale(self, step: int) -> float:
+        strategy = getattr(self.vla, 'get_lr_groupwise_scale', None)
+        if callable(strategy):
+            scale = strategy(
+                step=step,
+                freeze_steps=self.freeze_steps,
+                warmup_steps=self.warmup_steps,
+                use_cosine_decay=self.use_cosine_decay,
+                min_lr_ratio=self.min_lr_ratio,
+                num_training_steps=self.num_training_steps,
+                max_steps=self.max_steps,
+            )
+            if scale is not None:
+                return scale
+
+        if not self.use_cosine_decay:
+            return 1.0
+
+        progress = max(0, step - self.freeze_steps)
+        if progress < self.warmup_steps:
+            return progress / max(1, self.warmup_steps)
+
+        total_steps = self.num_training_steps
+        if total_steps is None:
+            total_steps = self.max_steps or 0
+        remain = max(1, total_steps - (self.freeze_steps + self.warmup_steps))
+        cosine_progress = min(1.0, (progress - self.warmup_steps) / remain)
+        cosine_ratio = 0.5 * (1.0 + math.cos(math.pi * cosine_progress))
+        return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * cosine_ratio
+
+    def _update_groupwise_lrs(self, step: int) -> None:
+        """Update named optimizer groups using freeze/warmup/cosine policy."""
+        lr = self.learning_rate
+        coef = self.lr_coef
+        base = {
+            'vlm': lr * coef,
+            'transformer_core': lr,
+            'soft_prompts': lr * coef,
+            'action_heads': lr,
+        }
+        for group in self.optimizer.param_groups:
+            name = group.get('name', '')
+            if name not in base:
+                continue
+            if step < self.freeze_steps:
+                group['lr'] = 0.0 if name in ('vlm',
+                                              'transformer_core') else base[name]
+            else:
+                group['lr'] = base[name] * self._groupwise_lr_scale(step)
 
     def run(self, vla_dataset) -> None:
         """Train the VLA model."""
@@ -716,7 +800,7 @@ class BaseTrainRunner(ABC):
                 self.metric.commit(
                     global_step=self.metric.global_step + 1,
                     epoch=self.current_epoch,
-                    lr=self.lr_scheduler.get_last_lr()[0])
+                    lr=self._get_log_lr())
                 progress.set_description(self.metric.push())
                 progress.update()
 
@@ -781,7 +865,7 @@ class BaseTrainRunner(ABC):
                         self.metric.commit(
                             global_step=self.metric.global_step + 1,
                             epoch=self.current_epoch,
-                            lr=self.lr_scheduler.get_last_lr()[0])
+                            lr=self._get_log_lr())
                         iter_pbar.set_description(self.metric.push())
                         iter_pbar.update()
 
@@ -823,7 +907,11 @@ class BaseTrainRunner(ABC):
 
     def _training_step(self, batch) -> torch.Tensor:
         """Execute single training step: forward, backward, optimize."""
-        if self.enable_mixed_precision_training:
+        if self._uses_groupwise_lr_schedule():
+            self._update_groupwise_lrs(self.metric.global_step)
+
+        if (self.enable_mixed_precision_training
+                and self.convert_batch_float_to_mixed_precision):
             batch = self._convert_batch_to_dtype(batch,
                                                  self.mixed_precision_dtype)
         with torch.autocast(
@@ -856,7 +944,8 @@ class BaseTrainRunner(ABC):
                 self.optimizer.step()
             else:
                 raise
-        self.lr_scheduler.step()
+        if not self._uses_groupwise_lr_schedule():
+            self.lr_scheduler.step()
         self.optimizer.zero_grad()
 
         # Custom hook for subclasses
@@ -871,6 +960,15 @@ class BaseTrainRunner(ABC):
         """Reinitialize optimizer on state mismatch."""
         if overwatch.is_rank_zero():
             overwatch.warning('Optimizer state mismatch. Reinitializing.')
+        if self._uses_groupwise_lr_schedule():
+            param_groups = self._build_groupwise_param_groups(
+                self.weight_decay)
+            self.optimizer = AdamW(param_groups, betas=self.betas)
+            self.lr_scheduler = get_constant_schedule(self.optimizer)
+            self._update_groupwise_lrs(self.metric.global_step)
+            self.optimizer_state_loaded = False
+            return
+
         trainable_params = [
             p for p in self.vla.parameters() if p.requires_grad
         ]

@@ -27,6 +27,7 @@ from .builder import build_transform_from_cfg  # noqa: F401, F403
 from .builder import build_vision_backbone_from_cfg  # noqa: F401, F403
 from .builder import build_vla_from_cfg  # noqa: F401, F403
 from .builder import build_vlm_backbone_from_cfg  # noqa: F401, F403
+from .geometry_utils import rotmat_to_rot6d  # noqa: F401, F403
 from .name_map import str_to_dtype  # noqa: F401, F403
 from .overwatch import *  # noqa: F401, F403
 from .registry import Registry  # noqa: F401, F403

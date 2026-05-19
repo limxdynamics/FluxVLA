@@ -13,5 +13,17 @@
 # limitations under the License.
 
 from .cross_attention_dit import SelfAttentionTransformer
+from .xvla_transformer import (Attention, DomainAwareLinear, Mlp,
+                               SoftPromptedTransformer, TransformerBlock,
+                               basic_init, timestep_embedding)
 
-__all__ = ['SelfAttentionTransformer']
+__all__ = [
+    'Attention',
+    'DomainAwareLinear',
+    'Mlp',
+    'SelfAttentionTransformer',
+    'SoftPromptedTransformer',
+    'TransformerBlock',
+    'basic_init',
+    'timestep_embedding',
+]
