@@ -35,6 +35,7 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 | FluxVLA(Qwen3VL 0.6B+GR00T) |      98.6      |     99.6      |    95.6     |  92.2±1.8   |     96.50      |
 | FluxVLA(DreamZero)          |      96.8      |     97.4      |  90.8±1.5   |    93.6     |     94.65      |
 | FluxVLA(SmolVLA)            |      87.4      |     93.2      |    92.0     |    63.4     |      84.0      |
+| FluxVLA(XVLA)               |      98.8      |     99.8      |    96.8     |    93.2     |     97.15      |
 
 ## 📢 Latest News
 
@@ -310,8 +311,10 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 | PI05_base   | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_base)   |
 | PI05_libero | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_libero) |
 | SmolVLA     | 450M | [🤗 Hugging Face](https://huggingface.co/lerobot/smolvla_base)                             |
+| X-VLA-PT    | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/X-VLA-PT) |
 
 </details>
+
 
 <details>
 <summary><b>Vision-Language Models (VLM)</b></summary>
@@ -452,6 +455,7 @@ Example:
 export WANDB_MODE=disabled
 /root/miniconda3/envs/fluxvla/bin/torchrun --standalone --nnodes 1 --nproc-per-node 2 scripts/eval.py --config configs/pi05/pi05_paligemma_libero_10_full_finetune.py --ckpt-path checkpoints/pi05_paligemma_libero_10_full_finetune_bs64/checkpoints/step-028548-epoch-18-loss=0.0111.safetensors
 ```
+
 
 </details>
 

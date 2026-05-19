@@ -101,6 +101,7 @@ def get_libero_image(obs, resize_size, img_key='agentview_image'):
     return img
 
 
+
 def get_libero_dummy_action():
     """Returns a dummy action for the Libero environment.
 

@@ -18,7 +18,7 @@ import math
 import os
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 import torch.distributed as dist
@@ -60,6 +60,8 @@ class LiberoEvalRunner:
         num_steps_wait (int): Number of steps to wait before
             starting evaluation.
             Default is 10.
+        controller_use_delta (Optional[bool]): Optional LIBERO controller
+            delta-mode override after the initial wait phase.
         mixed_precision_dtype (str): Data type for mixed precision training.
             Default is 'bf16'.
         enable_mixed_precision_training (bool): Whether to enable mixed
@@ -80,6 +82,7 @@ class LiberoEvalRunner:
                  resize_size: int = 224,
                  num_trials_per_task: int = 50,
                  num_steps_wait: int = 10,
+                 controller_use_delta: Optional[bool] = None,
                  mixed_precision_dtype: str = 'bf16',
                  enable_mixed_precision_training: bool = True):
         from fluxvla.engines import (build_dataset_from_cfg,
@@ -150,6 +153,7 @@ class LiberoEvalRunner:
         self.resize_size = resize_size
         self.num_trials_per_task = num_trials_per_task
         self.num_steps_wait = num_steps_wait
+        self.controller_use_delta = controller_use_delta
         self.mixed_precision_dtype = str_to_dtype(mixed_precision_dtype)
         self.enable_mixed_precision_training = enable_mixed_precision_training
         self.distributed_state = overwatch.distributed_state
@@ -164,6 +168,12 @@ class LiberoEvalRunner:
                 'You can ignore this if you are loading the base VLA (i.e. not fine-tuned) checkpoint.'  # noqa: E501
                 'Otherwise, you may run into errors when trying to call `predict_action()` due to an absent `unnorm_key`.'  # noqa: E501
             )
+
+    def _set_controller_use_delta(self, env) -> None:
+        if self.controller_use_delta is None:
+            return
+        for robot in env.env.robots:
+            robot.controller.use_delta = self.controller_use_delta
 
     def run_setup(self):
         """Set up the evaluation environment and model."""
@@ -227,6 +237,7 @@ class LiberoEvalRunner:
                 f'Action un-norm key {unnorm_key} '
                 'not found in VLA norm_stats!')
         for id in range(num_local_episodes):
+            episode_done = None
             if id >= len(local_episodes):
                 step_tensor = torch.zeros(
                     1, device=torch.cuda.current_device())
@@ -278,6 +289,8 @@ class LiberoEvalRunner:
                 overwatch.info(f'Starting episode {trial_id+1}...')
 
                 log_file.write(f'Starting episode {trial_id+1}...\n')
+                if self.num_steps_wait <= 0:
+                    self._set_controller_use_delta(env)
                 while t < max_steps + self.num_steps_wait:
                     # IMPORTANT: Do nothing for the first
                     # few timesteps
@@ -287,6 +300,8 @@ class LiberoEvalRunner:
                         obs, reward, done, info = env.step(
                             get_libero_dummy_action())
                         t += 1
+                        if t >= self.num_steps_wait:
+                            self._set_controller_use_delta(env)
                         continue
                     obs['task_description'] = task_description
                     obs['is_new_episode'] = is_new_episode
@@ -327,6 +342,7 @@ class LiberoEvalRunner:
                     if done:
                         break
                 total_episodes += 1
+                episode_done = done
                 step_tensor = torch.ones(1, device=torch.cuda.current_device())
                 # Save a replay video of the episode
                 save_rollout_video(
@@ -351,7 +367,8 @@ class LiberoEvalRunner:
             global_successes = total_successes.clone()
             dist.all_reduce(global_episodes, op=dist.ReduceOp.SUM)
             dist.all_reduce(global_successes, op=dist.ReduceOp.SUM)
-            done = done.item() if isinstance(done, torch.Tensor) else done
+            if isinstance(episode_done, torch.Tensor):
+                episode_done = episode_done.item()
             if rank == 0:
                 # Log current results
                 overwatch.info(
@@ -360,7 +377,8 @@ class LiberoEvalRunner:
                 success_text = (f'# successes: {int(global_successes[0])} '
                                 f'({success_rate:.1f}%)')  # noqa: E231
                 overwatch.info(success_text)
-                log_file.write(f'Success: {done}\n')
+                if episode_done is not None:
+                    log_file.write(f'Success: {episode_done}\n')
                 log_file.write(
                     f'# episodes completed so far: {global_episodes[0]}\n')
                 success_log = (f'# successes: {global_successes[0]} '

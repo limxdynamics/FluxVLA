@@ -300,6 +300,16 @@ class PureOverwatch:
         return 0
 
     @staticmethod
+    def local_rank() -> int:
+        """
+        Returns 0 in non-distributed mode.
+
+        Returns:
+            int: Always 0 in non-distributed mode.
+        """
+        return 0
+
+    @staticmethod
     def world_size() -> int:
         """
         Returns 1 in non-distributed mode.
