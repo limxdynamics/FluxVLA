@@ -24,6 +24,7 @@ import numpy as np
 from transformers import AutoTokenizer
 
 from fluxvla.engines.utils import TOKENIZERS
+from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 
 @TOKENIZERS.register_module()
@@ -49,7 +50,8 @@ class ActionTokenizer:
             max_action (int, optional): Maximum number of actions.
                 Defaults to 1.
         """
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            resolve_hf_local_path(model_path))
         self.n_bins, self.min_action, self.max_action = bins, \
             min_action, max_action
 
