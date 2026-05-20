@@ -386,6 +386,9 @@ class LiberoPromptFromInputs:
                 pad_len = self.max_len - len(token_ids)
                 token_ids = token_ids + [self.pad_token_id] * pad_len
                 mask = mask + [False] * pad_len
+            else:
+                token_ids = token_ids[:self.max_len]
+                mask = mask[:self.max_len]
         return token_ids, mask
 
     def __call__(self, inputs: Dict) -> Dict:
@@ -400,14 +403,12 @@ class LiberoPromptFromInputs:
         if self.add_new_line:
             prompt += '\n'
         tokens, token_mask = self._tokenize_single_prompt(prompt)
-        lang_tokens = [tokens]
-        lang_masks = [token_mask]
         if self.negative_prompt is not None:
             negative_tokens, negative_token_mask = (
                 self._tokenize_single_prompt(self.negative_prompt))
-            lang_tokens.append(negative_tokens)
-            lang_masks.append(negative_token_mask)
+            tokens = [tokens, negative_tokens]
+            token_mask = [token_mask, negative_token_mask]
 
-        inputs['lang_tokens'] = np.asarray(lang_tokens, dtype=np.int64)
-        inputs['lang_masks'] = np.asarray(lang_masks, dtype=np.bool_)
+        inputs['lang_tokens'] = np.asarray(tokens, dtype=np.int64)
+        inputs['lang_masks'] = np.asarray(token_mask, dtype=np.bool_)
         return inputs
