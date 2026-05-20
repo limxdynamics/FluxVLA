@@ -44,6 +44,31 @@ Published Hugging Face datasets:
 - New LeRobot v2.1 manual conversion for training / inference and legacy-tool compatibility: [`limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
 - New LeRobot v2.1 unlabeled conversion for manual or VLM labeling workflows: [`limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1`](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
 
+One-command setup:
+
+```bash
+# Default: SARM manual v3.0 example data + CLIP checkpoint
+bash scripts/setup_sarm_data_ckpts.sh
+
+# LeRobot v2.1 SARM manual example data + CLIP checkpoint
+bash scripts/setup_sarm_data_ckpts.sh --version v2
+
+# Also prepare VLM auto-annotation inputs and Qwen3-VL
+bash scripts/setup_sarm_data_ckpts.sh --with-vlm --mirror
+
+# Prepare all released SARM v2.1/v3.0 examples and related checkpoints
+bash scripts/setup_sarm_data_ckpts.sh --all
+```
+
+The script downloads SARM data from
+[`limxdynamics/FluxVLAData`](https://huggingface.co/datasets/limxdynamics/FluxVLAData),
+CLIP from
+[`openai/clip-vit-base-patch32`](https://huggingface.co/openai/clip-vit-base-patch32),
+and optional Qwen3-VL from
+[`Qwen/Qwen3-VL-30B-A3B-Instruct`](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct).
+It skips any dataset or checkpoint directory that is already present, so it is
+safe to rerun. Use `--dry-run` to preview commands without downloading.
+
 Download them locally under `./datasets` with:
 
 ```bash
