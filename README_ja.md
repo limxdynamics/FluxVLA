@@ -621,7 +621,7 @@ FluxVLA を研究やプロジェクトで利用した場合は、以下の形式
 }
 ```
 
-**謝辞:** 本プロジェクトは、以下のオープンソースプロジェクトおよびコミュニティの活動から恩恵を受けています。心より感謝いたします：[LeRobot](https://github.com/huggingface/lerobot)、[NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)、[OpenVLA](https://github.com/openvla/openvla)、[OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)、[LLaVA](https://github.com/haotian-liu/LLaVA)、[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)、[Qwen](https://github.com/QwenLM)、[Triton](https://github.com/triton-lang/triton)、[RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)、[Training RTC](https://arxiv.org/pdf/2512.05964)、[Realtime-VLA](https://github.com/Dexmal/realtime-vla)。もし謝辞に漏れがありましたら、issue または pull request でお知らせください。適切に謝辞へ反映します。
+**謝辞:** 本プロジェクトは、以下のオープンソースプロジェクトおよびコミュニティの活動から恩恵を受けています。心より感謝いたします：[LeRobot](https://github.com/huggingface/lerobot)、[NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main)、[DreamZero](https://arxiv.org/abs/2602.15922)（[code](https://github.com/dreamzero0/dreamzero)）、[OpenVLA](https://github.com/openvla/openvla)、[OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi)、[LLaVA](https://github.com/haotian-liu/LLaVA)、[DeepSpeed](https://github.com/deepspeedai/DeepSpeed)、[Qwen](https://github.com/QwenLM)、[Triton](https://github.com/triton-lang/triton)、[RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)、[Training RTC](https://arxiv.org/pdf/2512.05964)、[Realtime-VLA](https://github.com/Dexmal/realtime-vla)。もし謝辞に漏れがありましたら、issue または pull request でお知らせください。適切に謝辞へ反映します。
 
 ## ロードマップ
 

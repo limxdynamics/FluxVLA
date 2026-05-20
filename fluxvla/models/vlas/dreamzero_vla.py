@@ -26,6 +26,11 @@ overwatch = initialize_overwatch(__name__)
 class DreamZeroVLA(BaseVLA):
     """DreamZero World-Action Model.
 
+    Implemented based on the DreamZero paper:
+    https://arxiv.org/abs/2602.15922
+    and reference code:
+    https://github.com/dreamzero0/dreamzero
+
     Uses ``WanBackbone`` (vlm_backbone) for encoding (T5, CLIP, VAE) and
     ``DreamZeroHead`` (vla_head) for the DiT diffusion model and flow-matching.
 
