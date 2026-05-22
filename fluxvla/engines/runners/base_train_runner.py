@@ -711,7 +711,7 @@ class BaseTrainRunner(ABC):
                     global_step=self.metric.global_step + 1,
                     epoch=self.current_epoch,
                     lr=self.lr_scheduler.get_last_lr()[0])
-                progress.set_description(self.metric.push())
+                progress.set_description(self.metric.push(), refresh=False)
                 progress.update()
 
                 # Save checkpoint
