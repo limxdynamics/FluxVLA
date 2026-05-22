@@ -310,8 +310,7 @@ class PreparePromptWithState():
         cleaned_text = task_description.strip().replace('_', ' ').replace(
             '\n', ' ')
         state_str = ' '.join(map(str, discretized_states))
-        full_prompt = 'Task: {}, State: {};\nAction: '.format(
-            cleaned_text, state_str)
+        full_prompt = f'Task: {cleaned_text}, State: {state_str};\nAction: '
 
         inputs['prompt'] = full_prompt
         # Normalize state to [-1, 1] range if needed

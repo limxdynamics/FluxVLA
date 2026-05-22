@@ -256,7 +256,7 @@ class DistributedRepeatingDataset(IterableDataset):
         for stat in stats:
             for key in static_keys:
                 if key not in stat['stats']:
-                    raise KeyError(f'Dataset is missing key {key!r}.')
+                    raise KeyError(f"Key '{key}' not found in dataset.")
 
                 stat_data = stat['stats'][key]
 

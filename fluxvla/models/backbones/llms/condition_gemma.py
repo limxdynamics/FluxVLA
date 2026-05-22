@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from functools import partial
-from typing import Callable, Optional, Sequence, Type, TypedDict, Union
+from typing import Callable, Optional, Sequence, Type, Union
 
 import torch
 from torch import nn
@@ -34,15 +34,8 @@ from transformers.modeling_utils import (ALL_ATTENTION_FUNCTIONS,
                                          PreTrainedModel)
 from transformers.models.gemma.configuration_gemma import GemmaConfig
 from transformers.processing_utils import Unpack
-from transformers.utils import auto_docstring, can_return_tuple, logging
-
-try:
-    from transformers.utils import LossKwargs
-except ImportError:
-
-    class LossKwargs(TypedDict, total=False):
-        pass
-
+from transformers.utils import (LossKwargs, auto_docstring, can_return_tuple,
+                                logging)
 
 from fluxvla.engines import LLM_BACKBONES
 

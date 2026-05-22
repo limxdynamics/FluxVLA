@@ -20,12 +20,11 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from fluxvla.engines.utils import TOKENIZERS
-from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 try:
-    from huggingface_hub import snapshot_download as HF_SNAPSHOT_DOWNLOAD
+    from huggingface_hub import snapshot_download
 except Exception:
-    HF_SNAPSHOT_DOWNLOAD = None
+    snapshot_download = None
 
 
 @TOKENIZERS.register_module()
@@ -41,14 +40,12 @@ class PretrainedTokenizer:
         # Avoid top-level import to reduce environment constraints
         from transformers import AutoTokenizer
 
-        resolved_model_path = resolve_hf_local_path(model_path)
         self.tokenizer = AutoTokenizer.from_pretrained(
-            resolved_model_path,
+            model_path,
             model_max_length=model_max_length,
             padding_side=padding_side,
         )
-        self.original_model_path = model_path
-        self.model_path = resolved_model_path
+        self.model_path = model_path  # Keep original argument for source resolution  # noqa: E501
         self.copy_attrs_from_obj()
 
         self.bos_token_id = self.tokenizer.bos_token_id
@@ -108,7 +105,7 @@ class PretrainedTokenizer:
                 repo_id = cand
                 break
 
-        if repo_id and HF_SNAPSHOT_DOWNLOAD is not None:
+        if repo_id and snapshot_download is not None:
             # Download only tokenizer-related artifacts to minimize size
             allow_patterns = [
                 'tokenizer.*',
@@ -121,7 +118,7 @@ class PretrainedTokenizer:
                 'sentencepiece.*',
                 '*.bpe',
             ]
-            snapshot_path = HF_SNAPSHOT_DOWNLOAD(
+            snapshot_path = snapshot_download(
                 repo_id=repo_id, allow_patterns=allow_patterns)
             # Use the returned snapshot directory as the source
             return Path(snapshot_path)
@@ -175,26 +172,26 @@ class PretrainedTokenizer:
         )
 
         files: List[Path] = []
-        for candidate_path in src_dir.rglob('*'):
-            if not candidate_path.is_file():
+        for p in src_dir.rglob('*'):
+            if not p.is_file():
                 continue
-            name_lower = candidate_path.name.lower()
+            name_lower = p.name.lower()
 
             if exclude_regex.search(name_lower):
                 continue
-            if candidate_path.name in expected:
-                files.append(candidate_path)
+            if p.name in expected:
+                files.append(p)
                 continue
             if any(k in name_lower for k in include_keywords):
-                files.append(candidate_path)
+                files.append(p)
 
         # De-duplicate while preserving order
         seen = set()
         uniq = []
-        for tokenizer_file in files:
-            if tokenizer_file.as_posix() not in seen:
-                uniq.append(tokenizer_file)
-                seen.add(tokenizer_file.as_posix())
+        for f in files:
+            if f.as_posix() not in seen:
+                uniq.append(f)
+                seen.add(f.as_posix())
         return uniq
 
     def save_pretrained(self,
@@ -216,31 +213,28 @@ class PretrainedTokenizer:
 
         if src is not None:
             tok_files = self._collect_tokenizer_files(src)
-            for tokenizer_file in tok_files:
+            for f in tok_files:
                 # Most repos keep tokenizer files in the root; flatten copy is typically fine  # noqa: E501
-                rel = tokenizer_file.name
+                rel = f.name
                 target = dst / rel
                 if target.exists() and not overwrite:
                     # Skip when not allowed to overwrite
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(tokenizer_file, target)
+                shutil.copy2(f, target)
                 copied.append(target.name)
 
         # Fallback: if essential JSONs are missing, generate them via save_pretrained  # noqa: E501
         must_have = ['tokenizer_config.json', 'special_tokens_map.json']
-        missing = [
-            file_name for file_name in must_have
-            if not (dst / file_name).exists()
-        ]
+        missing = [m for m in must_have if not (dst / m).exists()]
         if missing:
             with tempfile.TemporaryDirectory(prefix='hf_tok_fallback_') as tmp:
                 self.tokenizer.save_pretrained(tmp)
-                for file_name in missing:
-                    src_file = Path(tmp) / file_name
+                for m in missing:
+                    src_file = Path(tmp) / m
                     if src_file.exists():
-                        shutil.copy2(src_file, dst / file_name)
-                        copied.append(file_name)
+                        shutil.copy2(src_file, dst / m)
+                        copied.append(m)
 
         # Final safety: ensure a core vocab asset exists; if not, export everything  # noqa: E501
         if not any((dst / name).exists() for name in [
