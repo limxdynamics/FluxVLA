@@ -1,16 +1,9 @@
 # ============================================================
-# GR00T-N1.5 Eagle 3B：Robocasa GR1 24 任务 × 每任务 30 episode 子集后训练
-# ============================================================
+# GR00T-N1.5 Eagle 3B RoboCasa GR1 finetuning.
 #
-# 数据：先运行（全量源目录多为 workspace 上 robocasa_lerobot_V2.1）
-#   python scripts/sample_robocasa_fluxvla_subset.py \\
-#       --src /mnt/workspace/mnt/data/yiming/fluxvla/datasets/robocasa_lerobot_V2.1 \\
-#       --dst .../robocasa_gr1_24tasks_first30ep --per-task 30 --strategy first
-# DLC 上通过 ROBOCASA_DATASET_ROOT 指向含 24 个子目录的数据根，
-# launch 脚本会把其链到 ./datasets/robocasa_fluxvla，故下列相对路径不变。
-#
-# statistic_name 须与 eval.unnorm_key 一致；
-#
+# The same config supports both small subsets and full RoboCasa GR1 datasets.
+# Point datasets/robocasa_fluxvla to the desired converted LeRobot dataset, or
+# use scripts/train_groot_robocasa.sh with ROBOCASA_DATASET_ROOT.
 # ============================================================
 
 model = dict(
@@ -21,8 +14,6 @@ model = dict(
         dtype='bf16',
         vlm_path='fluxvla/models/third_party_models/eagle2_hg_model',
         vlm_config=dict(max_input_seq_len=900),
-        # GR00T N1.5 RoboCasa uses --tune-visual with tune_llm=False:
-        # train Eagle vision tower, keep Eagle language_model frozen.
         tune_llm=False,
         tune_visual=True),
     vla_head=dict(
@@ -47,6 +38,33 @@ model = dict(
 _STAT = 'robocasa_gr1_24tasks_30ep'
 _OFFICIAL_GR1_STATS_PATH = 'work_dirs/official_groot_gr1_dataset_statistics.json'
 
+_ROBOCASA_TASK_DIRS = [
+    'PnPBottleToCabinetClose',
+    'PnPCanToDrawerClose',
+    'PnPCupToDrawerClose',
+    'PnPMilkToMicrowaveClose',
+    'PnPPotatoToMicrowaveClose',
+    'PnPWineToCabinetClose',
+    'PosttrainPnPNovelFromCuttingboardToBasketSplitA',
+    'PosttrainPnPNovelFromCuttingboardToCardboardboxSplitA',
+    'PosttrainPnPNovelFromCuttingboardToPanSplitA',
+    'PosttrainPnPNovelFromCuttingboardToPotSplitA',
+    'PosttrainPnPNovelFromCuttingboardToTieredbasketSplitA',
+    'PosttrainPnPNovelFromPlacematToBasketSplitA',
+    'PosttrainPnPNovelFromPlacematToBowlSplitA',
+    'PosttrainPnPNovelFromPlacematToPlateSplitA',
+    'PosttrainPnPNovelFromPlacematToTieredshelfSplitA',
+    'PosttrainPnPNovelFromPlateToBowlSplitA',
+    'PosttrainPnPNovelFromPlateToCardboardboxSplitA',
+    'PosttrainPnPNovelFromPlateToPanSplitA',
+    'PosttrainPnPNovelFromPlateToPlateSplitA',
+    'PosttrainPnPNovelFromTrayToCardboardboxSplitA',
+    'PosttrainPnPNovelFromTrayToPlateSplitA',
+    'PosttrainPnPNovelFromTrayToPotSplitA',
+    'PosttrainPnPNovelFromTrayToTieredbasketSplitA',
+    'PosttrainPnPNovelFromTrayToTieredshelfSplitA',
+]
+
 train_dataloader = dict(
     per_device_batch_size=4,
     per_device_num_workers=4,
@@ -63,30 +81,8 @@ train_dataloader = dict(
             dict(
                 type='ParquetDataset',
                 data_root_path=[
-                    './datasets/robocasa_fluxvla/PnPBottleToCabinetClose',
-                    './datasets/robocasa_fluxvla/PnPCanToDrawerClose',
-                    './datasets/robocasa_fluxvla/PnPCupToDrawerClose',
-                    './datasets/robocasa_fluxvla/PnPMilkToMicrowaveClose',
-                    './datasets/robocasa_fluxvla/PnPPotatoToMicrowaveClose',
-                    './datasets/robocasa_fluxvla/PnPWineToCabinetClose',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromCuttingboardToBasketSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromCuttingboardToCardboardboxSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromCuttingboardToPanSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromCuttingboardToPotSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromCuttingboardToTieredbasketSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlacematToBasketSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlacematToBowlSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlacematToPlateSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlacematToTieredshelfSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlateToBowlSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlateToCardboardboxSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlateToPanSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromPlateToPlateSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromTrayToCardboardboxSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromTrayToPlateSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromTrayToPotSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromTrayToTieredbasketSplitA',
-                    './datasets/robocasa_fluxvla/PosttrainPnPNovelFromTrayToTieredshelfSplitA',
+                    f'./datasets/robocasa_fluxvla/{task_dir}'
+                    for task_dir in _ROBOCASA_TASK_DIRS
                 ],
                 statistic_name=_STAT,
                 action_key='action',
@@ -114,7 +110,14 @@ train_dataloader = dict(
                         tokenizer=dict(
                             type='PretrainedTokenizer',
                             model_path='fluxvla/models/third_party_models/eagle2_hg_model')),
+                    dict(type='RandomCropImages', scale=0.95),
                     dict(type='ResizeImages', height=224, width=224),
+                    dict(
+                        type='ColorJitterImages',
+                        brightness=0.3,
+                        contrast=0.4,
+                        saturation=0.5,
+                        hue=0.08),
                     dict(
                         type='NormalizeImages',
                         means=[[127.5, 127.5, 127.5]],
@@ -203,30 +206,8 @@ eval = dict(
     type='RobocasaEvalRunner',
     model_family='groot',
     task_list=[
-        'gr1_unified/PnPBottleToCabinetClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PnPCanToDrawerClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PnPMilkToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PnPPotatoToMicrowaveClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PnPWineToCabinetClose_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromCuttingboardToBasketSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromCuttingboardToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromCuttingboardToPanSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromCuttingboardToPotSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromCuttingboardToTieredbasketSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlacematToBasketSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlacematToBowlSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlacematToPlateSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlacematToTieredshelfSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlateToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlateToPanSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromPlateToPlateSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromTrayToCardboardboxSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromTrayToPlateSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromTrayToPotSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromTrayToTieredbasketSplitA_GR1ArmsAndWaistFourierHands_Env',
-        'gr1_unified/PosttrainPnPNovelFromTrayToTieredshelfSplitA_GR1ArmsAndWaistFourierHands_Env',
+        f'gr1_unified/{task_dir}_GR1ArmsAndWaistFourierHands_Env'
+        for task_dir in _ROBOCASA_TASK_DIRS
     ],
     eval_chunk_size=16,
     max_episode_steps=720,

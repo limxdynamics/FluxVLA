@@ -160,16 +160,19 @@ class ParquetDataset(Dataset):
         data = self.dataset[index]
         # Determine which dataset the data belongs to
         dataset_idx = self._get_dataset_index(index)
+
+        def _get_task_name(ds_idx: int, sample_idx: int) -> str:
+            task_idx = self.dataset[sample_idx]['task_index']
+            if task_idx < 0 or task_idx >= len(self.tasks[ds_idx]):
+                return 'empty'
+            return self.tasks[ds_idx][task_idx].get('task', 'empty')
+
         while (index == len(self.dataset) - 1
                or self.dataset[index]['episode_index'] !=
                self.dataset[index + 1]['episode_index']
                or self._get_dataset_index(index + 1) != dataset_idx or
-               self.tasks[dataset_idx][self.dataset[index +
-                                                    1]['task_index']]['task']
-               == 'empty' or
-               self.tasks[dataset_idx][self.dataset[index +
-                                                    1]['task_index']]['task']
-               == 'static'):
+               _get_task_name(dataset_idx, index + 1) == 'empty' or
+               _get_task_name(dataset_idx, index + 1) == 'static'):
 
             index = self._rand_another()
             data = self.dataset[index]
@@ -185,11 +188,9 @@ class ParquetDataset(Dataset):
                     and  # noqa: E501
                     self._get_dataset_index(index + window_idx) == dataset_idx
                     and  # noqa: E501
-                    self.tasks[dataset_idx][self.dataset[index + window_idx]
-                                            ['task_index']]['task'] != 'empty'
+                    _get_task_name(dataset_idx, index + window_idx) != 'empty'
                     and  # noqa: E501
-                    self.tasks[dataset_idx][self.dataset[index + window_idx]
-                                            ['task_index']]['task'] !=
+                    _get_task_name(dataset_idx, index + window_idx) !=
                     'static'):  # noqa: E501
                 if self.use_delta:
                     actions.append(
@@ -201,15 +202,13 @@ class ParquetDataset(Dataset):
                     actions.append(self.dataset[index +
                                                 window_idx][self.action_key])
                 action_masks.append(1)
-            elif index + window_idx >= len(
-                    self.dataset) or self.tasks[dataset_idx][self.dataset[
-                        index + window_idx]['task_index']]['task'] == 'empty':
+            elif index + window_idx >= len(self.dataset) or _get_task_name(
+                    dataset_idx, index + window_idx) == 'empty':
                 for _ in range(self.action_window_size - len(actions)):
                     actions.append(actions[-1])
                     action_masks.append(0)
                 break
-            elif self.tasks[dataset_idx][self.dataset[index + window_idx]
-                                         ['task_index']]['task'] == 'static':
+            elif _get_task_name(dataset_idx, index + window_idx) == 'static':
                 window_idx += 1
                 continue
             else:
@@ -244,8 +243,7 @@ class ParquetDataset(Dataset):
         data['action_masks'] = np.array(action_masks, dtype=np.float32)
         if self.expose_index:
             data['index'] = np.array(index, dtype=np.int64)
-        data['task_description'] = self.tasks[dataset_idx][data['task_index']][
-            'task']  # noqa: E501
+        data['task_description'] = _get_task_name(dataset_idx, index)
         data['data_root'] = self.data_root_path[dataset_idx]
         for transform in self.transforms:
             data = transform(data)

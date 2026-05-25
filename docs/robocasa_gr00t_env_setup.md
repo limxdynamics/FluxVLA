@@ -103,19 +103,31 @@ PY
 If the second check fails because assets or datasets are unavailable, verify
 the RoboCasa asset paths first. The Python imports should still pass.
 
-## GR00T RoboCasa Configs
+## GR00T RoboCasa Config
 
-The integration provides two GR00T RoboCasa configs:
+The integration provides one GR00T RoboCasa finetuning config:
 
 ```bash
-configs/gr00t/gr00t_eagle_3b_robocasa_posttrain_24x30.py
-configs/gr00t/gr00t_eagle_3b_robocasa_posttrain_24x30_official_aug.py
+configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py
 ```
 
-Use the `official_aug` config when matching the Isaac-GR00T fine-tuning image
-pipeline. It adds random crop and color jitter before resize and normalization.
+The config includes the official Isaac-GR00T-style training image pipeline:
+random crop, resize, color jitter, and `[-1, 1]` image normalization. It can be
+used for either small subsets or full RoboCasa GR1 datasets by changing the
+dataset symlink or `ROBOCASA_DATASET_ROOT`.
 
-Both configs expect RoboCasa data to be available under:
+## Checkpoints, Data, and Assets
+
+Large assets are not stored in this repository. Download or prepare them
+separately, then symlink them into the repo.
+
+The GR00T base checkpoint should be available at:
+
+```bash
+checkpoints/GR00T-N1.5-3B
+```
+
+The converted RoboCasa LeRobot dataset should be available under:
 
 ```bash
 datasets/robocasa_fluxvla
@@ -126,6 +138,49 @@ You can create this as a symlink to your converted RoboCasa LeRobot dataset:
 ```bash
 mkdir -p datasets
 ln -sfnT /path/to/robocasa_lerobot_V2.1 datasets/robocasa_fluxvla
+```
+
+For evaluation, make sure RoboCasa assets and raw videos are available according
+to the RoboCasa / GR00T dataset instructions. If your converted LeRobot dataset
+stores `videos/` as symlinks, those symlinks must resolve on the target machine.
+
+For local shared storage, the same layout can be achieved with symlinks:
+
+```bash
+mkdir -p checkpoints datasets work_dirs
+ln -sfnT /shared/checkpoints/GR00T-N1.5-3B checkpoints/GR00T-N1.5-3B
+ln -sfnT /shared/datasets/robocasa_lerobot_V2.1 datasets/robocasa_fluxvla
+```
+
+## Training and Evaluation
+
+Training can be launched with:
+
+```bash
+export ROBOCASA_DATASET_ROOT=/path/to/robocasa_lerobot_V2.1
+export WORK_DIR=work_dirs/groot_robocasa_full
+export PER_DEVICE_BS=16
+export LEARNING_RATE=3e-5
+export WARMUP_RATIO=0.05
+export WEIGHT_DECAY=1e-5
+export LR_SCHEDULER_TYPE=linear-warmup+cosine-decay
+export MAX_STEPS=60000
+export SAVE_ITER_INTERVAL=5000
+export MAX_KEEP_CKPTS=20
+
+bash scripts/train_groot_robocasa.sh
+```
+
+Evaluation can be launched with:
+
+```bash
+bash scripts/eval_robocasa.sh \
+  --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
+  --ckpt-path work_dirs/groot_robocasa_full/checkpoints/step-060000.safetensors \
+  --output-dir work_dirs/groot_robocasa_full/eval_step060000 \
+  --cfg-options \
+    eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.num_trials_per_task=20
 ```
 
 ## Notes

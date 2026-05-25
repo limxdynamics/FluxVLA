@@ -498,7 +498,13 @@ class NormalizeImages:
             raise AssertionError(
                 "NormalizeImages: need 'images' or 'pixel_values' in data")
 
-        images = np.asarray(data[img_key])
+        src = data[img_key]
+        if isinstance(src, torch.Tensor):
+            images = src.detach().cpu().float().numpy()
+        else:
+            images = np.asarray(src)
+            if images.dtype == np.uint8:
+                images = images.astype(np.float32)
         if self.preserve_leading_dims:
             original_shape = images.shape
             if original_shape[-3] == 3:
