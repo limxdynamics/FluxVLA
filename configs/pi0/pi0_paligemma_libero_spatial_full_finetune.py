@@ -159,10 +159,7 @@ train_dataloader = dict(
                     add_new_line=True),
                 dict(
                     type='ProcessPrompts',
-                    tokenizer=dict(
-                        type='PretrainedTokenizer',
-                        model_path='./checkpoints/pi0_base',
-                    )),
+                    tokenizer=dict(type='PaligemmaTokenizer')),
                 dict(type='ResizeImages', height=224, width=224),
                 dict(
                     type='NormalizeImages',
@@ -200,10 +197,7 @@ runner = dict(
         ],
         meta_keys=['task_description', 'prompt', 'info', 'stats']),
     sampler=None,
-    tokenizer=dict(
-        type='PretrainedTokenizer',
-        model_path='./checkpoints/pi0_base',
-    ),
+    tokenizer=dict(type='PaligemmaTokenizer'),
     metric=dict(
         type='VLAMetric',
         active_trackers=('jsonl', 'wandb'),
@@ -246,10 +240,7 @@ eval = dict(
                 type='LiberoPromptFromInputs',
                 use_conversation=False,
                 add_new_line=True,
-                tokenizer=dict(
-                    type='PretrainedTokenizer',
-                    model_path='./checkpoints/pi0_base',
-                )),
+                tokenizer=dict(type='PaligemmaTokenizer')),
             dict(
                 type='LiberoProprioFromInputs',
                 norm_type='mean_std',
