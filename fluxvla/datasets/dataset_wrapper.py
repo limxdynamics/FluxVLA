@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
@@ -66,7 +67,14 @@ class DistributedRepeatingDataset(IterableDataset):
                  seed: int = 42,
                  statistic_name: str = 'private',
                  dim: Optional[int] = None,
-                 dataset_statistics: Optional[Dict] = None) -> None:
+                 dataset_statistics: Optional[Dict] = None,
+                 dataset_statistics_path: Optional[str] = None) -> None:
+        if dataset_statistics is not None and dataset_statistics_path is not None:
+            raise ValueError(
+                'dataset_statistics and dataset_statistics_path are mutually exclusive')
+        if dataset_statistics_path is not None:
+            with open(dataset_statistics_path, 'r', encoding='utf-8') as f:
+                dataset_statistics = json.load(f)
         self.shuffle = shuffle
         self.reshuffle_each_epoch = reshuffle_each_epoch
         self.seed = seed
@@ -125,10 +133,17 @@ class DistributedRepeatingDataset(IterableDataset):
             self.is_grouped = False
             self.is_list = True
 
-            self.dataset_statistics = self.get_dataset_statistics(
-                stats, statistic_keys, name_mappings)
+            if dataset_statistics is None:
+                self.dataset_statistics = self.get_dataset_statistics(
+                    stats, statistic_keys, name_mappings)
+            else:
+                self.dataset_statistics = dataset_statistics
 
         else:
+            if dataset_statistics is not None:
+                raise ValueError(
+                    'dataset_statistics_path is only supported for single/list '
+                    'dataset configs; grouped datasets should use grouped stats.')
             # Case 3: Grouped datasets (dict of list of dict)
             self.grouped_datasets = {}
             self.grouped_dataset_lens = {}
@@ -463,8 +478,8 @@ class DistributedRepeatingDataset(IterableDataset):
         pass
 
     def __iter__(self):
-        # Incorporate DataLoader worker info so that data is split
-        # across both distributed processes AND per-process workers.
+        # Incorporate DataLoader worker info so data is split across both
+        # distributed processes and per-process DataLoader workers.
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None:
             worker_id = worker_info.id
@@ -473,17 +488,18 @@ class DistributedRepeatingDataset(IterableDataset):
             worker_id = 0
             num_workers = 1
 
-        # Effective world: distributed processes × per-process workers
         total_world = self.world_size * num_workers
         total_rank = self.rank * num_workers + worker_id
 
         while True:
+            # Create indices for the entire virtual concatenated dataset
             indices = np.arange(self.total_len)
             if self.shuffle:
                 epoch_offset = self._epoch if self.reshuffle_each_epoch else 0
                 rng = np.random.default_rng(self.seed + epoch_offset)
                 rng.shuffle(indices)
 
+            # Distribute indices across distributed ranks and DataLoader workers.
             shard = indices[total_rank::total_world].tolist()
 
             for idx in shard:

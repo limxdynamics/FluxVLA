@@ -19,7 +19,7 @@ import numpy as np
 import timm
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Resize
+from torchvision.transforms import ColorJitter, Compose, Resize
 from transformers import AutoImageProcessor
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import \
     PILImageResampling
@@ -188,6 +188,133 @@ class ResizeImagesWithPad:
 
         resized_images = np.concatenate(resized_images, axis=0)
         data['images'] = resized_images
+        return data
+
+
+@TRANSFORMS.register_module()
+class RandomCropImages:
+    """Random-crop CHW images by a fixed scale.
+
+    This mirrors official GR00T ``VideoCrop(scale=0.95)`` in train mode,
+    where torchvision uses a random crop before resizing.
+    """
+
+    def __init__(self, scale: float = 0.95, *args, **kwargs):
+        if not (0 < scale <= 1):
+            raise ValueError(f'scale must be in (0, 1], got {scale}')
+        self.scale = scale
+
+    def _as_image_list(self, images):
+        if isinstance(images, list):
+            return images, 'list', None
+        arr = np.asarray(images)
+        if arr.ndim == 3:
+            original_shape = arr.shape
+            if arr.shape[0] % 3 == 0 and arr.shape[-1] != 3:
+                return list(arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])), \
+                    'array', original_shape
+            return [arr], 'array', original_shape
+        if arr.ndim == 4:
+            return list(arr), 'array', arr.shape
+        raise ValueError(f'RandomCropImages: unsupported image shape {arr.shape}')
+
+    def _restore_images(self, cropped, kind, original_shape):
+        if kind == 'list':
+            return cropped
+        arr = np.stack(cropped, axis=0)
+        if original_shape is not None and len(original_shape) == 3:
+            return arr.reshape(original_shape)
+        return arr
+
+    def _crop_one(self, image: np.ndarray) -> np.ndarray:
+        arr = np.asarray(image)
+        if self.scale == 1:
+            return arr
+
+        channel_first = arr.ndim == 3 and arr.shape[0] == 3
+        if channel_first:
+            h, w = arr.shape[-2:]
+        elif arr.ndim == 3 and arr.shape[-1] == 3:
+            h, w = arr.shape[:2]
+        else:
+            raise ValueError(
+                f'RandomCropImages expects CHW or HWC image, got {arr.shape}')
+
+        crop_h = max(1, int(h * self.scale))
+        crop_w = max(1, int(w * self.scale))
+        top = np.random.randint(0, h - crop_h + 1)
+        left = np.random.randint(0, w - crop_w + 1)
+        if channel_first:
+            return arr[:, top:top + crop_h, left:left + crop_w]
+        return arr[top:top + crop_h, left:left + crop_w, :]
+
+    def __call__(self, data: dict):
+        assert 'images' in data, "Input data must contain 'images' key"
+        images, kind, original_shape = self._as_image_list(data['images'])
+        cropped = [self._crop_one(image) for image in images]
+        data['images'] = self._restore_images(cropped, kind, original_shape)
+        return data
+
+
+@TRANSFORMS.register_module()
+class ColorJitterImages:
+    """Apply official GR00T-style torchvision color jitter to CHW images."""
+
+    def __init__(self,
+                 brightness: float = 0.3,
+                 contrast: float = 0.4,
+                 saturation: float = 0.5,
+                 hue: float = 0.08,
+                 *args,
+                 **kwargs):
+        self.transform = ColorJitter(
+            brightness=brightness,
+            contrast=contrast,
+            saturation=saturation,
+            hue=hue)
+
+    def _as_image_list(self, images):
+        if isinstance(images, list):
+            return images, 'list', None
+        arr = np.asarray(images)
+        if arr.ndim == 3:
+            original_shape = arr.shape
+            if arr.shape[0] % 3 == 0 and arr.shape[-1] != 3:
+                return list(arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])), \
+                    'array', original_shape
+            return [arr], 'array', original_shape
+        if arr.ndim == 4:
+            return list(arr), 'array', arr.shape
+        raise ValueError(f'ColorJitterImages: unsupported image shape {arr.shape}')
+
+    def _restore_images(self, jittered, kind, original_shape):
+        if kind == 'list':
+            return jittered
+        arr = np.stack(jittered, axis=0)
+        if original_shape is not None and len(original_shape) == 3:
+            return arr.reshape(original_shape)
+        return arr
+
+    def _jitter_one(self, image: np.ndarray) -> np.ndarray:
+        arr = np.asarray(image)
+        channel_first = arr.ndim == 3 and arr.shape[0] == 3
+        if not channel_first and arr.ndim == 3 and arr.shape[-1] == 3:
+            arr = np.transpose(arr, (2, 0, 1))
+        elif not channel_first:
+            raise ValueError(
+                f'ColorJitterImages expects CHW or HWC image, got {arr.shape}')
+
+        tensor = torch.from_numpy(np.ascontiguousarray(arr))
+        jittered = self.transform(tensor).detach().cpu().numpy()
+        if channel_first:
+            return jittered.astype(arr.dtype, copy=False)
+        return np.transpose(jittered, (1, 2, 0)).astype(image.dtype, copy=False)
+
+    def __call__(self, data: dict):
+        assert 'images' in data, "Input data must contain 'images' key"
+        images, kind, original_shape = self._as_image_list(data['images'])
+        jittered = [self._jitter_one(image) for image in images]
+        data['images'] = self._restore_images(jittered, kind, original_shape)
         return data
 
 
@@ -363,21 +490,63 @@ class NormalizeImages:
         return np.stack(normalized_images, axis=0)
 
     def __call__(self, data: dict):
-        assert 'images' in data, "Input data must contain 'images' key"
-        images = np.asarray(data['images'])
+        if 'images' in data:
+            img_key = 'images'
+        elif 'pixel_values' in data:
+            img_key = 'pixel_values'
+        else:
+            raise AssertionError(
+                "NormalizeImages: need 'images' or 'pixel_values' in data")
+
+        images = np.asarray(data[img_key])
         if self.preserve_leading_dims:
             original_shape = images.shape
-            flat_images = images.reshape(-1, original_shape[-3],
-                                         original_shape[-2],
-                                         original_shape[-1]).astype(np.float32)
-            data['images'] = self._normalize_flat_images(flat_images).reshape(
-                original_shape)
+            if original_shape[-3] == 3:
+                flat_images = images.reshape(
+                    -1, original_shape[-3], original_shape[-2],
+                    original_shape[-1]).astype(np.float32)
+                data[img_key] = self._normalize_flat_images(
+                    flat_images).reshape(original_shape)
+            elif original_shape[-1] == 3:
+                flat_images = images.reshape(-1, original_shape[-3],
+                                             original_shape[-2],
+                                             original_shape[-1])
+                flat_images = np.transpose(flat_images,
+                                           (0, 3, 1, 2)).astype(np.float32)
+                normalized_images = self._normalize_flat_images(flat_images)
+                normalized_images = np.transpose(normalized_images,
+                                                 (0, 2, 3, 1))
+                data[img_key] = normalized_images.reshape(original_shape)
+            else:
+                raise ValueError(
+                    f'NormalizeImages: unsupported image shape '
+                    f'{original_shape}')
             return data
 
-        flat_images = images.reshape(-1, 3, images.shape[-2],
-                                     images.shape[-1]).astype(np.float32)
-        data['images'] = np.concatenate(
-            self._normalize_flat_images(flat_images), axis=0)
+        original_shape = images.shape
+        if (images.ndim == 3 and images.shape[0] % 3 == 0
+                and images.shape[-1] != 3):
+            flat_images = images.reshape(-1, 3, images.shape[-2],
+                                         images.shape[-1]).astype(np.float32)
+            normalized_images = self._normalize_flat_images(flat_images)
+            data[img_key] = np.concatenate(normalized_images, axis=0)
+        elif images.ndim == 3 and images.shape[-1] == 3:
+            flat_images = np.transpose(images[None],
+                                       (0, 3, 1, 2)).astype(np.float32)
+            normalized_images = self._normalize_flat_images(flat_images)
+            data[img_key] = np.transpose(normalized_images,
+                                         (0, 2, 3, 1))[0]
+        elif images.ndim == 4 and images.shape[1] == 3:
+            flat_images = images.astype(np.float32)
+            data[img_key] = self._normalize_flat_images(flat_images)
+        elif images.ndim == 4 and images.shape[-1] == 3:
+            flat_images = np.transpose(images, (0, 3, 1,
+                                                2)).astype(np.float32)
+            normalized_images = self._normalize_flat_images(flat_images)
+            data[img_key] = np.transpose(normalized_images, (0, 2, 3, 1))
+        else:
+            raise ValueError(
+                f'NormalizeImages: unsupported image shape {original_shape}')
         return data
 
 

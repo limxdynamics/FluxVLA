@@ -24,6 +24,10 @@ from .fluxbisim_base_inference_runner import \
 from .fsdp_train_runner import FSDPTrainRunner  # noqa: F401, F403
 from .libero_eval_runner import LiberoEvalRunner  # noqa: F401, F403
 from .libero_inference_runner import LiberoInferenceRunner  # noqa: F401, F403
+try:
+    from .robocasa_eval_runner import RobocasaEvalRunner  # noqa: F401, F403
+except ImportError:
+    pass
 from .tron2_inference_runner import Tron2InferenceRunner  # noqa: F401, F403
 from .tron2_rtc_inference_runner import \
     Tron2RTCInferenceRunner  # noqa: F401, F403

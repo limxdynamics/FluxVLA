@@ -21,3 +21,9 @@ from .transform_actions import *  # noqa: F401, F403
 from .transform_images import *  # noqa: F401, F403
 from .transform_inputs import *  # noqa: F401, F403
 from .transform_prompts import *  # noqa: F401, F403
+from .robocasa_transforms import (  # noqa: F401, F403
+    DenormalizeRobocasaAction,
+    ProcessRobocasaEvalInputs,
+    RobocasaEvalDataset,
+    RobocasaGR1N15Bridge,
+)
