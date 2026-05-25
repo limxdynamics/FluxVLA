@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # ===================================================================
-# DreamZero – LIBERO-10 full fine-tune config
+# DreamZero – LIBERO spatial full fine-tune config
 #
 # Video setup:
 #   frame_window_size = 17 (current frame + 16 future frames for
@@ -23,9 +23,9 @@
 #   T=17 -> 5 latent frames -> 1 conditioning + 4 future latents.
 #
 # Image layout : 2 views (agentview + wrist) @ 128x128 each
-#                tiled vertically → 256×128
-# VAE latent   : 32×16 (spatial /8)
-# After patch  : 16×8  (patch 2×2)
+#                tiled vertically -> 256x128
+# VAE latent   : 32x16 (spatial /8)
+# After patch  : 16x8  (patch 2x2)
 # frame_seqlen : 16 * 8 = 128
 #
 # Pretrained weights are loaded from pretrained_name_or_path
@@ -110,10 +110,10 @@ train_dataloader = dict(
             'action': ['action'],
         },
         statistic_keys=['observation.state', 'timestamp', 'action'],
-        statistic_name='libero_10_no_noops',
+        statistic_name='libero_spatial_no_noops',
         datasets=dict(
             type='ParquetDataset',
-            data_root_path='./datasets/libero_10_no_noops_lerobotv2.1',
+            data_root_path='./datasets/libero_spatial_no_noops_lerobotv2.1',
             transforms=[
                 dict(
                     type='ProcessParquetInputs',
@@ -163,7 +163,7 @@ train_dataloader = dict(
             action_window_size=20,
             action_key='action',
             use_delta=False,
-            statistic_name='libero_10_no_noops',
+            statistic_name='libero_spatial_no_noops',
             window_start_idx=0,
             frame_window_size=_frame_window_size,
         ),
@@ -172,7 +172,7 @@ train_dataloader = dict(
 
 runner = dict(
     type='FSDPTrainRunner',
-    max_epochs=8,
+    max_epochs=10,
     learning_rate=1e-5,
     weight_decay=1e-5,
     max_grad_norm=1.0,
@@ -210,7 +210,7 @@ runner = dict(
 
 eval = dict(
     type='LiberoEvalRunner',
-    task_suite_name='libero_10',
+    task_suite_name='libero_spatial',
     model_family='dreamzero',
     eval_chunk_size=10,
     resize_size=128,
@@ -219,12 +219,7 @@ eval = dict(
     seed=7,
     enable_mixed_precision_training=True,
     mixed_precision_dtype='bf16',
-    dataset=dict[str, str | int
-                 | list[dict[str, str | list[str]]
-                        | dict[str, str | list[list[int]] | list[list[float]]]
-                        | dict[str, str | int]
-                        | dict[str, str | dict[str, str] | int]]]
-    (
+    dataset=dict(
         type='LiberoParquetEvalDataset',
         # Keep the eval input at 4 observed RGB frames; DreamZeroVLA repeats
         # them to 8 and prepends the first frame before VAE, matching upstream.
