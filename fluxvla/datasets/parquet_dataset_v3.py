@@ -127,6 +127,24 @@ class ParquetDatasetV3(ParquetDataset):
                  statistic_name: str = 'private',
                  window_start_idx: int = 1,
                  frame_window_size: int = 1) -> None:
+        """Initialize a parquet dataset backed by LeRobot v3 metadata.
+
+        Args:
+            data_root_path (Union[str, List[str]]): One dataset root, or a list
+                of dataset roots, each containing ``meta`` and ``data``.
+            transforms (List[Dict]): Transform config dictionaries applied in
+                order after sample assembly.
+            action_window_size (int): Number of future actions to return.
+            action_key (str): Dataset key used as the action/state source.
+            use_delta (bool): Whether actions are converted to frame-to-frame
+                deltas.
+            statistic_name (str): Statistics entry read from
+                ``dataset_statistics``.
+            window_start_idx (int): First offset used when building the action
+                window.
+            frame_window_size (int): Number of timestamps to expose for
+                frame-sequence consumers.
+        """
         Dataset.__init__(self)
         self.action_window_size = action_window_size
         if isinstance(data_root_path, str):
@@ -213,17 +231,33 @@ class ParquetDatasetV3(ParquetDataset):
         return ''
 
     def __getitem__(self, index, dataset_statistics):
+        """Build one transformed sample from a parquet row.
+
+        Args:
+            index (int): Dataset row index.
+            dataset_statistics (Dict): Statistics mapping supplied by the
+                runner or collator.
+
+        Returns:
+            Dict: Sample dictionary containing task text, actions, masks,
+            metadata, and transform outputs.
+        """
         data = self.dataset[index]
         dataset_idx = self._get_dataset_index(index)
-        while (index == len(self.dataset) - 1
-               or self.dataset[index]['episode_index'] !=
-               self.dataset[index + 1]['episode_index']
-               or self._get_dataset_index(index + 1) != dataset_idx
-               or self._resolve_task_description(
-                   dataset_idx, self.dataset[index + 1]) == 'empty'
-               or self._resolve_task_description(
-                   dataset_idx, self.dataset[index + 1]) == 'static'):
+        while True:
+            if index == len(self.dataset) - 1:
+                needs_resample = True
+            else:
+                next_data = self.dataset[index + 1]
+                next_task = self._resolve_task_description(
+                    dataset_idx, next_data)
+                needs_resample = (
+                    data['episode_index'] != next_data['episode_index']
+                    or self._get_dataset_index(index + 1) != dataset_idx
+                    or next_task in ('empty', 'static'))
 
+            if not needs_resample:
+                break
             index = self._rand_another()
             data = self.dataset[index]
             dataset_idx = self._get_dataset_index(index)
@@ -231,38 +265,38 @@ class ParquetDatasetV3(ParquetDataset):
         action_masks = list()
         window_idx = self.window_start_idx
         while len(actions) < self.action_window_size:
-            if (index + window_idx < len(self.dataset)
-                    and data['episode_index']
-                    == self.dataset[index + window_idx]['episode_index']
-                    and  # noqa: E501
-                    self._get_dataset_index(index + window_idx) == dataset_idx
-                    and  # noqa: E501
-                    self._resolve_task_description(
-                        dataset_idx, self.dataset[index + window_idx]) !=
-                    'empty' and  # noqa: E501
-                    self._resolve_task_description(
-                        dataset_idx,
-                        self.dataset[index + window_idx]) != 'static'):
+            future_idx = index + window_idx
+            future_in_range = future_idx < len(self.dataset)
+            if future_in_range:
+                future_data = self.dataset[future_idx]
+                future_task = self._resolve_task_description(
+                    dataset_idx, future_data)
+                future_dataset_idx = self._get_dataset_index(future_idx)
+            else:
+                future_data = None
+                future_task = ''
+                future_dataset_idx = None
+
+            valid_future = (
+                future_in_range
+                and data['episode_index'] == future_data['episode_index']
+                and future_dataset_idx == dataset_idx
+                and future_task not in ('empty', 'static'))
+            if valid_future:
                 if self.use_delta:
                     actions.append(
-                        np.array(self.dataset[index +
-                                              window_idx][self.action_key]) -
+                        np.array(self.dataset[future_idx][self.action_key]) -
                         np.array(self.dataset[index + window_idx -
                                               1][self.action_key]).tolist())
                 else:
-                    actions.append(self.dataset[index +
-                                                window_idx][self.action_key])
+                    actions.append(self.dataset[future_idx][self.action_key])
                 action_masks.append(1)
-            elif index + window_idx >= len(
-                    self.dataset) or self._resolve_task_description(
-                        dataset_idx,
-                        self.dataset[index + window_idx]) == 'empty':
+            elif not future_in_range or future_task == 'empty':
                 for _ in range(self.action_window_size - len(actions)):
                     actions.append(actions[-1])
                     action_masks.append(0)
                 break
-            elif self._resolve_task_description(
-                    dataset_idx, self.dataset[index + window_idx]) == 'static':
+            elif future_task == 'static':
                 window_idx += 1
                 continue
             else:

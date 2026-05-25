@@ -405,6 +405,7 @@ def _rewrite_parquet(
 
 
 def main() -> None:
+    """Write manual SARM stage annotations into a LeRobot dataset."""
     parser = argparse.ArgumentParser(
         description=(
             'Manually write SARM sparse/dense subtask annotations into a '

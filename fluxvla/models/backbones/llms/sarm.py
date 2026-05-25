@@ -23,6 +23,12 @@ from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
 
 
 class StageTransformer(nn.Module):
+    """Transformer head that predicts the current SARM stage.
+
+    The module fuses CLIP visual features, CLIP task text features, and robot
+    state embeddings for each observation step, then predicts sparse or dense
+    stage logits.
+    """
 
     def __init__(self,
                  d_model: int = 512,
@@ -35,6 +41,20 @@ class StageTransformer(nn.Module):
                  num_cameras: int = 1,
                  num_classes_sparse: int = 4,
                  num_classes_dense: int = 8):
+        """Initialize the stage classification transformer.
+
+        Args:
+            d_model (int): Transformer hidden dimension.
+            vis_emb_dim (int): Visual feature dimension from CLIP.
+            text_emb_dim (int): Text feature dimension from CLIP.
+            state_dim (int): Robot state feature dimension.
+            n_layers (int): Number of transformer encoder layers.
+            n_heads (int): Number of attention heads.
+            dropout (float): Transformer dropout probability.
+            num_cameras (int): Number of camera streams in each sequence.
+            num_classes_sparse (int): Sparse head class count.
+            num_classes_dense (int): Dense head class count.
+        """
         super().__init__()
         self.d_model = d_model
         self.num_cameras = num_cameras
@@ -80,6 +100,20 @@ class StageTransformer(nn.Module):
                 state: torch.Tensor,
                 lengths: torch.Tensor,
                 scheme: str = 'sparse') -> torch.Tensor:
+        """Predict stage logits for an image/state/text sequence.
+
+        Args:
+            img_seq (torch.Tensor): Visual features with shape
+                ``[B, N, T, Dv]``.
+            lang_emb (torch.Tensor): Text features with shape ``[B, Dt]`` or
+                ``[B, T, Dt]``.
+            state (torch.Tensor): State features with shape ``[B, T, Ds]``.
+            lengths (torch.Tensor): Valid frame count for each sample.
+            scheme (str): Head to use, either ``sparse`` or ``dense``.
+
+        Returns:
+            torch.Tensor: Stage logits with shape ``[B, T, num_classes]``.
+        """
         batch_size, num_cameras, seq_len, _ = img_seq.shape
         dim = self.d_model
         device = img_seq.device
@@ -117,6 +151,7 @@ class StageTransformer(nn.Module):
 
 
 class SubtaskTransformer(nn.Module):
+    """Transformer head that predicts progress within the current stage."""
 
     def __init__(self,
                  d_model: int = 512,
@@ -127,6 +162,18 @@ class SubtaskTransformer(nn.Module):
                  n_heads: int = 8,
                  dropout: float = 0.1,
                  num_cameras: int = 1):
+        """Initialize the in-stage progress transformer.
+
+        Args:
+            d_model (int): Transformer hidden dimension.
+            vis_emb_dim (int): Visual feature dimension from CLIP.
+            text_emb_dim (int): Text feature dimension from CLIP.
+            state_dim (int): Robot state feature dimension.
+            n_layers (int): Number of transformer encoder layers.
+            n_heads (int): Number of attention heads.
+            dropout (float): Transformer dropout probability.
+            num_cameras (int): Number of camera streams in each sequence.
+        """
         super().__init__()
         self.d_model = d_model
         self.num_cameras = num_cameras
@@ -187,6 +234,22 @@ class SubtaskTransformer(nn.Module):
                 lengths: torch.Tensor,
                 stage_prior: torch.Tensor,
                 scheme: str = 'sparse') -> torch.Tensor:
+        """Predict normalized in-stage progress.
+
+        Args:
+            img_seq (torch.Tensor): Visual features with shape
+                ``[B, N, T, Dv]``.
+            lang_emb (torch.Tensor): Text features with shape ``[B, Dt]`` or
+                ``[B, T, Dt]``.
+            state (torch.Tensor): State features with shape ``[B, T, Ds]``.
+            lengths (torch.Tensor): Valid frame count for each sample.
+            stage_prior (torch.Tensor): Stage one-hot prior with shape
+                ``[B, 1, T, num_classes]``.
+            scheme (str): Head to use, either ``sparse`` or ``dense``.
+
+        Returns:
+            torch.Tensor: In-stage progress values with shape ``[B, T]``.
+        """
         batch_size, num_cameras, seq_len, _ = img_seq.shape
         dim = self.d_model
         device = img_seq.device
@@ -226,6 +289,12 @@ class SubtaskTransformer(nn.Module):
 
 @LLM_BACKBONES.register_module()
 class SARMBackbone(nn.Module):
+    """CLIP encoder plus SARM transformer heads.
+
+    The backbone exposes image and text encoders from CLIP and attaches the
+    SARM stage and in-stage progress transformers used by
+    ``SARMRewardModel``.
+    """
 
     transformer_layer_cls = nn.TransformerEncoderLayer
 
@@ -241,6 +310,23 @@ class SARMBackbone(nn.Module):
                  num_sparse_stages: int = 1,
                  num_dense_stages: int = 1,
                  freeze_clip_backbone: bool = True):
+        """Initialize the SARM backbone.
+
+        Args:
+            pretrained_name_or_path (Optional[str]): CLIP model path or repo
+                id.
+            clip_model_name_or_path (Optional[str]): Backward-compatible CLIP
+                model path or repo id.
+            hidden_dim (int): Hidden dimension for SARM transformer heads.
+            max_state_dim (int): Padded robot state feature dimension.
+            num_layers (int): Number of transformer encoder layers.
+            num_heads (int): Number of attention heads.
+            dropout (float): Transformer dropout probability.
+            num_cameras (int): Number of camera streams per sample.
+            num_sparse_stages (int): Sparse stage count.
+            num_dense_stages (int): Dense stage count.
+            freeze_clip_backbone (bool): Whether CLIP parameters are frozen.
+        """
         super().__init__()
         clip_model_name_or_path = (
             pretrained_name_or_path or clip_model_name_or_path)
@@ -281,6 +367,14 @@ class SARMBackbone(nn.Module):
             self.clip_model.requires_grad_(False)
 
     def encode_images(self, images: torch.Tensor) -> torch.Tensor:
+        """Encode batched image sequences with CLIP.
+
+        Args:
+            images (torch.Tensor): Images with shape ``[B, T, N, C, H, W]``.
+
+        Returns:
+            torch.Tensor: Visual features with shape ``[B, N, T, D]``.
+        """
         batch_size, seq_len, num_cameras, channels, height, width = (
             images.shape)
         flat_images = cast(
@@ -296,6 +390,17 @@ class SARMBackbone(nn.Module):
 
     def encode_text(self, text_input_ids: torch.Tensor,
                     text_attention_mask: torch.Tensor) -> torch.Tensor:
+        """Encode task text tokens with CLIP.
+
+        Args:
+            text_input_ids (torch.Tensor): Text token ids with shape
+                ``[B, L]``.
+            text_attention_mask (torch.Tensor): Text attention mask with shape
+                ``[B, L]``.
+
+        Returns:
+            torch.Tensor: Text features with shape ``[B, D]``.
+        """
         return self.clip_model.get_text_features(
             input_ids=text_input_ids,
             attention_mask=text_attention_mask,

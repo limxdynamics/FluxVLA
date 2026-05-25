@@ -164,12 +164,29 @@ class ResizeImagesWithPad:
 
 @TRANSFORMS.register_module()
 class ResizeImageSequence:
+    """Resize image sequences while preserving leading sequence dimensions."""
 
     def __init__(self, height: int, width: int, *args, **kwargs):
+        """Initialize sequence image resizing.
+
+        Args:
+            height (int): Output image height.
+            width (int): Output image width.
+            *args: Unused compatibility arguments.
+            **kwargs: Unused compatibility keyword arguments.
+        """
         self.height = height
         self.width = width
 
     def __call__(self, data: Dict) -> Dict:
+        """Resize ``data['images']`` in CHW layout.
+
+        Args:
+            data (Dict): Sample dictionary containing ``images``.
+
+        Returns:
+            Dict: Sample dictionary with resized images.
+        """
         assert 'images' in data, "Input data must contain 'images' key"
         images = np.asarray(data['images'])
         original_shape = images.shape
@@ -347,6 +364,7 @@ class NormalizeImages:
 
 @TRANSFORMS.register_module()
 class NormalizeImageSequence:
+    """Normalize image sequences while preserving leading dimensions."""
 
     def __init__(self,
                  means: List,
@@ -354,11 +372,29 @@ class NormalizeImageSequence:
                  scale_to_unit_interval: bool = False,
                  *args,
                  **kwargs):
+        """Initialize sequence image normalization.
+
+        Args:
+            means (List): Per-channel or per-frame means.
+            stds (List): Per-channel or per-frame standard deviations.
+            scale_to_unit_interval (bool): Whether to divide input pixels by
+                ``255.0`` before normalization.
+            *args: Unused compatibility arguments.
+            **kwargs: Unused compatibility keyword arguments.
+        """
         self.means = np.asarray(means, dtype=np.float32)
         self.stds = np.asarray(stds, dtype=np.float32)
         self.scale_to_unit_interval = scale_to_unit_interval
 
     def __call__(self, data: Dict) -> Dict:
+        """Normalize ``data['images']`` in CHW layout.
+
+        Args:
+            data (Dict): Sample dictionary containing ``images``.
+
+        Returns:
+            Dict: Sample dictionary with normalized images.
+        """
         assert 'images' in data, "Input data must contain 'images' key"
         images = np.asarray(data['images'])
         original_shape = images.shape

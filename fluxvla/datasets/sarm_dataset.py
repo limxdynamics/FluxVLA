@@ -53,6 +53,28 @@ class SARMDataset(ParquetDatasetV3):
                  rewind_probability: float = 0.8,
                  state_key: str = 'observation.state',
                  training: bool = True) -> None:
+        """Initialize a SARM dataset.
+
+        Args:
+            data_root_path (Union[str, List[str]]): One or more LeRobot dataset
+                roots.
+            video_keys (List[str]): Camera video keys to decode for each
+                sample.
+            transforms (List[Dict]): Transform configs applied after SARM
+                sample construction.
+            annotation_mode (str): One of ``single_stage``, ``dense_only``, or
+                ``dual``.
+            n_obs_steps (int): Number of observation steps around the current
+                frame.
+            frame_gap (int): Frame stride between adjacent observations.
+            max_rewind_steps (int): Maximum rewind frames appended during
+                training augmentation.
+            rewind_probability (float): Probability of applying rewind
+                augmentation during training.
+            state_key (str): Dataset key used for robot state vectors.
+            training (bool): Whether to enable training-only augmentation and
+                sample length.
+        """
         super().__init__(
             data_root_path=data_root_path,
             transforms=transforms,
@@ -286,6 +308,17 @@ class SARMDataset(ParquetDatasetV3):
         return targets
 
     def __getitem__(self, index: int, dataset_statistics=None) -> Dict:
+        """Build one transformed SARM sequence sample.
+
+        Args:
+            index (int): Global row index in the concatenated parquet dataset.
+            dataset_statistics: Unused compatibility argument for the existing
+                dataset/collator API.
+
+        Returns:
+            Dict: SARM sample containing image and state sequences, tokenizable
+            task text, sparse targets, and optional dense targets.
+        """
         del dataset_statistics
         data = self.dataset[index]
         dataset_idx = self._get_dataset_index(index)

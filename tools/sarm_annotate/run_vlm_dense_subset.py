@@ -2,6 +2,7 @@
 # flake8: noqa
 # isort: skip_file
 # yapf: disable
+"""Run dense VLM annotation for a selected SARM episode subset."""
 
 from __future__ import annotations
 import argparse
@@ -33,6 +34,14 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 
 def resolve_dataset_spec(dataset_source: str) -> tuple[str, Path | None]:
+    """Resolve a Hugging Face repo id or local LeRobot dataset path.
+
+    Args:
+        dataset_source (str): Repo id or local dataset root.
+
+    Returns:
+        tuple[str, Path | None]: Repo id and optional local dataset root.
+    """
     source_path = Path(dataset_source).expanduser()
     if source_path.exists():
         source_path = source_path.resolve()
@@ -46,6 +55,14 @@ def resolve_dataset_spec(dataset_source: str) -> tuple[str, Path | None]:
 
 
 def timestamp_to_seconds(timestamp: str) -> float:
+    """Convert an ``MM:SS`` or ``SS`` timestamp string to seconds.
+
+    Args:
+        timestamp (str): Timestamp string.
+
+    Returns:
+        float: Timestamp in seconds.
+    """
     parts = timestamp.split(':')
     if len(parts) == 2:
         return int(parts[0]) * 60 + int(parts[1])
@@ -53,6 +70,14 @@ def timestamp_to_seconds(timestamp: str) -> float:
 
 
 def serialize_annotation(annotation: Any) -> list[dict[str, float | str]]:
+    """Serialize a Pydantic subtask annotation for JSON output.
+
+    Args:
+        annotation (Any): Annotation object with ``subtasks``.
+
+    Returns:
+        list[dict[str, float | str]]: JSON-serializable subtask spans.
+    """
     return [{
         'name': subtask.name,
         'start': float(timestamp_to_seconds(subtask.timestamps.start)),
@@ -61,6 +86,14 @@ def serialize_annotation(annotation: Any) -> list[dict[str, float | str]]:
 
 
 def round_timing(value: float | None) -> float | None:
+    """Round timing values for stable JSON output.
+
+    Args:
+        value (float | None): Timing value in seconds.
+
+    Returns:
+        float | None: Rounded timing value or ``None``.
+    """
     if value is None:
         return None
     return round(value, 6)
@@ -68,6 +101,16 @@ def round_timing(value: float | None) -> float | None:
 
 def compute_episode_duration_s(dataset_meta: Any, episode_index: int,
                                video_key: str) -> float:
+    """Compute an episode duration from LeRobot video metadata.
+
+    Args:
+        dataset_meta (Any): LeRobot dataset metadata object.
+        episode_index (int): Episode index.
+        video_key (str): Video key used for duration metadata.
+
+    Returns:
+        float: Episode duration in seconds.
+    """
     start = float(dataset_meta.episodes[f'videos/{video_key}/from_timestamp']
                   [episode_index])
     end = float(dataset_meta.episodes[f'videos/{video_key}/to_timestamp']
@@ -76,6 +119,14 @@ def compute_episode_duration_s(dataset_meta: Any, episode_index: int,
 
 
 def build_timing_record(episode_index: int) -> dict[str, Any]:
+    """Create the timing record skeleton for one episode.
+
+    Args:
+        episode_index (int): Episode index.
+
+    Returns:
+        dict[str, Any]: Mutable timing record.
+    """
     return {
         'episode_index': int(episode_index),
         'episode_duration_s': None,
@@ -88,6 +139,14 @@ def build_timing_record(episode_index: int) -> dict[str, Any]:
 
 
 def finalize_timing_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Fill derived timing fields and round values.
+
+    Args:
+        record (dict[str, Any]): Mutable timing record.
+
+    Returns:
+        dict[str, Any]: Finalized timing record.
+    """
     dense_time = record['dense_vlm_time_s']
     total_time = 0.0 if dense_time is None else dense_time
     record['episode_duration_s'] = round_timing(record['episode_duration_s'])
@@ -98,6 +157,14 @@ def finalize_timing_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def format_timing_line(record: dict[str, Any]) -> str:
+    """Format a one-line timing summary for console logs.
+
+    Args:
+        record (dict[str, Any]): Finalized timing record.
+
+    Returns:
+        str: Human-readable timing summary.
+    """
     pieces = [
         f"Episode {record['episode_index']}",
         f"duration={record['episode_duration_s']:.3f}s"
@@ -111,6 +178,16 @@ def format_timing_line(record: dict[str, Any]) -> str:
 
 def compute_weighted_average(records: list[dict[str, Any]],
                              field_name: str) -> float | None:
+    """Compute a duration-weighted average for a timing field.
+
+    Args:
+        records (list[dict[str, Any]]): Timing records.
+        field_name (str): Field to average.
+
+    Returns:
+        float | None: Weighted average, or ``None`` when no valid weights
+        exist.
+    """
     weighted_sum = 0.0
     total_weight = 0.0
     for record in records:
@@ -127,6 +204,15 @@ def compute_weighted_average(records: list[dict[str, Any]],
 
 def compute_unweighted_average(records: list[dict[str, Any]],
                                field_name: str) -> float | None:
+    """Compute an arithmetic mean for a timing field.
+
+    Args:
+        records (list[dict[str, Any]]): Timing records.
+        field_name (str): Field to average.
+
+    Returns:
+        float | None: Average value, or ``None`` when no values exist.
+    """
     values = [
         record[field_name] for record in records
         if record.get(field_name) is not None
@@ -146,6 +232,21 @@ def save_timing_summary(
     episode_indices: list[int],
     timing_records: list[dict[str, Any]],
 ) -> Path:
+    """Write aggregate VLM timing statistics to JSON.
+
+    Args:
+        output_path (Path): Destination JSON path.
+        dataset_source (str): Original dataset argument.
+        dataset_root (Path): Resolved local dataset root.
+        repo_id (str): LeRobot repo id.
+        video_key (str): Video key used for annotation.
+        num_workers (int): Number of VLM workers.
+        episode_indices (list[int]): Requested episode indices.
+        timing_records (list[dict[str, Any]]): Per-episode timing records.
+
+    Returns:
+        Path: The written output path.
+    """
     sorted_records = sorted(
         timing_records, key=lambda item: item['episode_index'])
     successful_records = [
@@ -208,6 +309,23 @@ def worker_process_dense_episodes(
     model_name: str,
     torch_dtype: torch.dtype,
 ) -> tuple[dict[int, list[dict[str, float | str]]], list[dict[str, Any]]]:
+    """Run dense annotation for a subset of episodes on one GPU worker.
+
+    Args:
+        worker_id (int): Worker index.
+        gpu_id (int): CUDA device index for this worker.
+        episode_indices (list[int]): Episodes assigned to this worker.
+        repo_id (str): LeRobot repo id.
+        dataset_root (str | None): Optional local dataset root.
+        video_key (str): Video key to annotate.
+        dense_subtask_list (list[str]): Dense subtask vocabulary.
+        model_name (str): VLM model name or path.
+        torch_dtype (torch.dtype): Inference dtype.
+
+    Returns:
+        tuple[dict[int, list[dict[str, float | str]]], list[dict[str, Any]]]:
+        Dense annotations and timing records.
+    """
     del worker_id
 
     device = f'cuda:{gpu_id}'
@@ -250,6 +368,7 @@ def worker_process_dense_episodes(
 
 
 def main() -> None:
+    """Run dense VLM annotation for the requested episode subset."""
     parser = argparse.ArgumentParser(
         description='Run dense VLM annotation on a selected episode subset')
     parser.add_argument(

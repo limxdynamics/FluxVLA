@@ -27,6 +27,16 @@ from datasets import concatenate_datasets, load_dataset
 
 def compute_tau(current_frame: int | float, subtask_start: int | float,
                 subtask_end: int | float) -> float:
+    """Compute normalized progress within one subtask span.
+
+    Args:
+        current_frame (int | float): Frame whose progress is requested.
+        subtask_start (int | float): Inclusive start frame for the subtask.
+        subtask_end (int | float): Inclusive end frame for the subtask.
+
+    Returns:
+        float: Progress clipped to ``[0.0, 1.0]``.
+    """
     duration = subtask_end - subtask_start
     if duration <= 0:
         return 1.0
@@ -43,6 +53,25 @@ def find_stage_and_tau(
     temporal_proportions: Optional[Dict[str, float]],
     return_combined: bool = False,
 ) -> Tuple[int, float] | float:
+    """Map a frame to a SARM stage index and in-stage progress.
+
+    Args:
+        current_frame (int): Frame index relative to the current episode.
+        episode_length (int): Number of frames in the episode.
+        subtask_names (Optional[List[str]]): Per-episode subtask names.
+        subtask_start_frames (Optional[List[int]]): Per-episode subtask start
+            frames.
+        subtask_end_frames (Optional[List[int]]): Per-episode subtask end
+            frames.
+        global_subtask_names (List[str]): Dataset-level ordered subtask names.
+        temporal_proportions (Optional[Dict[str, float]]): Dataset priors kept
+            for API compatibility.
+        return_combined (bool): If ``True``, return ``stage + tau`` instead of
+            ``(stage, tau)``.
+
+    Returns:
+        Tuple[int, float] | float: Stage/tau pair or combined scalar target.
+    """
     del temporal_proportions
     stage_idx, tau = 0, 0.0
     num_stages = len(global_subtask_names)
@@ -92,6 +121,20 @@ def compute_absolute_indices(
         ep_end: int,
         n_obs_steps: int,
         frame_gap: int = 30) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Compute observation indices around a center frame.
+
+    Args:
+        frame_idx (int): Center frame index in the global dataset.
+        ep_start (int): Inclusive global start index for the episode.
+        ep_end (int): Exclusive global end index for the episode.
+        n_obs_steps (int): Number of neighboring observations, excluding the
+            center frame.
+        frame_gap (int): Frame stride between neighboring observations.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Clamped indices and a mask where
+        ``1`` marks indices that were clamped out of bounds.
+    """
     half_steps = n_obs_steps // 2
     past_deltas = [-frame_gap * idx for idx in range(half_steps, 0, -1)]
     future_deltas = [frame_gap * idx for idx in range(1, half_steps + 1)]
@@ -116,6 +159,20 @@ def apply_rewind_augmentation(
     frame_gap: int = 30,
     rewind_step: Optional[int] = None,
 ) -> Tuple[int, List[int]]:
+    """Sample extra historical frames for SARM rewind augmentation.
+
+    Args:
+        frame_idx (int): Center frame index in the global dataset.
+        ep_start (int): Inclusive global start index for the episode.
+        n_obs_steps (int): Number of neighboring observations before rewind.
+        max_rewind_steps (int): Maximum number of rewind frames to append.
+        frame_gap (int): Frame stride between neighboring observations.
+        rewind_step (Optional[int]): Optional deterministic rewind length.
+
+    Returns:
+        Tuple[int, List[int]]: Selected rewind length and global rewind frame
+        indices.
+    """
     half_steps = n_obs_steps // 2
     earliest_obs_frame = frame_idx - half_steps * frame_gap
     if earliest_obs_frame <= ep_start:
@@ -141,6 +198,15 @@ def apply_rewind_augmentation(
 
 def pad_state_to_max_dim(state: torch.Tensor,
                          max_state_dim: int) -> torch.Tensor:
+    """Pad or truncate the state feature dimension.
+
+    Args:
+        state (torch.Tensor): State tensor with feature dimension last.
+        max_state_dim (int): Desired feature dimension.
+
+    Returns:
+        torch.Tensor: State tensor whose last dimension is ``max_state_dim``.
+    """
     current_dim = state.shape[-1]
     if current_dim >= max_state_dim:
         return state[..., :max_state_dim]
@@ -152,6 +218,17 @@ def temporal_proportions_to_breakpoints(
     temporal_proportions: Dict[str, float] | List[float],
     subtask_names: Optional[List[str]] = None,
 ) -> List[float]:
+    """Convert temporal stage proportions into cumulative breakpoints.
+
+    Args:
+        temporal_proportions (Dict[str, float] | List[float]): Stage
+            proportions by name or ordered list.
+        subtask_names (Optional[List[str]]): Optional explicit order for dict
+            inputs.
+
+    Returns:
+        List[float]: Breakpoints from ``0.0`` to ``1.0``.
+    """
     if isinstance(temporal_proportions, dict):
         if subtask_names is not None:
             proportions = [
@@ -182,6 +259,22 @@ def normalize_stage_tau(
     temporal_proportions: Dict[str, float] | List[float] | None = None,
     subtask_names: Optional[List[str]] = None,
 ) -> float | torch.Tensor:
+    """Normalize ``stage + tau`` targets with temporal priors.
+
+    Args:
+        x (float | torch.Tensor): Encoded SARM value where the integer part is
+            the stage index and the fractional part is in-stage progress.
+        num_stages (Optional[int]): Number of equally weighted stages.
+        breakpoints (Optional[List[float]]): Explicit cumulative
+            breakpoints.
+        temporal_proportions (Dict[str, float] | List[float] | None): Stage
+            duration priors used to derive breakpoints.
+        subtask_names (Optional[List[str]]): Optional dict ordering for
+            temporal proportions.
+
+    Returns:
+        float | torch.Tensor: Progress normalized to ``[0.0, 1.0]``.
+    """
     resolved_breakpoints = breakpoints
     if resolved_breakpoints is not None:
         current_breakpoints = cast(List[float], resolved_breakpoints)
@@ -257,6 +350,20 @@ def _extract_annotation_row(record: Dict,
 def load_temporal_proportions(
         meta_root: str | Path,
         annotation_type: str) -> Tuple[List[str], List[float]]:
+    """Load dataset-level SARM temporal proportions.
+
+    Args:
+        meta_root (str | Path): Dataset ``meta`` directory.
+        annotation_type (str): Annotation prefix such as ``sparse`` or
+            ``dense``.
+
+    Returns:
+        Tuple[List[str], List[float]]: Ordered subtask names and proportions.
+
+    Raises:
+        FileNotFoundError: If the expected temporal proportions file is
+            missing.
+    """
     meta_root = Path(meta_root)
     file_path = meta_root / f'temporal_proportions_{annotation_type}.json'
     if not file_path.exists():
@@ -284,6 +391,15 @@ def load_episode_annotations(meta_root: str | Path,
     ``dense_subtask_end_frames``. This matches how the official LeRobot SARM
     code (``lerobot.policies.sarm``) reads annotations via
     ``dataset_meta.episodes.to_pandas()``.
+
+    Args:
+        meta_root (str | Path): Dataset ``meta`` directory.
+        annotation_type (str): Annotation prefix such as ``sparse`` or
+            ``dense``.
+
+    Returns:
+        Dict[int, Dict]: Mapping from episode index to subtask names and frame
+        spans.
     """
     meta_root = Path(meta_root)
     episodes_path = meta_root / 'episodes.jsonl'

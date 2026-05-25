@@ -74,6 +74,41 @@ class SARMRewardModel(BaseVLA):
                  pretrained_name_or_path: Optional[str] = None,
                  *args,
                  **kwargs) -> None:
+        """Initialize the SARM reward model.
+
+        Args:
+            annotation_mode (str): One of ``single_stage``, ``dense_only``, or
+                ``dual``.
+            llm_backbone (Optional[Dict]): Optional backbone config override.
+            clip_model_name_or_path (str): CLIP checkpoint path or Hugging Face
+                repo id.
+            data_root_path (Optional[str | List[str]]): Optional dataset root
+                used to infer stage counts and temporal priors.
+            hidden_dim (int): Hidden dimension for SARM transformer heads.
+            num_heads (int): Number of transformer attention heads.
+            num_layers (int): Number of transformer encoder layers.
+            max_state_dim (int): Padded robot state feature dimension.
+            dropout (float): Transformer dropout probability.
+            n_obs_steps (int): Number of observation steps used for inference.
+            frame_gap (int): Frame stride between observations.
+            max_rewind_steps (int): Training rewind augmentation length.
+            num_cameras (int): Number of camera streams per sample.
+            freeze_clip_backbone (bool): Whether to freeze CLIP parameters.
+            freeze_llm_backbone (bool): Whether to freeze the whole SARM
+                backbone.
+            num_sparse_stages (int): Sparse stage count when not inferred from
+                data.
+            sparse_subtask_names (Optional[List[str]]): Sparse stage names.
+            sparse_temporal_proportions (Optional[List[float]]): Sparse stage
+                priors.
+            num_dense_stages (Optional[int]): Dense stage count when not
+                inferred from data.
+            dense_subtask_names (Optional[List[str]]): Dense stage names.
+            dense_temporal_proportions (Optional[List[float]]): Dense stage
+                priors.
+            pretrained_name_or_path (Optional[str]): Optional compatibility
+                argument passed to ``BaseVLA``.
+        """
         del args, kwargs
         self.annotation_mode = annotation_mode
         self.n_obs_steps = n_obs_steps
@@ -165,10 +200,20 @@ class SARMRewardModel(BaseVLA):
 
     @property
     def config(self):
+        """Return optional Hugging Face-style model config.
+
+        Returns:
+            None: SARMRewardModel does not expose a transformer config object.
+        """
         return None
 
     @property
     def uses_dual_heads(self) -> bool:
+        """Whether the model should train or infer the dense head.
+
+        Returns:
+            bool: ``True`` for ``dense_only`` and ``dual`` modes.
+        """
         return self.annotation_mode in ['dense_only', 'dual']
 
     def freeze_backbones(self) -> None:
@@ -427,5 +472,10 @@ class SARMRewardModel(BaseVLA):
         return normalized_progress[:, target_index]
 
     def get_fsdp_wrapping_policy(self) -> Callable:
+        """Build the FSDP wrapping policy for SARM transformer layers.
+
+        Returns:
+            Callable: Policy wrapping ``nn.TransformerEncoderLayer`` modules.
+        """
         return partial(
             _module_wrap_policy, module_classes={nn.TransformerEncoderLayer})

@@ -82,6 +82,16 @@ from transformers import AutoProcessor
 
 
 def resolve_hf_local_path(model_name_or_path: str) -> str:
+    """Resolve a local Hugging Face cache root to a snapshot path.
+
+    Args:
+        model_name_or_path (str): Hugging Face repo id, model directory, or
+            local cache directory.
+
+    Returns:
+        str: Original value for non-local paths, or a concrete snapshot
+        directory when a local cache layout is detected.
+    """
     path = Path(model_name_or_path)
     if not path.exists() or not path.is_dir():
         return model_name_or_path
@@ -109,6 +119,18 @@ def resolve_hf_local_path(model_name_or_path: str) -> str:
 
 
 def resolve_qwen_vl_model_class(model_name: str):
+    """Resolve the Transformers class for a Qwen VL checkpoint.
+
+    Args:
+        model_name (str): Hugging Face model id or local checkpoint path.
+
+    Returns:
+        type: Transformers model class that can load the checkpoint.
+
+    Raises:
+        ImportError: If no compatible vision-language model class is
+            available.
+    """
     from transformers import AutoConfig
 
     resolved_model_name = resolve_hf_local_path(model_name)
@@ -236,6 +258,14 @@ def compute_temporal_proportions(
 
 
 def create_sarm_prompt(subtask_list: list[str]) -> str:
+    """Create the VLM prompt used for SARM temporal annotation.
+
+    Args:
+        subtask_list (list[str]): Closed-vocabulary subtask names.
+
+    Returns:
+        str: Prompt instructing the VLM to emit SARM JSON annotations.
+    """
     subtask_str = '\n'.join([f'  - {name}' for name in subtask_list])
 
     return textwrap.dedent(f"""\
@@ -321,7 +351,7 @@ def create_sarm_prompt(subtask_list: list[str]) -> str:
 
 
 class VideoAnnotator:
-    """Annotates robot manipulation videos using local Qwen3-VL model on GPU"""
+    """Annotates robot manipulation videos using a local Qwen VL model."""
 
     def __init__(
             self,
@@ -475,7 +505,19 @@ class VideoAnnotator:
         end_timestamp: float | None = None,
         max_retries: int = 3,
     ) -> SubtaskAnnotation:
-        """Annotate a video segment using local GPU."""
+        """Annotate a video segment using local VLM inference.
+
+        Args:
+            file_path (str | Path): Source video path.
+            fps (int): Source video frame rate.
+            start_timestamp (float): Segment start time in seconds.
+            end_timestamp (float | None): Segment end time in seconds. If
+                omitted, the full video duration is used.
+            max_retries (int): Maximum number of VLM generation attempts.
+
+        Returns:
+            SubtaskAnnotation: Validated SARM subtask annotation.
+        """
         from qwen_vl_utils import process_vision_info
 
         file_path = Path(file_path)
@@ -579,7 +621,14 @@ def display_annotation(annotation: SubtaskAnnotation,
                        episode_idx: int,
                        fps: int,
                        prefix: str = ''):
-    """Display annotation summary."""
+    """Print a compact annotation summary.
+
+    Args:
+        annotation (SubtaskAnnotation): Annotation to display.
+        episode_idx (int): Episode index.
+        fps (int): Dataset frame rate, kept for API compatibility.
+        prefix (str): Optional label included in the summary.
+    """
     subtask_summary = ', '.join(
         f'{s.name}({s.timestamps.start}-{s.timestamps.end})'
         for s in annotation.subtasks)
@@ -589,16 +638,30 @@ def display_annotation(annotation: SubtaskAnnotation,
 
 
 def timestamp_to_seconds(timestamp: str) -> float:
-    """Convert MM:SS or SS timestamp to seconds"""
+    """Convert an ``MM:SS`` or ``SS`` timestamp to seconds.
+
+    Args:
+        timestamp (str): Timestamp string.
+
+    Returns:
+        float: Timestamp in seconds.
+    """
     parts = timestamp.split(':')
     if len(parts) == 2:
         return int(parts[0]) * 60 + int(parts[1])
-    else:
-        return int(parts[0])
+    return int(parts[0])
 
 
 def extract_frame(video_path: Path, timestamp: float) -> np.ndarray | None:
-    """Extract a single frame from video at given timestamp."""
+    """Extract a single RGB frame from a video.
+
+    Args:
+        video_path (Path): Source video path.
+        timestamp (float): Timestamp in seconds.
+
+    Returns:
+        np.ndarray | None: RGB frame, or ``None`` if extraction fails.
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         return None
@@ -609,7 +672,14 @@ def extract_frame(video_path: Path, timestamp: float) -> np.ndarray | None:
 
 
 def draw_timeline(ax, subtasks, total_duration, colors):
-    """Draw a timeline with color-coded subtask segments."""
+    """Draw color-coded subtask segments on a matplotlib axis.
+
+    Args:
+        ax: Matplotlib axis to draw on.
+        subtasks: Ordered subtasks with timestamp spans.
+        total_duration: Episode duration in seconds.
+        colors: Color palette used for segments.
+    """
     import matplotlib.patches as mpatches
 
     bar_height, bar_y = 0.6, 0.5
@@ -695,7 +765,18 @@ def visualize_episode(
     video_key: str,
     ann_type: str,
 ):
-    """Create visualization for a single episode with frames and timeline."""
+    """Create a frame-and-timeline visualization for one episode.
+
+    Args:
+        ep_idx (int): Episode index.
+        annotation (SubtaskAnnotation): Annotation to visualize.
+        video_path (Path): Source video path.
+        video_start (float): Episode start timestamp in the video file.
+        video_end (float): Episode end timestamp in the video file.
+        output_path (Path): Destination image path.
+        video_key (str): Camera/video key.
+        ann_type (str): Annotation type label.
+    """
     import matplotlib.pyplot as plt
 
     if annotation is None:
@@ -906,7 +987,14 @@ def save_annotations_to_dataset(dataset_path: Path,
                                 annotations: dict[int, SubtaskAnnotation],
                                 fps: int,
                                 prefix: str = 'sparse'):
-    """Save annotations to LeRobot dataset parquet format."""
+    """Save annotations to LeRobot dataset parquet metadata.
+
+    Args:
+        dataset_path (Path): Local LeRobot dataset root.
+        annotations (dict[int, SubtaskAnnotation]): Episode annotations.
+        fps (int): Dataset frame rate.
+        prefix (str): Annotation prefix, usually ``sparse`` or ``dense``.
+    """
     from lerobot.datasets.utils import DEFAULT_EPISODES_PATH, load_episodes
 
     episodes_dataset = load_episodes(dataset_path)
@@ -982,7 +1070,16 @@ def save_annotations_to_dataset(dataset_path: Path,
 def generate_auto_sparse_annotations(
         dataset: LeRobotDataset, episode_indices: list[int],
         video_key: str) -> dict[int, SubtaskAnnotation]:
-    """Auto-generate single 'task' stage annotations for all episodes."""
+    """Generate single-stage ``task`` annotations.
+
+    Args:
+        dataset (LeRobotDataset): Loaded LeRobot dataset.
+        episode_indices (list[int]): Episodes to annotate.
+        video_key (str): Video key used to determine episode duration.
+
+    Returns:
+        dict[int, SubtaskAnnotation]: Auto-generated sparse annotations.
+    """
     annotations = {}
     for ep_idx in episode_indices:
         start = float(
@@ -1002,7 +1099,15 @@ def generate_auto_sparse_annotations(
 def load_annotations_from_dataset(
         dataset_path: Path,
         prefix: str = 'sparse') -> dict[int, SubtaskAnnotation]:
-    """Load annotations from LeRobot dataset parquet files."""
+    """Load annotations from LeRobot dataset parquet metadata.
+
+    Args:
+        dataset_path (Path): Local LeRobot dataset root.
+        prefix (str): Annotation prefix, usually ``sparse`` or ``dense``.
+
+    Returns:
+        dict[int, SubtaskAnnotation]: Parsed episode annotations.
+    """
     from lerobot.datasets.utils import load_episodes
 
     episodes_dataset = load_episodes(dataset_path)
@@ -1047,7 +1152,20 @@ def process_single_episode(
     fps: int,
     annotator: VideoAnnotator,
 ) -> tuple[int, SubtaskAnnotation | None, str | None]:
-    """Process a single episode annotation."""
+    """Run VLM annotation for one episode.
+
+    Args:
+        ep_idx (int): Episode index.
+        dataset_root (Path): Local LeRobot dataset root.
+        dataset_meta: LeRobot metadata object.
+        video_key (str): Video key to annotate.
+        fps (int): Dataset frame rate.
+        annotator (VideoAnnotator): VLM annotator instance.
+
+    Returns:
+        tuple[int, SubtaskAnnotation | None, str | None]: Episode index,
+        optional annotation, and optional error message.
+    """
     try:
         video_path = dataset_root / dataset_meta.get_video_file_path(
             ep_idx, video_key)
@@ -1075,7 +1193,24 @@ def worker_process_episodes(
     model_name: str,
     torch_dtype: torch.dtype,
 ) -> tuple[dict, dict | None]:
-    """Worker for parallel processing across GPUs."""
+    """Run sparse and optional dense annotation on one GPU worker.
+
+    Args:
+        worker_id (int): Worker index.
+        gpu_id (int): CUDA device index for this worker.
+        episode_indices (list[int]): Episodes assigned to this worker.
+        repo_id (str): LeRobot repo id.
+        video_key (str): Video key to annotate.
+        sparse_subtask_list (list[str]): Sparse subtask vocabulary.
+        dense_subtask_list (list[str] | None): Optional dense subtask
+            vocabulary.
+        model_name (str): VLM model name or path.
+        torch_dtype (torch.dtype): Inference dtype.
+
+    Returns:
+        tuple[dict, dict | None]: Sparse annotations and optional dense
+        annotations.
+    """
     device = f'cuda:{gpu_id}'
     dataset = LeRobotDataset(repo_id, download_videos=False)
 
@@ -1113,6 +1248,7 @@ def worker_process_episodes(
 
 
 def main():
+    """Run SARM VLM annotation, visualization, or hub upload."""
     parser = argparse.ArgumentParser(
         description='SARM-style subtask annotation using local GPU (Qwen3-VL)')
     parser.add_argument(
@@ -1410,6 +1546,14 @@ def main():
                          prefix,
                          subtask_list=None,
                          is_auto=False):
+        """Save temporal proportions for generated annotations.
+
+        Args:
+            annotations: Mapping from episode index to annotations.
+            prefix: Annotation prefix, usually ``sparse`` or ``dense``.
+            subtask_list: Optional output subtask order.
+            is_auto: Whether to write the single-stage ``task`` prior.
+        """
         props: dict[str, float] = ({
             'task': 1.0
         } if is_auto else compute_temporal_proportions(annotations, fps,

@@ -25,6 +25,11 @@ from fluxvla.engines import (build_collator_from_cfg, build_dataset_from_cfg,
 
 
 def parse_args():
+    """Parse command-line arguments for SARM progress inference.
+
+    Returns:
+        argparse.Namespace: Parsed inference arguments.
+    """
     parser = argparse.ArgumentParser(
         description='Infer SARM progress over a LeRobot v2.1 or v3.x dataset.')
     parser.add_argument('--config', type=str, required=True)
@@ -43,6 +48,7 @@ def parse_args():
 
 
 def main():
+    """Run SARM progress inference and write JSONL predictions."""
     args = parse_args()
     cfg = Config.fromfile(args.config)
     if args.cfg_options is not None:

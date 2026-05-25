@@ -82,6 +82,7 @@ def _compute_temporal_proportions(
 
 
 def main() -> None:
+    """Parse sparse per-episode annotation metadata into JSON."""
     parser = argparse.ArgumentParser(
         description='Parse sparse subtask info per episode.')
     parser.add_argument(

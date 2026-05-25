@@ -38,6 +38,14 @@ DERIVED_FILES = [
 
 
 def has_value(v) -> bool:
+    """Return whether a dataframe cell contains an annotation value.
+
+    Args:
+        v: Cell value to inspect.
+
+    Returns:
+        bool: ``True`` if the value is not null or NaN.
+    """
     if v is None:
         return False
     return not (isinstance(v, float) and pd.isna(v))
@@ -45,6 +53,16 @@ def has_value(v) -> bool:
 
 def clear_parquet_annotations(parquet_path: Path,
                               apply: bool) -> tuple[int, int]:
+    """Clear annotation columns from one episodes parquet file.
+
+    Args:
+        parquet_path (Path): Episodes parquet path to inspect.
+        apply (bool): Whether to write the cleared parquet file.
+
+    Returns:
+        tuple[int, int]: Number of annotation columns found and non-null cells
+        seen before clearing.
+    """
     df = pd.read_parquet(parquet_path)
     existing = [c for c in ANNOTATION_COLUMNS if c in df.columns]
     if not existing:
@@ -63,6 +81,7 @@ def clear_parquet_annotations(parquet_path: Path,
 
 
 def main() -> None:
+    """Clear generated SARM annotation fields from a dataset."""
     parser = argparse.ArgumentParser(
         description='Clear written dense/sparse/subtask annotations.')
     parser.add_argument('--dataset-root', type=Path, required=True)
