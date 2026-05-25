@@ -40,6 +40,12 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 ## 📢 Latest News
 
+**\[2026/05/26\]** 🔥 Model evaluation on Isaac Sim 4.5.0 is now supported.
+
+**\[2026/05/09\]** 🔥 SmolVLA is now supported.
+
+**\[2026/04/24\]** 🔥 Pi0.5-RTC is now supported.
+
 **\[2026/04/22\]** 🔥 ZMQ-based remote inference framework is now supported.
 
 **\[2026/04/15\]** 🔥 DreamZero WAM is now supported.
