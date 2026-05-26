@@ -13,8 +13,12 @@
 # limitations under the License.
 
 import argparse
+import importlib
 import json
+import logging
+import os
 import sys
+import types
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Tuple, cast
@@ -24,11 +28,272 @@ import torch
 from mmengine import Config, DictAction
 from torch.utils.data import DataLoader, Dataset
 
+# SARM inference is PyTorch-only; set this before any transitive Hugging Face
+# imports can probe or initialize TensorFlow.
+os.environ.setdefault('USE_TF', '0')
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
+os.environ.setdefault('DATASETS_VERBOSITY', 'error')
+os.environ.setdefault('TRANSFORMERS_VERBOSITY', 'error')
+for logger_name in ('datasets', 'datasets.config', 'transformers',
+                    'transformers.utils.import_utils'):
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 VizRecordsByMode = Dict[str, DefaultDict[int, List[Dict]]]
+
+
+def _ensure_namespace_package(name: str, path: Path) -> types.ModuleType:
+    """Install a namespace package without executing its ``__init__`` file."""
+    module = sys.modules.get(name)
+    if module is not None and hasattr(module, '__path__'):
+        return module
+    module = types.ModuleType(name)
+    module.__path__ = [str(path)]  # type: ignore[attr-defined]
+    module.__package__ = name
+    sys.modules[name] = module
+    return module
+
+
+def _install_lightweight_fluxvla_imports() -> Dict[str, Any]:
+    """Expose only the registry utilities needed by SARM inference."""
+    package_paths = {
+        'fluxvla':
+        REPO_ROOT / 'fluxvla',
+        'fluxvla.collators':
+        REPO_ROOT / 'fluxvla' / 'collators',
+        'fluxvla.datasets':
+        REPO_ROOT / 'fluxvla' / 'datasets',
+        'fluxvla.datasets.utils':
+        REPO_ROOT / 'fluxvla' / 'datasets' / 'utils',
+        'fluxvla.engines':
+        REPO_ROOT / 'fluxvla' / 'engines',
+        'fluxvla.engines.utils':
+        REPO_ROOT / 'fluxvla' / 'engines' / 'utils',
+        'fluxvla.models':
+        REPO_ROOT / 'fluxvla' / 'models',
+        'fluxvla.models.backbones':
+        REPO_ROOT / 'fluxvla' / 'models' / 'backbones',
+        'fluxvla.models.backbones.llms':
+        REPO_ROOT / 'fluxvla' / 'models' / 'backbones' / 'llms',
+        'fluxvla.models.vlas':
+        REPO_ROOT / 'fluxvla' / 'models' / 'vlas',
+        'fluxvla.tokenizers':
+        REPO_ROOT / 'fluxvla' / 'tokenizers',
+    }
+    for name, path in package_paths.items():
+        _ensure_namespace_package(name, path)
+
+    root = importlib.import_module('fluxvla.engines.utils.root')
+    builder = importlib.import_module('fluxvla.engines.utils.builder')
+    overwatch = importlib.import_module('fluxvla.engines.utils.overwatch')
+
+    registry_names = [
+        'TOKENIZERS',
+        'TRANSFORMS',
+        'DATASETS',
+        'LLM_BACKBONES',
+        'VISION_BACKBONES',
+        'PROJECTORS',
+        'HEADS',
+        'VLAS',
+        'RUNNERS',
+        'COLLATORS',
+        'METRICS',
+        'PROCESSORS',
+        'VLM_BACKBONES',
+        'OPERATORS',
+    ]
+    builder_names = [
+        'build_collator_from_cfg',
+        'build_dataset_from_cfg',
+        'build_from_cfg',
+        'build_head_from_cfg',
+        'build_llm_backbone_from_cfg',
+        'build_projector_from_cfg',
+        'build_tokenizer_from_cfg',
+        'build_transform_from_cfg',
+        'build_vision_backbone_from_cfg',
+        'build_vla_from_cfg',
+        'build_vlm_backbone_from_cfg',
+    ]
+    engines_pkg = sys.modules['fluxvla.engines']
+    utils_pkg = sys.modules['fluxvla.engines.utils']
+    for attr in registry_names:
+        value = getattr(root, attr)
+        setattr(engines_pkg, attr, value)
+        setattr(utils_pkg, attr, value)
+    for attr in builder_names:
+        value = getattr(builder, attr)
+        setattr(engines_pkg, attr, value)
+        setattr(utils_pkg, attr, value)
+    setattr(engines_pkg, 'initialize_overwatch',
+            overwatch.initialize_overwatch)
+    setattr(utils_pkg, 'initialize_overwatch', overwatch.initialize_overwatch)
+    return {name: getattr(builder, name) for name in builder_names}
+
+
+def _register_sarm_transforms() -> None:
+    """Register SARM-only transforms without importing unrelated modules."""
+    from fluxvla.engines import TRANSFORMS
+
+    class ResizeImageSequence:
+        """Resize image sequences while preserving leading dimensions."""
+
+        def __init__(self, height: int, width: int, *args, **kwargs):
+            del args, kwargs
+            self.height = height
+            self.width = width
+
+        def __call__(self, data: Dict) -> Dict:
+            import cv2
+            assert 'images' in data, "Input data must contain 'images' key"
+            images = np.asarray(data['images'])
+            original_shape = images.shape
+            if images.ndim < 4:
+                raise ValueError(
+                    'Input image sequence must have at least 4 dimensions')
+            flat_images = images.reshape(-1, original_shape[-3],
+                                         original_shape[-2],
+                                         original_shape[-1])
+
+            resized_images = []
+            for image in flat_images:
+                resized_images.append(
+                    cv2.resize(
+                        image.transpose(1, 2, 0), (self.width, self.height),
+                        interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1))
+
+            data['images'] = np.stack(
+                resized_images, axis=0).reshape(*original_shape[:-2],
+                                                self.height, self.width)
+            return data
+
+    class NormalizeImageSequence:
+        """Normalize image sequences while preserving leading dimensions."""
+
+        def __init__(self,
+                     means: List,
+                     stds: List,
+                     scale_to_unit_interval: bool = False,
+                     *args,
+                     **kwargs):
+            del args, kwargs
+            self.means = np.asarray(means, dtype=np.float32)
+            self.stds = np.asarray(stds, dtype=np.float32)
+            self.scale_to_unit_interval = scale_to_unit_interval
+
+        def __call__(self, data: Dict) -> Dict:
+            assert 'images' in data, "Input data must contain 'images' key"
+            images = np.asarray(data['images'])
+            original_shape = images.shape
+            flat_images = images.reshape(-1, original_shape[-3],
+                                         original_shape[-2],
+                                         original_shape[-1]).astype(np.float32)
+            if self.scale_to_unit_interval:
+                flat_images = flat_images / 255.0
+
+            means = self.means
+            stds = self.stds
+            if means.ndim == 1:
+                means = np.broadcast_to(means[None, :],
+                                        (flat_images.shape[0], 3))
+            if stds.ndim == 1:
+                stds = np.broadcast_to(stds[None, :],
+                                       (flat_images.shape[0], 3))
+            if means.shape[0] == 1:
+                means = np.broadcast_to(means, (flat_images.shape[0], 3))
+            if stds.shape[0] == 1:
+                stds = np.broadcast_to(stds, (flat_images.shape[0], 3))
+            if (means.shape[0] != flat_images.shape[0]
+                    or stds.shape[0] != flat_images.shape[0]):
+                raise ValueError(
+                    'Means/stds must have length 1 or match the number '
+                    'of images after flattening.')
+
+            normalized_images = []
+            for idx, image in enumerate(flat_images):
+                normalized_images.append((image - means[idx][:, None, None]) /
+                                         (stds[idx][:, None, None] + 1e-8))
+
+            data['images'] = np.stack(
+                normalized_images, axis=0).reshape(original_shape)
+            return data
+
+    class PadStates:
+        """Pad or truncate SARM state vectors."""
+
+        def __init__(self, max_state_dim: int = 32):
+            self.max_state_dim = max_state_dim
+
+        def __call__(self, data: Dict) -> Dict:
+            states = np.asarray(data['states'], dtype=np.float32)
+            current_dim = states.shape[-1]
+            if current_dim >= self.max_state_dim:
+                data['states'] = states[..., :self.max_state_dim]
+                return data
+            padded_shape = (*states.shape[:-1], self.max_state_dim)
+            padded = np.zeros(padded_shape, dtype=np.float32)
+            padded[..., :current_dim] = states
+            data['states'] = padded
+            return data
+
+    class TokenizeText:
+        """Tokenize task text for CLIP-based SARM inference."""
+
+        def __init__(self,
+                     tokenizer: Dict,
+                     max_length: int = 77,
+                     text_key: str = 'task_description',
+                     output_ids_key: str = 'text_input_ids',
+                     output_attention_mask_key: str = 'text_attention_mask'):
+            from fluxvla.engines import build_tokenizer_from_cfg
+            from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
+            tokenizer = dict(tokenizer)
+            model_path = tokenizer.get('model_path')
+            if isinstance(model_path, str):
+                tokenizer['model_path'] = resolve_hf_local_path(model_path)
+            self.tokenizer = build_tokenizer_from_cfg(tokenizer)
+            self.max_length = max_length
+            self.text_key = text_key
+            self.output_ids_key = output_ids_key
+            self.output_attention_mask_key = output_attention_mask_key
+
+        def __call__(self, data: Dict) -> Dict:
+            encoded = self.tokenizer(
+                data[self.text_key],
+                padding='max_length',
+                truncation=True,
+                max_length=self.max_length,
+                return_tensors='np',
+            )
+            data[self.output_ids_key] = encoded['input_ids'][0].astype(
+                np.int64)
+            data[self.output_attention_mask_key] = encoded['attention_mask'][
+                0].astype(np.int64)
+            return data
+
+    TRANSFORMS.register_module(module=ResizeImageSequence, force=True)
+    TRANSFORMS.register_module(module=NormalizeImageSequence, force=True)
+    TRANSFORMS.register_module(module=PadStates, force=True)
+    TRANSFORMS.register_module(module=TokenizeText, force=True)
+
+
+def _register_sarm_runtime_modules() -> Dict[str, Any]:
+    """Register only modules required by the SARM inference config."""
+    builders = _install_lightweight_fluxvla_imports()
+    _register_sarm_transforms()
+    for module_name in [
+            'fluxvla.collators.dict_collator',
+            'fluxvla.datasets.sarm_dataset',
+            'fluxvla.models.backbones.llms.sarm',
+            'fluxvla.models.vlas.sarm_reward_model',
+            'fluxvla.tokenizers.pretrained_tokenizer',
+    ]:
+        importlib.import_module(module_name)
+    return builders
 
 
 def parse_args():
@@ -277,7 +542,7 @@ def _render_episode_visualization(records: List[Dict], stage_labels: List[str],
         ax_frames.text(
             col * width + width / 2,
             -8, f"Frame {record['current_index']}\n"
-            f"{pred_progress}\n{stage_name}",
+            f'{pred_progress}\n{stage_name}',
             ha='center',
             va='top',
             fontsize=7)
@@ -321,8 +586,10 @@ def _write_jsonl(output_path: str, records: List[Dict]) -> None:
 def main():
     """Run SARM progress inference and optional prediction visualizations."""
     args = parse_args()
-    from fluxvla.engines import (build_collator_from_cfg,
-                                 build_dataset_from_cfg, build_vla_from_cfg)
+    builders = _register_sarm_runtime_modules()
+    build_collator_from_cfg = builders['build_collator_from_cfg']
+    build_dataset_from_cfg = builders['build_dataset_from_cfg']
+    build_vla_from_cfg = builders['build_vla_from_cfg']
 
     cfg = Config.fromfile(args.config)
     if args.cfg_options is not None:
