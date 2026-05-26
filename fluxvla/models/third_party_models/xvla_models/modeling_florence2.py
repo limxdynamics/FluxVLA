@@ -13,6 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Origin: Source
+# Upstream-Repo: 2toINF/X-VLA
+# Upstream-Path: models/modeling_florence2.py
+# Upstream-Ref: main
+# SPDX-License-Identifier: Apache-2.0
+#
+# Notes: Vendored verbatim from X-VLA; original Microsoft/HuggingFace notices
+# below are retained.
+
 """ PyTorch Florence-2 model."""
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union

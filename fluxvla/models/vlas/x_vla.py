@@ -12,6 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Origin: Modified from
+# Upstream-Repo: 2toINF/X-VLA
+# Upstream-Path: models/modeling_xvla.py
+# Upstream-Ref: main
+# SPDX-License-Identifier: Apache-2.0
+#
+# Notes: Refactored from X-VLA's monolithic model into FluxVLA's backbone /
+# head / wrapper split while preserving the external XVLA data flow.
+
 from functools import partial
 from typing import Callable, Dict, List, Optional
 
@@ -24,8 +33,8 @@ from .base_vla import BaseVLA
 
 
 @VLAS.register_module()
-class XVLAFlowMatching(BaseVLA):
-    """Training-time XVLA VLA wrapper.
+class X_VLA(BaseVLA):
+    """Training-time X_VLA wrapper.
 
     This keeps the XVLA-specific multi-view backbone/head data plumbing in a
     dedicated VLA class.
@@ -66,7 +75,6 @@ class XVLAFlowMatching(BaseVLA):
             strict_mapping=strict_mapping,
         )
         self.all_module_keys = ['vlm_backbone', 'vla_head']
-        self.trainable_module_keys = []
 
     @property
     def config(self) -> PretrainedConfig:
@@ -75,11 +83,6 @@ class XVLAFlowMatching(BaseVLA):
     def _reorder_cache(self, past_key_values, beam_idx):
         del beam_idx
         return past_key_values
-
-    def freeze_backbones(self) -> None:
-        super().freeze_backbones()
-        if 'vla_head' not in self.trainable_module_keys:
-            self.trainable_module_keys.append('vla_head')
 
     def _forward_backbone(
         self,
@@ -163,7 +166,7 @@ class XVLAFlowMatching(BaseVLA):
             wrapping_policies.append(self.vla_head.get_fsdp_wrapping_policy())
         if not wrapping_policies:
             raise ValueError(
-                'XVLAFlowMatching could not build any FSDP wrapping policy.')
+                'X_VLA could not build any FSDP wrapping policy.')
         return partial(_or_policy, policies=wrapping_policies)
 
     def get_lr_param_group_strategy(self,
@@ -233,5 +236,5 @@ class XVLAFlowMatching(BaseVLA):
         ]
 
 __all__ = [
-    'XVLAFlowMatching',
+    'X_VLA',
 ]

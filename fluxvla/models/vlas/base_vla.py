@@ -90,7 +90,7 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
         self.name_mapping = name_mapping
         self.strict_mapping = strict_mapping
         # Instance Attributes for a generic VLM
-        self.all_module_keys, self.trainable_module_keys = None, None
+        self.all_module_keys = None
 
     @property
     def device(self) -> torch.device:
@@ -111,17 +111,6 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
             self.vlm_backbone.requires_grad_(not self.freeze_vlm_backbone)
         if self.projector is not None:
             self.projector.requires_grad_(not self.freeze_projector)
-
-        # Add to `self.trainable_module_keys`
-        self.trainable_module_keys = []
-        if not self.freeze_vision_backbone:
-            self.trainable_module_keys.append('vision_backbone')
-        if not self.freeze_llm_backbone:
-            self.trainable_module_keys.append('llm_backbone')
-        if not self.freeze_projector:
-            self.trainable_module_keys.append('projector')
-        if not self.freeze_vlm_backbone:
-            self.trainable_module_keys.append('vlm_backbone')
 
         # Update Trackers
         self.vision_backbone_requires_grad = not self.freeze_vision_backbone

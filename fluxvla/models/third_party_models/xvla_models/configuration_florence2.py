@@ -11,6 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# Origin: Source
+# Upstream-Repo: 2toINF/X-VLA
+# Upstream-Path: models/configuration_florence2.py
+# Upstream-Ref: main
+# SPDX-License-Identifier: Apache-2.0
+#
+# Notes: Vendored verbatim from X-VLA; original Microsoft/HuggingFace notices
+# below are retained.
 import warnings
 """ Florence-2 configuration"""
 
@@ -337,4 +346,3 @@ class Florence2Config(PretrainedConfig):
 
 
         super().__init__(**kwargs)
-

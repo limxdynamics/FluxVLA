@@ -189,7 +189,6 @@ class SmolVLAFlowMatching(BaseVLA):
             'action_time_mlp_in',
             'action_time_mlp_out',
         ]
-        self.trainable_module_keys = []
         self._logged_forward_keys = False
         self._logged_predict_keys = False
 

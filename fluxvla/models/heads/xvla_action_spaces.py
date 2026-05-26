@@ -14,12 +14,22 @@
 # limitations under the License.
 # ------------------------------------------------------------------------------
 
+# Origin: Modified from
+# Upstream-Repo: 2toINF/X-VLA
+# Upstream-Path: models/action_hub.py
+# Upstream-Ref: main
+# SPDX-License-Identifier: Apache-2.0
+#
+# Notes: Adapted into FluxVLA's action-space registry; the EE6D / joint / auto
+# layouts preserve X-VLA semantics while fitting FluxVLA's module structure.
+
 from __future__ import annotations
 
-from typing import Dict, Iterable, Tuple, Type
+from typing import Dict, Iterable, Optional, Tuple, Type
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 ACTION_REGISTRY: Dict[str, Type['BaseActionSpace']] = {}
 
@@ -60,13 +70,21 @@ class BaseActionSpace(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def compute_loss(self, pred: torch.Tensor,
-                     target: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def compute_loss(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        action_masks: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
         raise NotImplementedError
 
-    def forward(self, pred: torch.Tensor,
-                target: torch.Tensor) -> Dict[str, torch.Tensor]:
-        return self.compute_loss(pred, target)
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        action_masks: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
+        return self.compute_loss(pred, target, action_masks=action_masks)
 
     def preprocess(
         self,
@@ -86,6 +104,44 @@ def _ensure_indices_valid(D: int, idx: Iterable[int], name: str) -> None:
     if bad:
         raise IndexError(
             f'{name} contains out-of-range indices {bad} for action dim D={D}')
+
+
+def _select_mask(action_masks: Optional[torch.Tensor],
+                 idx=None) -> Optional[torch.Tensor]:
+    if action_masks is None:
+        return None
+    if action_masks.ndim < 3 or idx is None:
+        return action_masks
+    if isinstance(idx, tuple):
+        idx = list(idx)
+    return action_masks[:, :, idx]
+
+
+def _masked_reduce(losses: torch.Tensor,
+                   action_masks: Optional[torch.Tensor]) -> torch.Tensor:
+    if action_masks is None:
+        return losses.mean()
+    mask = action_masks.to(device=losses.device, dtype=losses.dtype)
+    while mask.ndim < losses.ndim:
+        mask = mask.unsqueeze(-1)
+    mask = mask.expand_as(losses)
+    return (losses * mask).sum() / (mask.sum() + 1e-8)
+
+
+def _masked_mse(pred: torch.Tensor, target: torch.Tensor,
+                action_masks: Optional[torch.Tensor] = None) -> torch.Tensor:
+    losses = F.mse_loss(pred, target, reduction='none')
+    return _masked_reduce(losses, action_masks)
+
+
+def _masked_bce_with_logits(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    action_masks: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    losses = F.binary_cross_entropy_with_logits(
+        pred, target, reduction='none')
+    return _masked_reduce(losses, action_masks)
 
 
 @register_action('ee6d')
@@ -108,23 +164,36 @@ class EE6DActionSpace(BaseActionSpace):
         self.mse = nn.MSELoss()
         self.bce = nn.BCEWithLogitsLoss()
 
-    def compute_loss(self, pred, target):
+    def compute_loss(self, pred, target, action_masks=None):
         assert pred.shape == target.shape, 'pred/target shapes must match'
         _, _, D = pred.shape
         _ensure_indices_valid(D, self.gripper_idx, 'gripper_idx')
 
-        g_losses = [self.bce(pred[:, :, gi], target[:, :, gi])
-                    for gi in self.gripper_idx]
+        g_losses = [
+            _masked_bce_with_logits(
+                pred[:, :, gi],
+                target[:, :, gi],
+                _select_mask(action_masks, gi),
+            ) for gi in self.gripper_idx
+        ]
         gripper_loss = sum(g_losses) / len(self.gripper_idx) * self.GRIPPER_SCALE
 
         pos_loss = (
-            self.mse(pred[:, :, self.POS_IDX_1], target[:, :, self.POS_IDX_1])
-            + self.mse(pred[:, :, self.POS_IDX_2], target[:, :, self.POS_IDX_2])
+            _masked_mse(pred[:, :, self.POS_IDX_1],
+                        target[:, :, self.POS_IDX_1],
+                        _select_mask(action_masks, self.POS_IDX_1))
+            + _masked_mse(pred[:, :, self.POS_IDX_2],
+                          target[:, :, self.POS_IDX_2],
+                          _select_mask(action_masks, self.POS_IDX_2))
         ) * self.XYZ_SCALE
 
         rot_loss = (
-            self.mse(pred[:, :, self.ROT_IDX_1], target[:, :, self.ROT_IDX_1])
-            + self.mse(pred[:, :, self.ROT_IDX_2], target[:, :, self.ROT_IDX_2])
+            _masked_mse(pred[:, :, self.ROT_IDX_1],
+                        target[:, :, self.ROT_IDX_1],
+                        _select_mask(action_masks, self.ROT_IDX_1))
+            + _masked_mse(pred[:, :, self.ROT_IDX_2],
+                          target[:, :, self.ROT_IDX_2],
+                          _select_mask(action_masks, self.ROT_IDX_2))
         ) * self.ROT_SCALE
 
         return {
@@ -162,20 +231,26 @@ class JointActionSpace(BaseActionSpace):
         self.mse = nn.MSELoss()
         self.bce = nn.BCEWithLogitsLoss()
 
-    def compute_loss(self, pred, target):
+    def compute_loss(self, pred, target, action_masks=None):
         assert pred.shape == target.shape
         _, _, D = pred.shape
         _ensure_indices_valid(D, self.gripper_idx, 'gripper_idx')
 
-        g_losses = [self.bce(pred[:, :, gi], target[:, :, gi])
-                    for gi in self.gripper_idx]
+        g_losses = [
+            _masked_bce_with_logits(
+                pred[:, :, gi],
+                target[:, :, gi],
+                _select_mask(action_masks, gi),
+            ) for gi in self.gripper_idx
+        ]
         gripper_loss = sum(g_losses) / len(self.gripper_idx) * self.GRIPPER_SCALE
 
         joints_idx = tuple(i for i in range(D)
                            if i not in set(self.gripper_idx))
-        joints_loss = self.mse(
+        joints_loss = _masked_mse(
             pred[:, :, joints_idx],
             target[:, :, joints_idx],
+            _select_mask(action_masks, joints_idx),
         ) * self.JOINTS_SCALE
 
         return {
@@ -216,22 +291,31 @@ class AGIBOTEE6DActionSpace(BaseActionSpace):
         super().__init__()
         self.mse = nn.MSELoss()
 
-    def compute_loss(self, pred, target):
+    def compute_loss(self, pred, target, action_masks=None):
         assert pred.shape == target.shape
         _, _, D = pred.shape
         _ensure_indices_valid(D, self.gripper_idx, 'gripper_idx')
 
-        gripper_loss = self.mse(
+        gripper_loss = _masked_mse(
             pred[:, :, self.gripper_idx],
             target[:, :, self.gripper_idx],
+            _select_mask(action_masks, self.gripper_idx),
         ) * self.GRIPPER_SCALE
         pos_loss = (
-            self.mse(pred[:, :, self.POS_IDX_1], target[:, :, self.POS_IDX_1])
-            + self.mse(pred[:, :, self.POS_IDX_2], target[:, :, self.POS_IDX_2])
+            _masked_mse(pred[:, :, self.POS_IDX_1],
+                        target[:, :, self.POS_IDX_1],
+                        _select_mask(action_masks, self.POS_IDX_1))
+            + _masked_mse(pred[:, :, self.POS_IDX_2],
+                          target[:, :, self.POS_IDX_2],
+                          _select_mask(action_masks, self.POS_IDX_2))
         ) * self.XYZ_SCALE
         rot_loss = (
-            self.mse(pred[:, :, self.ROT_IDX_1], target[:, :, self.ROT_IDX_1])
-            + self.mse(pred[:, :, self.ROT_IDX_2], target[:, :, self.ROT_IDX_2])
+            _masked_mse(pred[:, :, self.ROT_IDX_1],
+                        target[:, :, self.ROT_IDX_1],
+                        _select_mask(action_masks, self.ROT_IDX_1))
+            + _masked_mse(pred[:, :, self.ROT_IDX_2],
+                          target[:, :, self.ROT_IDX_2],
+                          _select_mask(action_masks, self.ROT_IDX_2))
         ) * self.ROT_SCALE
 
         return {
@@ -284,16 +368,22 @@ class AutoActionSpace(BaseActionSpace):
     def _trim_to_ori_action_dim(self, x: torch.Tensor) -> torch.Tensor:
         return x[..., :self.ori_action_dim]
 
-    def compute_loss(self, pred: torch.Tensor,
-                     target: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def compute_loss(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        action_masks: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
         pred = self._pad_to_model_dim(pred)
         target = self._pad_to_model_dim(target)
         assert pred.shape == target.shape, (
             f'Shape mismatch: pred {pred.shape} vs target {target.shape}')
 
-        joints_loss = self.mse(
+        action_idx = tuple(range(self.ori_action_dim))
+        joints_loss = _masked_mse(
             pred[:, :, :self.ori_action_dim],
             target[:, :, :self.ori_action_dim],
+            _select_mask(action_masks, action_idx),
         ) * self.JOINTS_SCALE
         return {'joints_loss': joints_loss}
 

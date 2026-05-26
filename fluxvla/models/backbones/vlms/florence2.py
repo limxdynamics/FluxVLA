@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
+# Origin: Modified from
+# Upstream-Repo: 2toINF/X-VLA
+# Upstream-Path: models/modeling_xvla.py
+# Upstream-Ref: main
+# SPDX-License-Identifier: Apache-2.0
+#
+# Notes: Extracted the Florence2 encoder path into a FluxVLA backbone wrapper
+# while preserving X-VLA's multimodal merge semantics.
+
 from functools import partial
 from typing import Callable, Dict, Optional, Type
 
@@ -40,8 +47,7 @@ class Florence2Backbone(nn.Module):
         from fluxvla.engines import str_to_dtype
         target_dtype = str_to_dtype(dtype) if dtype else None
 
-        resolved_config = self._resolve_vlm_config(vlm_path, vlm_config)
-        self.vlm = self._build_vlm(vlm_path, target_dtype, resolved_config)
+        self.vlm = self._build_vlm(vlm_path, target_dtype, vlm_config)
         self.config = self.vlm.config
         self._remove_decoder(self.vlm)
 
@@ -55,36 +61,15 @@ class Florence2Backbone(nn.Module):
                 del lm.lm_head
 
     @staticmethod
-    def _read_config_json(model_dir: str) -> Optional[Dict]:
-        config_path = os.path.join(model_dir, 'config.json')
-        if not os.path.isfile(config_path):
+    def _build_config(vlm_config: Optional[Dict]) -> Optional[Florence2Config]:
+        if isinstance(vlm_config, Florence2Config):
+            return Florence2Config(**vlm_config.to_dict())
+        if isinstance(vlm_config, dict):
+            return Florence2Config(**vlm_config)
+        if vlm_config is None:
             return None
-        with open(config_path, 'r') as f:
-            return json.load(f)
-
-    @classmethod
-    def _is_xvla_checkpoint_dir(cls, vlm_path: str) -> bool:
-        if not os.path.isdir(vlm_path):
-            return False
-        config = cls._read_config_json(vlm_path)
-        return config is not None and config.get('model_type') == 'xvla'
-
-    @classmethod
-    def _resolve_vlm_config(
-        cls,
-        vlm_path: str,
-        vlm_config: Optional[Dict],
-    ) -> Optional[Dict]:
-        if vlm_config is not None:
-            return vlm_config
-        if not cls._is_xvla_checkpoint_dir(vlm_path):
-            return None
-        xvla_config = cls._read_config_json(vlm_path)
-        if xvla_config is None or 'florence_config' not in xvla_config:
-            raise ValueError(
-                f'XVLA checkpoint at {vlm_path} does not contain '
-                '`florence_config`.')
-        return xvla_config['florence_config']
+        raise TypeError(
+            '`vlm_config` must be a dict, Florence2Config, or None.')
 
     @classmethod
     def _build_vlm(
@@ -93,11 +78,7 @@ class Florence2Backbone(nn.Module):
         target_dtype: Optional[torch.dtype],
         vlm_config: Optional[Dict],
     ) -> Florence2ForConditionalGeneration:
-        config = vlm_config
-        if isinstance(config, Florence2Config):
-            config = Florence2Config(**config.to_dict())
-        elif isinstance(config, dict):
-            config = Florence2Config(**config)
+        config = cls._build_config(vlm_config)
 
         if config is not None and target_dtype is not None:
             # Keep the config dtype aligned with the requested runtime dtype.
@@ -107,24 +88,18 @@ class Florence2Backbone(nn.Module):
             if getattr(config, 'vision_config', None) is not None:
                 config.vision_config.torch_dtype = target_dtype
 
-        if cls._is_xvla_checkpoint_dir(vlm_path):
-            if config is None:
-                raise ValueError(
-                    'XVLA Florence2Backbone requires a resolved '
-                    '`florence_config` to build the VLM structure.')
+        if config is not None:
             if target_dtype is not None:
-                # FlashAttention2 checks the explicit construction dtype, not a
-                # later `.to(dtype=...)`, so the XVLA local-config path must
-                # instantiate the model under the target dtype directly.
                 return Florence2ForConditionalGeneration._from_config(
                     config, torch_dtype=target_dtype)
             return Florence2ForConditionalGeneration(config)
 
+        if vlm_path is None:
+            raise ValueError(
+                'Florence2Backbone requires either `vlm_config` or `vlm_path`.')
         load_kwargs = {'trust_remote_code': True}
         if target_dtype is not None:
             load_kwargs['torch_dtype'] = target_dtype
-        if config is not None:
-            load_kwargs['config'] = config
         return Florence2ForConditionalGeneration.from_pretrained(
             vlm_path, **load_kwargs)
 

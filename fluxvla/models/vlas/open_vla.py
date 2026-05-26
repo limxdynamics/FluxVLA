@@ -111,7 +111,6 @@ class OpenVLA(BaseVLA):
         if tokenizer is not None:
             # Build Tokenizer from Config
             self.tokenizer = build_tokenizer_from_cfg(tokenizer)
-        self.trainable_module_keys = []
         # === Generation Utilities ===
         #   => For computing likelihoods --> get tokens
         # corresponding to "True", "False" and "Yes", "No"
