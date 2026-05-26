@@ -15,7 +15,7 @@
 import copy
 from functools import partial
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import torch
 import torch.nn as nn
@@ -403,7 +403,8 @@ class SARMRewardModel(BaseVLA):
                          lengths: Optional[torch.Tensor] = None,
                          head_mode: str = 'sparse',
                          return_all_frames: bool = False,
-                         frame_index: Optional[int] = None) -> torch.Tensor:
+                         frame_index: Optional[int] = None,
+                         return_stage_probs: bool = False) -> Any:
         """Predict normalized SARM progress for inference.
 
         Args:
@@ -423,10 +424,14 @@ class SARMRewardModel(BaseVLA):
             frame_index (int, optional): Frame to return when
                 ``return_all_frames`` is ``False``. Defaults to
                 ``self.n_obs_steps``.
+            return_stage_probs (bool): Whether to also return per-stage
+                probabilities for the same frames as the progress output.
 
         Returns:
-            torch.Tensor: Normalized progress. Shape is ``[B, T]`` when
-            ``return_all_frames`` is ``True`` and ``[B]`` otherwise.
+            torch.Tensor | tuple[torch.Tensor, torch.Tensor]: Normalized
+            progress. Shape is ``[B, T]`` when ``return_all_frames`` is
+            ``True`` and ``[B]`` otherwise. If ``return_stage_probs`` is
+            ``True``, returns ``(progress, stage_probs)``.
         """
         device = self._device()
         backbone = self._backbone()
@@ -452,6 +457,7 @@ class SARMRewardModel(BaseVLA):
         num_classes = self._num_classes(head_mode)
         stage_logits = backbone.stage_model(image_features, text_features,
                                             states, lengths, head_mode)
+        stage_probs = torch.softmax(stage_logits, dim=-1)
         stage_idx = stage_logits.argmax(dim=-1)
         stage_onehot = F.one_hot(stage_idx, num_classes=num_classes).float()
         tau_pred = backbone.subtask_model(image_features, text_features,
@@ -468,9 +474,14 @@ class SARMRewardModel(BaseVLA):
         )
         assert isinstance(normalized_progress, torch.Tensor)
         if return_all_frames:
+            if return_stage_probs:
+                return normalized_progress, stage_probs
             return normalized_progress
         target_index = self.n_obs_steps if frame_index is None else frame_index
-        return normalized_progress[:, target_index]
+        selected_progress = normalized_progress[:, target_index]
+        if return_stage_probs:
+            return selected_progress, stage_probs[:, target_index]
+        return selected_progress
 
     def get_fsdp_wrapping_policy(self) -> Callable:
         """Build the FSDP wrapping policy for SARM transformer layers.

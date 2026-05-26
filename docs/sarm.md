@@ -300,8 +300,16 @@ python scripts/infer_sarm_progress.py \
   --ckpt-path ./work_dirs/sarm_dense_only/checkpoints/latest-checkpoint.pt \
   --output-path ./work_dirs/sarm_dense_only/sarm_progress.jsonl \
   --head-mode dense \
-  --batch-size 1
+  --batch-size 1 \
+  --num-visualizations 5 \
+  --output-dir ./work_dirs/sarm_dense_only/sarm_viz
 ```
+
+This post-training inference step also mirrors LeRobot's SARM prediction
+visualization: each selected episode is rendered as a PNG with predicted
+progress, stage probabilities, optional ground-truth progress, and sampled
+frames. Set `--num-visualizations 0` to skip PNG generation, or use
+`--visualize-only` to generate the PNGs without rewriting the JSONL file.
 
 Example minimal real-dataset inference command:
 
@@ -313,6 +321,8 @@ python scripts/infer_sarm_progress.py \
   --head-mode dense \
   --batch-size 1 \
   --max-batches 1 \
+  --num-visualizations 1 \
+  --output-dir ./work_dirs/sarm_dense_only_your_dataset/sarm_viz \
   --cfg-options \
     model.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
     inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
