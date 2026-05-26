@@ -202,6 +202,29 @@ python tools/sarm_annotate/subtask_annotation.py \
     --push-to-hub
 ```
 
+### Visualizing annotation results
+
+`subtask_annotation.py` includes the same annotation visualization flow as
+LeRobot's SARM tooling. It can render each selected episode as a PNG containing
+representative video frames above a color-coded subtask timeline.
+
+Use `--visualize-only` to inspect annotations already written into the
+LeRobot episodes metadata without running the VLM:
+
+```bash
+python tools/sarm_annotate/subtask_annotation.py \
+  --repo-id ./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
+  --video-key observation.images.cam_high \
+  --visualize-only \
+  --visualize-type both \
+  --episodes 0 1 2 \
+  --output-dir ./subtask_viz
+```
+
+After a normal VLM annotation run, the script also writes visualizations unless
+`--num-visualizations 0` is passed. Use `--visualize-type sparse`, `dense`, or
+`both` to choose which annotation columns are rendered.
+
 ### Distributed per-episode runner
 
 `run_vlm_dense_subset.py` wraps `subtask_annotation.py` to annotate a subset of

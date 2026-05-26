@@ -221,6 +221,27 @@ python tools/sarm_annotate/subtask_annotation.py \
 For large datasets, `run_vlm_dense_subset.py` parallelises annotation across
 worker processes.
 
+### Visualize annotation results
+
+The VLM annotation script also ports LeRobot's SARM visualization path. It can
+render already written sparse/dense annotations as PNGs with sampled frames and
+a color-coded subtask timeline:
+
+```bash
+python tools/sarm_annotate/subtask_annotation.py \
+  --repo-id ./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
+  --video-key observation.images.cam_high \
+  --visualize-only \
+  --visualize-type both \
+  --episodes 0 1 2 \
+  --output-dir ./subtask_viz
+```
+
+For a normal VLM annotation run, visualizations are generated automatically at
+the end. Set `--num-visualizations 0` to skip them, or use
+`--visualize-type sparse`, `dense`, or `both` to choose which columns are
+rendered.
+
 ### Inspect / validate / reset
 
 - `tools/sarm_annotate/parse_sparse_episode_info.py` — per-episode

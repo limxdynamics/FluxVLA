@@ -157,18 +157,19 @@ class SARMRewardModel(BaseVLA):
         if self.uses_dual_heads:
             self.num_dense_stages = dense_stage_count
 
-        llm_backbone_cfg = copy.deepcopy(llm_backbone) if llm_backbone else {}
-        llm_backbone_cfg.setdefault('type', 'SARMBackbone')
-        llm_backbone_cfg.setdefault('pretrained_name_or_path',
-                                    clip_model_name_or_path)
-        llm_backbone_cfg.setdefault('hidden_dim', hidden_dim)
-        llm_backbone_cfg.setdefault('max_state_dim', max_state_dim)
-        llm_backbone_cfg.setdefault('num_layers', num_layers)
-        llm_backbone_cfg.setdefault('num_heads', num_heads)
-        llm_backbone_cfg.setdefault('dropout', dropout)
-        llm_backbone_cfg.setdefault('num_cameras', num_cameras)
-        llm_backbone_cfg.setdefault('freeze_clip_backbone',
-                                    freeze_clip_backbone)
+        llm_backbone_cfg = dict(
+            type='SARMBackbone',
+            pretrained_name_or_path=clip_model_name_or_path,
+            hidden_dim=hidden_dim,
+            max_state_dim=max_state_dim,
+            num_layers=num_layers,
+            num_heads=num_heads,
+            dropout=dropout,
+            num_cameras=num_cameras,
+            freeze_clip_backbone=freeze_clip_backbone,
+        )
+        if llm_backbone:
+            llm_backbone_cfg.update(copy.deepcopy(llm_backbone))
         llm_backbone_cfg['num_sparse_stages'] = self.num_sparse_stages
         llm_backbone_cfg['num_dense_stages'] = dense_stage_count
 
