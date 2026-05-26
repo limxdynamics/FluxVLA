@@ -139,6 +139,13 @@ class BaseVLA(nn.Module, GenerationMixin, ABC):
             else:
                 overwatch.info('[TRAINABLE] 🔥 =>> Projector', ctx_level=1)
 
+        # Some VLM backbones need finer-grained tuning than the generic
+        # freeze_vlm_backbone switch, e.g. GR00T N1.5 freezes Eagle LLM but
+        # tunes Eagle vision tower for RoboCasa.
+        if self.vlm_backbone is not None and hasattr(
+                self.vlm_backbone, 'apply_trainable_policy'):
+            self.vlm_backbone.apply_trainable_policy()
+
         if self.vision_backbone_fp32:
             self.vision_backbone.dtype = torch.float32
 

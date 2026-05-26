@@ -346,6 +346,7 @@ class NormalizeStatesAndActions:
                  norm_type: str = 'mean_std',
                  pad_value: float = 0.0,
                  action_norm_mask: List[bool] = None,
+                 normalize_states: bool = True,
                  *args,
                  **kwargs):
         self.state_key = state_key
@@ -354,6 +355,7 @@ class NormalizeStatesAndActions:
         self.pad_value = pad_value
         self.action_dim = action_dim
         self.state_dim = state_dim
+        self.normalize_states = normalize_states
         if action_norm_mask is not None:
             assert len(action_norm_mask) == action_dim, \
                 f'Action norm mask must be of length {action_dim}'
@@ -373,25 +375,29 @@ class NormalizeStatesAndActions:
                 data['actions'] = actions
         else:
             assert 'stats' in data, "Input data must contain 'stats' key"
-            state_stats = data['stats'][self.state_key]
+            state_stats = data['stats'][self.state_key] \
+                if self.normalize_states else None
             action_stats = None
-            if self.action_key is not None:
+            if self.action_key is not None and actions is not None:
                 action_stats = data['stats'][self.action_key]
 
             if self.norm_type == 'quantile':
-                states = self._normalize_quantile(states, state_stats)
+                if self.normalize_states:
+                    states = self._normalize_quantile(states, state_stats)
                 if actions is not None:
                     actions = self._normalize_quantile(actions, action_stats,
                                                        self.action_norm_mask)
                     data['actions'] = actions
             elif self.norm_type == 'min_max':
-                states = self._normalize_min_max(states, state_stats)
+                if self.normalize_states:
+                    states = self._normalize_min_max(states, state_stats)
                 if actions is not None:
                     actions = self._normalize_min_max(actions, action_stats,
                                                       self.action_norm_mask)
                     data['actions'] = actions
             else:  # norm_type == 'mean_std'
-                states = self._normalize(states, state_stats)
+                if self.normalize_states:
+                    states = self._normalize(states, state_stats)
                 if actions is not None:
                     actions = self._normalize(actions, action_stats,
                                               self.action_norm_mask)

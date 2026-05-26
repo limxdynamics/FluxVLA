@@ -41,7 +41,18 @@ pip install git+https://github.com/yinchimaoliang/robosuite.git@7264a82
 Install Isaac-GR00T and the RoboCasa GR1 task package from local checkouts:
 
 ```bash
+# Isaac-GR00T
+git clone https://github.com/NVIDIA/Isaac-GR00T.git /path/to/Isaac-GR00T
+cd /path/to/Isaac-GR00T
+git checkout 4af2b622892f7dcb5aae5a3fb70bcb02dc217b96  # n1.5-release
+
 pip install --no-deps -e /path/to/Isaac-GR00T
+
+# RoboCasa GR1 tabletop tasks
+git clone https://github.com/robocasa/robocasa-gr1-tabletop-tasks.git /path/to/robocasa-gr1-tabletop-tasks
+cd /path/to/robocasa-gr1-tabletop-tasks
+git checkout 4840e671596f93ca03651524b9f72ffb1aadfeff
+
 pip install --no-deps -e /path/to/robocasa-gr1-tabletop-tasks
 ```
 
@@ -84,6 +95,14 @@ print("PandaOmron:", PandaOmron)
 PY
 ```
 
+下载assert：
+
+```bash
+# 5. Download assets
+cd robocasa-gr1-tabletop-tasks
+python robocasa/scripts/download_tabletop_assets.py -y
+```
+
 Then verify RoboCasa registration:
 
 ```bash
@@ -92,10 +111,13 @@ import gymnasium as gym
 import robocasa  # noqa: F401
 from robocasa.utils.gym_utils import GrootRoboCasaEnv  # noqa: F401
 
-env_id = "PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env"
+env_id = "gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env"
+print("registered?", env_id in gym.envs.registry)
+
 env = gym.make(env_id)
 obs, info = env.reset()
 print("env reset OK:", env_id, len(obs), "obs keys")
+print(sorted(obs.keys())[:10])
 env.close()
 PY
 ```
@@ -152,6 +174,8 @@ ln -sfnT /shared/checkpoints/GR00T-N1.5-3B checkpoints/GR00T-N1.5-3B
 ln -sfnT /shared/datasets/robocasa_lerobot_V2.1 datasets/robocasa_fluxvla
 ```
 
+### 开始训练和评测前，确保权重和数据集，统计量已经下载到本地，或从共享存储中建立好软链接。
+
 ## Training and Evaluation
 
 Training can be launched with:
@@ -169,7 +193,60 @@ export SAVE_ITER_INTERVAL=5000
 export MAX_KEEP_CKPTS=20
 
 bash scripts/train_groot_robocasa.sh
+
+export CONFIG=configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py
+export WORK_DIR=work_dirs/smoke_groot_robocasa_train_0525
+export ROBOCASA_DATASET_ROOT=/mnt/workspace/mnt/data/yiming/fluxvla/datasets/robocasa_lerobot_V2.1
+
+export NPROC_PER_NODE=1
+export PER_DEVICE_BS=1
+export MAX_STEPS=2
+export SAVE_ITER_INTERVAL=1
+export MAX_KEEP_CKPTS=2
+export LEARNING_RATE=3e-5
+export WARMUP_RATIO=0.05
+export WEIGHT_DECAY=1e-5
+export LR_SCHEDULER_TYPE=linear-warmup+cosine-decay
+export ACTIVE_TRACKERS="('jsonl',)"
+export WANDB_MODE=disabled
+
+bash scripts/train_groot_robocasa.sh
 ```
+
+起训练时报错：
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/mnt/workspace/mnt/data/yiming/fluxvla-pr-gr00t-v2/scripts/train.py", line 352, in <module>
+[rank0]:     train(args, cfg)
+[rank0]:   File "/mnt/workspace/mnt/data/yiming/fluxvla-pr-gr00t-v2/scripts/train.py", line 304, in train
+[rank0]:     dataset = build_dataset_from_cfg(cfg.train_dataloader.dataset)
+[rank0]:   File "/root/projects/FluxVLA/fluxvla/engines/utils/builder.py", line 209, in build_dataset_from_cfg
+[rank0]:     return build_from_cfg(cfg, DATASETS, default_args)
+[rank0]:   File "/root/projects/FluxVLA/fluxvla/engines/utils/builder.py", line 130, in build_from_cfg
+[rank0]:     obj = obj_cls(**args)  # type: ignore
+[rank0]: TypeError: DistributedRepeatingDataset.__init__() got an unexpected keyword argument 'dataset_statistics_path'
+
+因为我们使用的是ali的v1版本的fluxvla镜像，里面的fluxvla是旧版本，没有对统计量的路径指定适配代码，现在通过显示指定解决，后面官方仓库镜像中拉取仓库中的更新即可。
+
+在这里我重装一下fluxvla
+cd /mnt/workspace/mnt/data/yiming/fluxvla-pr-gr00t-v2
+
+python -m pip uninstall -y fluxvla FluxVLA || true
+
+这里要使用 --no-build-isolation 重新装 不然会报缺少torch，这是 pip build isolation 导致的：它创建了一个临时构建环境，里面没有 torch，而 FluxVLA 的 setup.py 在构建阶段 import 了 torch。
+python -m pip install --no-deps --no-build-isolation -e .
+
+然后检查是否指向当前 PR 目录：
+```bash
+python - <<'PY'
+import fluxvla
+from fluxvla.datasets.dataset_wrapper import DistributedRepeatingDataset
+import inspect
+print("fluxvla path:", fluxvla.__file__)
+print("has dataset_statistics_path:",
+      "dataset_statistics_path" in str(inspect.signature(DistributedRepeatingDataset.__init__)))
+PY
+```
+
 
 Evaluation can be launched with:
 
@@ -181,6 +258,28 @@ bash scripts/eval_robocasa.sh \
   --cfg-options \
     eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
     eval.num_trials_per_task=20
+
+使用基础gr00t评测一个任务一次，不传参覆盖eval.task_list即使默认测评24任务，eval.num_trials_per_task每个任务评测次数
+bash scripts/eval_robocasa.sh \
+  --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
+  --ckpt-path checkpoints/GR00T-N1.5-3B \
+  --output-dir work_dirs/smoke_eval_base \
+  --cfg-options \
+    eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.task_list="['gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env']" \
+    eval.num_trials_per_task=1 \
+    eval.save_video=False
+
+使用你微调后的gr00t评测一个任务一次
+bash scripts/eval_robocasa.sh \
+  --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
+  --ckpt-path work_dirs/smoke_groot_robocasa_24x30/checkpoints/step-000002-epoch-00-loss=0.0256.safetensors \
+  --output-dir work_dirs/smoke_groot_robocasa_24x30/eval_step_000002 \
+  --cfg-options \
+    eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.task_list="['gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env']" \
+    eval.num_trials_per_task=1 \
+    eval.save_video=true
 ```
 
 ## Notes
