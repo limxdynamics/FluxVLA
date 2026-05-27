@@ -36,8 +36,7 @@ class FSDPTrainRunner(BaseTrainRunner):
     setup and training process for FSDP.
     It initializes the FSDP strategy, sets up the optimizer and learning rate
     scheduler, and handles gradient checkpointing.
-    It also provides a method to save checkpoints with only trainable
-    parameters.
+    It also provides a method to save checkpoints.
 
     Args:
         cfg (dict): Configuration dictionary for the runner.
@@ -55,8 +54,6 @@ class FSDPTrainRunner(BaseTrainRunner):
             based on epochs. Defaults to 1.
         max_keep_ckpts (int, optional): Maximum number of checkpoints to keep.
             Defaults to 2.
-        save_full_model (bool, optional): Whether to save the full model.
-            Defaults to True.
         lr_scheduler_type (str, optional): Type of learning rate scheduler.
             Supported types: 'constant', 'linear-warmup+cosine-decay',
             'step-based'. Defaults to 'constant'.
@@ -92,7 +89,6 @@ class FSDPTrainRunner(BaseTrainRunner):
                  save_epoch_interval: int = 1,
                  save_iter_interval: int = 10000,
                  max_keep_ckpts: int = 2,
-                 save_full_model: bool = True,
                  lr_scheduler_type: str = 'constant',
                  warmup_ratio: int = 0,
                  lr_schedule: Optional[Dict[float, float]] = None,
@@ -109,8 +105,8 @@ class FSDPTrainRunner(BaseTrainRunner):
         device_id = overwatch.local_rank()
         super().__init__(cfg, device_id, learning_rate, collator, sampler,
                          metric, max_epochs, max_steps, save_epoch_interval,
-                         save_iter_interval, max_keep_ckpts, save_full_model,
-                         lr_scheduler_type, lr_schedule, warmup_ratio,
+                         save_iter_interval, max_keep_ckpts, lr_scheduler_type,
+                         lr_schedule, warmup_ratio,
                          enable_gradient_checkpointing,
                          enable_mixed_precision_training,
                          reduce_in_full_precision, mixed_precision_dtype,
@@ -142,7 +138,6 @@ class FSDPTrainRunner(BaseTrainRunner):
         global_step: int,
         epoch: int,
         train_loss: Optional[float] = None,
-        only_trainable: bool = True,
     ) -> None:
         """Saves the checkpoint of the model.
 
@@ -152,8 +147,6 @@ class FSDPTrainRunner(BaseTrainRunner):
             epoch (int): Current epoch.
             train_loss (Optional[float], optional): Training loss.
                 Defaults to None.
-            only_trainable (bool, optional): Whether to save only
-                trainable parameters. Defaults to True.
         """
         assert isinstance(self.vla, FSDP), \
             'FSDPStrategy.save_checkpoint assumes VLA is \
@@ -174,15 +167,14 @@ class FSDPTrainRunner(BaseTrainRunner):
         with FSDP.state_dict_type(self.vla, self.fsdp_state_dict_type,
                                   self.fsdp_save_policy):
             full_vla_state_dict = self.vla.state_dict()
-            model_state_dicts = {
-                mkey: OrderedDict()
-                for mkey in (self.trainable_module_keys
-                             if only_trainable else self.all_module_keys)
-            }
 
             # Iterate through `full_vlm_state_dict` and split
             # `mkey.{full_dotted_path}` -> `mkey: {full_dotted_path}`
             if self.change_key_name:
+                model_state_dicts = {
+                    mkey: OrderedDict()
+                    for mkey in self.all_module_keys
+                }
                 for key, param in full_vla_state_dict.items():
                     for mkey in model_state_dicts:
                         if key.startswith(mprefix := f'{mkey}.'):
@@ -311,7 +303,6 @@ class FSDPTrainRunner(BaseTrainRunner):
                 buffer_dtype=torch.float32)
 
         self.vla.freeze_backbones()
-        self.trainable_module_keys = self.vla.trainable_module_keys
 
         if is_no_shard:
             target_dtype = torch.bfloat16
