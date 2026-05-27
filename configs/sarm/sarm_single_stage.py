@@ -2,14 +2,22 @@ clip_pretrained_name_or_path = './checkpoints/clip-vit-base-patch32'
 data_root_path = './datasets/SARM_manual_test_10Episodes_lerobotv3.0'
 
 current_transforms = [
-    dict(type='ResizeImageSequence', height=224, width=224),
     dict(
-        type='NormalizeImageSequence',
+        type='ResizeImages', height=224, width=224,
+        preserve_leading_dims=True),
+    dict(
+        type='NormalizeImages',
         means=[0.48145466, 0.4578275, 0.40821073],
         stds=[0.26862954, 0.26130258, 0.27577711],
+        preserve_leading_dims=True,
         scale_to_unit_interval=True,
     ),
-    dict(type='PadStates', max_state_dim=32),
+    dict(
+        type='NormalizeStatesAndActions',
+        state_key='states',
+        action_key=None,
+        state_dim=32,
+        norm_type='none'),
     dict(
         type='TokenizeText',
         tokenizer=dict(
