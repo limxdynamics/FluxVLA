@@ -96,6 +96,7 @@ class LiberoEvalRunner:
                  task_suite_name: str,
                  dataset: Dict,
                  denormalize_action: Dict,
+                 norm_stats_key: str = None,
                  eval_chunk_size: int = 1,
                  resize_size: int = 224,
                  num_trials_per_task: int = 50,
@@ -158,7 +159,9 @@ class LiberoEvalRunner:
             f'Dataset statistics file not found at {data_stat_path}!'
         # Load dataset and denormalization action
         denormalize_action['norm_stats'] = data_stat_path
+        self.norm_stats_key = norm_stats_key or f'{task_suite_name}_no_noops'
         dataset['task_suite_name'] = task_suite_name
+        dataset['norm_stats_key'] = self.norm_stats_key
         dataset['norm_stats'] = data_stat_path
         if self._is_qwen3_inference(cfg):
             self._use_checkpoint_tokenizer(dataset, ckpt_path)
@@ -284,6 +287,7 @@ class LiberoEvalRunner:
                 # Setup
                 t = 0
                 replay_images = []
+                next_batch = None
                 if self.task_suite_name == 'libero_spatial':
                     max_steps = 220  # longest training demo has 193 steps
                 elif self.task_suite_name == 'libero_object':
@@ -308,13 +312,17 @@ class LiberoEvalRunner:
                             get_libero_dummy_action())
                         t += 1
                         continue
-                    obs['task_description'] = task_description
-                    obs['is_new_episode'] = is_new_episode
-                    batch, replay_img = self.dataset(obs)
+                    if next_batch is None:
+                        obs['task_description'] = task_description
+                        obs['is_new_episode'] = is_new_episode
+                        batch, replay_img = self.dataset(obs)
+                        if len(replay_images) == 0:
+                            replay_images.append(replay_img)
+                    else:
+                        batch = next_batch
+                        next_batch = None
                     is_new_episode = False
                     batch['unnorm_key'] = unnorm_key
-                    if len(replay_images) == 0:
-                        replay_images.append(replay_img)
                     with torch.autocast(
                             'cuda',
                             dtype=self.mixed_precision_dtype,
@@ -332,6 +340,7 @@ class LiberoEvalRunner:
                         inputs = dict(
                             action=action,
                             task_suite_name=self.task_suite_name,
+                            norm_stats_key=self.norm_stats_key,
                         )
                         action_denormed = self.denormalize_action(inputs)
                         obs, reward, done, info = env.step(
@@ -341,7 +350,9 @@ class LiberoEvalRunner:
                         replay_images.append(replay_img)
                         if done:
                             total_successes += 1
+                            next_batch = None
                             break
+                        next_batch = batch
                         t += 1
                     if done:
                         break

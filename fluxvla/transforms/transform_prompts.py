@@ -42,7 +42,8 @@ class ProcessPrompts():
                  max_len: int = 180,
                  with_labels: bool = False,
                  with_state: bool = False,
-                 ignore_index: int = -100):
+                 ignore_index: int = -100,
+                 negative_prompt=None):
         from fluxvla.engines import build_tokenizer_from_cfg
         if model_path is not None:
             tokenizer['model_path'] = os.path.join(model_path, 'tokenizer')
@@ -51,6 +52,28 @@ class ProcessPrompts():
         self.with_labels = with_labels
         self.with_state = with_state
         self.ignore_index = ignore_index
+        self.negative_prompt = negative_prompt
+
+    def _tokenize_single_prompt(self,
+                                prompt: str,
+                                state: np.ndarray | None = None):
+        if state is not None:
+            tokens = self.tokenizer(
+                prompt, state=state, add_special_tokens=True)['input_ids']
+        else:
+            tokens = self.tokenizer(
+                prompt, add_special_tokens=True)['input_ids']
+        token_mask = [True] * len(tokens)
+        tokens_len = len(tokens)
+        if self.max_len is not None:
+            if tokens_len < self.max_len:
+                padding = [False] * (self.max_len - tokens_len)
+                tokens = tokens + padding
+                token_mask = token_mask + padding
+            else:
+                tokens = tokens[:self.max_len]
+                token_mask = token_mask[:self.max_len]
+        return tokens, token_mask
 
     def __call__(self, inputs):
         """Tokenize and process the prompt in the input data.
@@ -65,22 +88,17 @@ class ProcessPrompts():
         if self.with_state:
             assert 'state' in inputs, "Data must contain 'state' key."
             state = inputs['state']
-            tokens = self.tokenizer(
-                inputs['prompt'], state=state,
-                add_special_tokens=True)['input_ids']
         else:
-            tokens = self.tokenizer(
-                inputs['prompt'], add_special_tokens=True)['input_ids']
-        token_mask = [True] * len(tokens)
-        tokens_len = len(tokens)
-        if self.max_len is not None:
-            if tokens_len < self.max_len:
-                padding = [False] * (self.max_len - tokens_len)
-                tokens = tokens + padding
-                token_mask = token_mask + padding
-            else:
-                tokens = tokens[:self.max_len]
-                token_mask = token_mask[:self.max_len]
+            state = None
+        tokens, token_mask = self._tokenize_single_prompt(
+            inputs['prompt'], state)
+        lang_tokens = [tokens]
+        lang_masks = [token_mask]
+        if self.negative_prompt is not None:
+            negative_tokens, negative_token_mask = (
+                self._tokenize_single_prompt(self.negative_prompt, state))
+            lang_tokens.append(negative_tokens)
+            lang_masks.append(negative_token_mask)
         labels = list(tokens)
         inputs['lang_tokens'] = np.array(tokens)
         inputs['lang_masks'] = np.array(token_mask)
@@ -349,6 +367,7 @@ class LiberoPromptFromInputs:
                  pad_token_id: int = 0,
                  prompt_suffix: str = '',
                  use_conversation: bool = True,
+                 negative_prompt: str = None,
                  add_new_line: bool = False) -> None:
         from fluxvla.engines import build_tokenizer_from_cfg
         self.tokenizer = build_tokenizer_from_cfg(tokenizer)
@@ -356,22 +375,12 @@ class LiberoPromptFromInputs:
         self.pad_token_id = pad_token_id
         self.prompt_suffix = prompt_suffix
         self.use_conversation = use_conversation
+        self.negative_prompt = negative_prompt
         self.add_new_line = add_new_line
 
-    def __call__(self, inputs: Dict) -> Dict:
-        assert 'task_description' in inputs, "inputs must contain 'task_description'"  # noqa: E501
-        task_description = inputs['task_description']
-        if self.use_conversation:
-            prompt = (f'In: What action should the robot take to '
-                      f'{str(task_description).lower()}?\nOut:' +
-                      self.prompt_suffix)
-        else:
-            prompt = task_description
-        if self.add_new_line:
-            prompt += '\n'
+    def _tokenize_single_prompt(self, prompt: str):
         token_ids = self.tokenizer(prompt)['input_ids']
         mask = [True] * len(token_ids)
-
         if self.max_len is not None:
             if len(token_ids) < self.max_len:
                 pad_len = self.max_len - len(token_ids)
@@ -380,7 +389,26 @@ class LiberoPromptFromInputs:
             else:
                 token_ids = token_ids[:self.max_len]
                 mask = mask[:self.max_len]
+        return token_ids, mask
 
-        inputs['lang_tokens'] = np.asarray(token_ids, dtype=np.int64)
-        inputs['lang_masks'] = np.asarray(mask, dtype=np.bool_)
+    def __call__(self, inputs: Dict) -> Dict:
+        assert 'task_description' in inputs, "inputs must contain 'task_description'"  # noqa: E501
+        task_description = inputs['task_description']
+        if self.use_conversation:
+            prompt = ('In: What action should the robot take to ' +
+                      str(task_description).lower() + '?\nOut:' +
+                      self.prompt_suffix)
+        else:
+            prompt = task_description
+        if self.add_new_line:
+            prompt += '\n'
+        tokens, token_mask = self._tokenize_single_prompt(prompt)
+        if self.negative_prompt is not None:
+            negative_tokens, negative_token_mask = (
+                self._tokenize_single_prompt(self.negative_prompt))
+            tokens = [tokens, negative_tokens]
+            token_mask = [token_mask, negative_token_mask]
+
+        inputs['lang_tokens'] = np.asarray(tokens, dtype=np.int64)
+        inputs['lang_masks'] = np.asarray(token_mask, dtype=np.bool_)
         return inputs

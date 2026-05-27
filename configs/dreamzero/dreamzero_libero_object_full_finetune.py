@@ -21,7 +21,7 @@
 #   observation; the remaining frames are prediction targets for
 #   the video dynamics loss.
 #   VAE temporal compression: latent_frames = 1 + (T-1)//4
-#   T=9 → 3 latent frames → 1 conditioning + 2 = 1 block of
+#   T=9 -> 3 latent frames -> 1 conditioning + 2 = 1 block of
 #   num_frame_per_block=2.
 #
 # Image layout : 2 views (agentview + wrist) @ 128x128 each
@@ -48,6 +48,7 @@ model = dict(
     frame_window_size=_frame_window_size,
     pretrained_name_or_path=  # noqa: E251
     _ckpt_root + '/DreamZero-AgiBot',
+    use_cache=False,
     vlm_backbone=dict(
         type='WanBackbone',
         text_encoder_path=None,
@@ -86,6 +87,8 @@ model = dict(
         num_inference_steps=16,
         # ----- pretrained paths -----
         use_gradient_checkpointing=True,
+        cfg_scale=1.0,
+        max_chunk_size=-1,
     ),
     name_mapping={
         'vla_head.model': 'action_head.model',
@@ -216,6 +219,7 @@ eval = dict(
     mixed_precision_dtype='bf16',
     dataset=dict(
         type='LiberoParquetEvalDataset',
+        img_buffer_len=1,
         transforms=[
             dict(
                 type='ProcessLiberoEvalInputs',

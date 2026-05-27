@@ -66,3 +66,18 @@ datasets/*
 
 # Ignore local experiment directories
 src/
+
+# Coding assistants' stuff
+.agents/
+/CLAUDE.md
+/instructions.md
+.claude/
+/GEMINI.md
+.gemini/
+AGENTS.md
+.codex/
+
+# Cursor specific files
+.cursor
+.cursorignore
+.cursorindexingignore

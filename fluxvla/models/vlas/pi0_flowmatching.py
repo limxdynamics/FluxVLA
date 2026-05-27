@@ -134,7 +134,6 @@ class PI0FlowMatching(BaseVLA):
         else:
             self.state_proj = None
         self.freeze_llm_expert = freeze_llm_expert
-        self.trainable_module_keys = []
         self.action_in_proj = build_projector_from_cfg(action_in_proj)
         self.action_out_proj = build_projector_from_cfg(action_out_proj)
         if time_mlp_in is not None:

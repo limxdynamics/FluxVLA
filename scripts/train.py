@@ -16,6 +16,7 @@ import argparse
 import gc
 import json
 import os
+import socket
 import sys
 
 import draccus
@@ -135,29 +136,110 @@ def _resolve_eval_config_path(args):
     return os.path.abspath(args.config)
 
 
-def _get_eval_relaunch_env():
+def _get_clean_eval_relaunch_env():
     env = os.environ.copy()
     for key in _DISTRIBUTED_ENV_KEYS:
         env.pop(key, None)
     return env
 
 
-def _relaunch_eval_in_fresh_process(args, eval_ckpt_path):
-    """Replace the current process with a clean single-worker eval launch."""
+def _get_int_env(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_torchrun_worker():
+    return all(
+        key in os.environ for key in ('LOCAL_RANK', 'RANK', 'WORLD_SIZE'))
+
+
+def _find_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(('', 0))
+        return sock.getsockname()[1]
+
+
+def _get_eval_relaunch_spec():
+    if not _is_torchrun_worker():
+        return dict(distributed=False)
+
+    world_size = _get_int_env('WORLD_SIZE', 1)
+    local_world_size = _get_int_env('LOCAL_WORLD_SIZE', 1)
+    rank = _get_int_env('RANK', 0)
+    local_rank = _get_int_env('LOCAL_RANK', 0)
+    nnodes = max(1, world_size // max(1, local_world_size))
+    node_rank = _get_int_env(
+        'GROUP_RANK',
+        _get_int_env('NODE_RANK', rank // max(1, local_world_size)))
+
+    master_port = None
+    if dist.is_available() and dist.is_initialized() and nnodes > 1:
+        port_holder = [_find_free_port() if rank == 0 else None]
+        dist.broadcast_object_list(port_holder, src=0)
+        master_port = str(port_holder[0])
+
+    return dict(
+        distributed=True,
+        local_rank=local_rank,
+        local_world_size=local_world_size,
+        nnodes=nnodes,
+        node_rank=node_rank,
+        master_addr=os.environ.get('MASTER_ADDR', 'localhost'),
+        master_port=master_port,
+    )
+
+
+def _should_launch_eval(relaunch_spec):
+    return (not relaunch_spec.get('distributed', False)
+            or relaunch_spec.get('local_rank', 0) == 0)
+
+
+def _relaunch_eval_in_fresh_process(args, eval_ckpt_path, relaunch_spec):
+    """Replace training workers with a clean evaluation torchrun job."""
     eval_script_path = os.path.abspath(
         os.path.join(os.path.dirname(__file__), 'eval.py'))
     eval_config_path = _resolve_eval_config_path(args)
-    eval_argv = [
-        sys.executable, '-m', 'torch.distributed.run', '--standalone',
-        '--nnodes', '1', '--nproc-per-node', '1', eval_script_path, '--config',
-        eval_config_path, '--ckpt-path',
+    eval_args = [
+        eval_script_path, '--config', eval_config_path, '--ckpt-path',
         os.path.abspath(eval_ckpt_path)
     ]
 
+    if relaunch_spec.get('distributed', False):
+        eval_argv = [sys.executable, '-m', 'torch.distributed.run']
+        nnodes = relaunch_spec['nnodes']
+        if nnodes == 1:
+            eval_argv.extend(['--standalone', '--nnodes', '1'])
+        else:
+            eval_argv.extend([
+                '--nnodes',
+                str(nnodes),
+                '--node_rank',
+                str(relaunch_spec['node_rank']),
+                '--master_addr',
+                relaunch_spec['master_addr'],
+                '--master_port',
+                relaunch_spec['master_port'],
+            ])
+        eval_argv.extend([
+            '--nproc-per-node',
+            str(relaunch_spec['local_world_size']),
+            *eval_args,
+        ])
+        overwatch.info(
+            'Re-launching evaluation in a fresh distributed job with '
+            f"{relaunch_spec['local_world_size']} worker(s) per node.")
+        os.execvpe(sys.executable, eval_argv, _get_clean_eval_relaunch_env())
+
+    eval_argv = [
+        sys.executable, '-m', 'torch.distributed.run', '--standalone',
+        '--nnodes', '1', '--nproc-per-node', '1', *eval_args
+    ]
     overwatch.info(
         'Re-launching evaluation in a fresh single-worker process to '
         'fully release training CUDA/FSDP state before eval.')
-    os.execvpe(sys.executable, eval_argv, _get_eval_relaunch_env())
+    os.execvpe(sys.executable, eval_argv, _get_clean_eval_relaunch_env())
 
 
 def _release_training_resources(runner, dataset):
@@ -252,14 +334,14 @@ def train(args, cfg):
         runner, dataset = _release_training_resources(runner, dataset)
         overwatch.info('Evaluation after training is enabled.')
         eval_ckpt_path = _resolve_eval_ckpt_path(ckpt_path)
-        is_rank_zero = overwatch.is_rank_zero()
+        relaunch_spec = _get_eval_relaunch_spec()
         _destroy_distributed_process_group()
         _clear_cuda_memory()
-        if not is_rank_zero:
+        if not _should_launch_eval(relaunch_spec):
             return
         assert eval_ckpt_path is not None, (
             'Evaluation checkpoint path is missing after training.')
-        _relaunch_eval_in_fresh_process(args, eval_ckpt_path)
+        _relaunch_eval_in_fresh_process(args, eval_ckpt_path, relaunch_spec)
 
 
 if __name__ == '__main__':

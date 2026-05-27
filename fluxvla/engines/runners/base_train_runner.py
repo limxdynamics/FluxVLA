@@ -58,8 +58,6 @@ class BaseTrainRunner(ABC):
             based on epochs. Defaults to 10000.
         max_keep_ckpts (int, optional): Maximum number of checkpoints to keep.
             Defaults to 2.
-        save_full_model (bool, optional): Whether to save the full model.
-            Defaults to True.
         lr_scheduler_type (str, optional): Type of learning rate scheduler.
             Defaults to 'constant'.
         warmup_ratio (int, optional): Warm-up ratio for learning rate
@@ -88,7 +86,6 @@ class BaseTrainRunner(ABC):
                  save_epoch_interval: int = 1,
                  save_iter_interval: int = 10000,
                  max_keep_ckpts: int = 2,
-                 save_full_model: bool = True,
                  lr_scheduler_type: str = 'constant',
                  lr_schedule: Optional[Dict[float, float]] = None,
                  warmup_ratio: int = 0,
@@ -118,7 +115,6 @@ class BaseTrainRunner(ABC):
 
         self.vla = build_vla_from_cfg(cfg.model)
         self.all_module_keys = self.vla.all_module_keys
-        self.trainable_module_keys = list()
         if self.vla.llm_backbone is not None:
             self.llm_transformer_layer_cls = self.vla.llm_backbone.transformer_layer_cls  # noqa: E501
         elif (self.vla.vlm_backbone is not None
@@ -136,7 +132,6 @@ class BaseTrainRunner(ABC):
         self.save_iter_interval = save_iter_interval
         self.save_epoch_interval = save_epoch_interval
         self.max_keep_ckpts = max_keep_ckpts
-        self.save_full_model = save_full_model
         self.lr_scheduler_type = lr_scheduler_type
         self.warmup_ratio = warmup_ratio
         self.enable_gradient_checkpointing = enable_gradient_checkpointing
@@ -291,7 +286,6 @@ class BaseTrainRunner(ABC):
         global_step: int,
         epoch: int,
         train_loss: Optional[float] = None,
-        only_trainable: bool = True,
     ) -> None:
         """Save checkpoint including model, optimizer, and scheduler states.
 
@@ -717,7 +711,7 @@ class BaseTrainRunner(ABC):
                     global_step=self.metric.global_step + 1,
                     epoch=self.current_epoch,
                     lr=self.lr_scheduler.get_last_lr()[0])
-                progress.set_description(self.metric.push())
+                progress.set_description(self.metric.push(), refresh=False)
                 progress.update()
 
                 # Save checkpoint
@@ -893,12 +887,8 @@ class BaseTrainRunner(ABC):
         else:
             avg_loss = loss_value
 
-        self.save_checkpoint(
-            self.metric.run_dir,
-            self.metric.global_step,
-            self.current_epoch,
-            avg_loss,
-            only_trainable=not self.save_full_model)
+        self.save_checkpoint(self.metric.run_dir, self.metric.global_step,
+                             self.current_epoch, avg_loss)
         dist.barrier()
 
     def _get_checkpoint_path(self) -> str:

@@ -3,6 +3,8 @@ Third-Party Attribution for dreamzero
 Source projects:
 - NVIDIA DreamZero
   Upstream location: https://github.com/dreamzero0/dreamzero/tree/main/groot/vla/model/dreamzero/modules
+  Project code: https://github.com/dreamzero0/dreamzero
+  Paper: https://arxiv.org/abs/2602.15922
   Upstream ref: main
   License: Apache-2.0
 

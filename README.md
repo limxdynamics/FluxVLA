@@ -28,12 +28,16 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 ## Performance
 
-| Codebase                    | Libero-Spatial | Libero-Object | Libero-Goal | Libero-Long | Libero-Average |
-| --------------------------- | :------------: | :-----------: | :---------: | :---------: | :------------: |
-| FluxVLA(GR00T)              |      96.2      |     96.8      |    93.4     |  89.4±1.5   |     93.95      |
-| FluxVLA(Pi)                 |      98.6      |     99.0      |    97.8     |   96±1.0    |     97.85      |
-| FluxVLA(Qwen3VL 0.6B+GR00T) |      98.6      |     99.6      |    95.6     |  92.2±1.8   |     96.50      |
-| FluxVLA(DreamZero)          |      96.8      |     97.4      |  90.8±1.5   |    93.6     |     94.65      |
+| Codebase                    |                                                     Libero-Spatial                                                      |                                                     Libero-Object                                                      |                                                     Libero-Goal                                                      |                                                     Libero-Long                                                     | Libero-Average |
+| --------------------------- | :---------------------------------------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------: | :------------: |
+| FluxVLA(SmolVLA)            |      [86.2](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/smolvla_libero_spatial_full_finetune_bs64)      |      [92.4](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/smolvla_libero_object_full_finetune_bs64)      |      [91.4](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/smolvla_libero_goal_full_finetune_bs64)      |      [68.8](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/smolvla_libero_10_full_finetune_bs64)       |      84.7      |
+| FluxVLA(GR00T)              |  [97.4](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_spatial_full_finetune_bs64)   |  [96.2](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_object_full_finetune_bs64)   |  [94.6](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_goal_full_finetune_bs64)   | [93.0±1.5](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_10_full_finetune_bs64) |      95.3      |
+| FluxVLA(DreamZero)          | [98.2](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/dreamzero_libero_spatial_full_finetune_w_cache_bs64) | [98.8](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/dreamzero_libero_object_full_finetune_w_cache_bs64) | [93.2](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/dreamzero_libero_goal_full_finetune_w_cache_bs64) | [94.8](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/dreamzero_libero_10_full_finetune_w_cache_bs64)  |     96.25      |
+| FluxVLA(Qwen3VL 0.6B+GR00T) |                                                          98.6                                                           |                                                          99.6                                                          |                                                         95.6                                                         |                                                      92.2±1.8                                                       |     96.50      |
+| FluxVLA(PI0)                |   [98.6](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_paligemma_libero_spatial_full_finetune_bs64)   |   [98.8](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_paligemma_libero_object_full_finetune_bs64)   |   [96.8](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_paligemma_libero_goal_full_finetune_bs64)   |   [93.2](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_paligemma_libero_10_full_finetune_bs64)    |     96.85      |
+| FluxVLA(PI0.5)              |  [98.6](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_spatial_full_finetune_bs64)   |  [99.6](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_object_full_finetune_bs64)   |  [98.0](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_goal_full_finetune_bs64)   | [95.6±1.0](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_10_full_finetune_bs64) |     97.95      |
+
+*Linked scores point to the corresponding checkpoints.*
 
 ## 📢 Latest News
 
@@ -316,15 +320,17 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 | PI0_base    | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi0_base)    |
 | PI05_base   | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_base)   |
 | PI05_libero | 3B   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_libero) |
+| SmolVLA     | 450M | [🤗 Hugging Face](https://huggingface.co/lerobot/smolvla_base)                             |
 
 </details>
 
 <details>
 <summary><b>Vision-Language Models (VLM)</b></summary>
 
-| Model      | Size | Download link                                                         |
-| ---------- | ---- | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| Model      | Size | Download link                                                                        |
+| ---------- | ---- | ------------------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)                |
+| SmolVLM2   | 500M | [🤗 Hugging Face](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) |
 
 </details>
 
@@ -356,12 +362,7 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 <details>
 <summary><b>Trained models</b></summary>
 
-You can also download models that have been trained with FluxVLA for inference or evaluation directly. Place them under `./work_dirs`.
-
-| Model                     | Download link                                                                                                              |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| PI0.5 PaliGemma Libero-10 | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_10_full_finetune_bs64) |
-| GR00T Eagle 3B Libero-10  | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_10_full_finetune_bs64) |
+Checkpoints are available on [🤗 limxdynamics/FluxVLAEngine](https://huggingface.co/limxdynamics/FluxVLAEngine). Linked scores in the [Performance](#performance) table point to the corresponding checkpoints.
 
 ```bash
 # Example: download the PI0.5 checkpoint from limxdynamics/FluxVLAEngine
@@ -629,7 +630,7 @@ If you use FluxVLA in your research or projects, please cite it as:
 }
 ```
 
-**Acknowledgements:** This project benefits from the following open-source projects and community efforts. Thanks to: [LeRobot](https://github.com/huggingface/lerobot), [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main), [OpenVLA](https://github.com/openvla/openvla), [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi), [LLaVA](https://github.com/haotian-liu/LLaVA), [DeepSpeed](https://github.com/deepspeedai/DeepSpeed), [Qwen](https://github.com/QwenLM), [Triton](https://github.com/triton-lang/triton), [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix), [Training RTC](https://arxiv.org/pdf/2512.05964), and [Realtime-VLA](https://github.com/Dexmal/realtime-vla). If we missed your project or contribution, please open an issue or pull request so we can properly acknowledge it.
+**Acknowledgements:** This project benefits from the following open-source projects and community efforts. Thanks to: [LeRobot](https://github.com/huggingface/lerobot), [NVIDIA Isaac GR00T](https://github.com/NVIDIA/Isaac-GR00T/tree/main), [DreamZero](https://arxiv.org/abs/2602.15922) ([code](https://github.com/dreamzero0/dreamzero)), [OpenVLA](https://github.com/openvla/openvla), [OpenPI (pi0)](https://github.com/Physical-Intelligence/openpi), [LLaVA](https://github.com/haotian-liu/LLaVA), [DeepSpeed](https://github.com/deepspeedai/DeepSpeed), [Qwen](https://github.com/QwenLM), [Triton](https://github.com/triton-lang/triton), [RTC](https://github.com/Physical-Intelligence/real-time-chunking-kinetix), [Training RTC](https://arxiv.org/pdf/2512.05964), and [Realtime-VLA](https://github.com/Dexmal/realtime-vla). If we missed your project or contribution, please open an issue or pull request so we can properly acknowledge it.
 
 ## Roadmap
 

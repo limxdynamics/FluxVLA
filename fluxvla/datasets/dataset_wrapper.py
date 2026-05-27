@@ -16,6 +16,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import torch
 from torch.utils.data import IterableDataset
 
 from fluxvla.engines import (DATASETS, build_dataset_from_cfg,
@@ -46,8 +47,9 @@ class DistributedRepeatingDataset(IterableDataset):
             to collect statistics.
         name_mappings (dict, optional): Mappings for
             statistic names. Defaults to None.
-        shuffle (bool): Whether to shuffle the dataset
-            at each epoch.
+        shuffle (bool): Whether to shuffle the dataset.
+        reshuffle_each_epoch (bool): Whether to change the shuffle order
+            after each full pass over the local shard. Defaults to False.
         seed (int): Seed for random number generation.
         statistic_name (str): Name for the statistics collection.
         dim (int, optional): Target dimension for padding/copying data.
@@ -60,11 +62,13 @@ class DistributedRepeatingDataset(IterableDataset):
                  statistic_keys: List[str],
                  name_mappings: Dict = None,
                  shuffle: bool = True,
+                 reshuffle_each_epoch: bool = False,
                  seed: int = 42,
                  statistic_name: str = 'private',
                  dim: Optional[int] = None,
                  dataset_statistics: Optional[Dict] = None) -> None:
         self.shuffle = shuffle
+        self.reshuffle_each_epoch = reshuffle_each_epoch
         self.seed = seed
         self.statistic_name = statistic_name
         self.dim = dim
@@ -178,6 +182,7 @@ class DistributedRepeatingDataset(IterableDataset):
         # Get the rank and world size from the overwatch
         self.rank = overwatch.rank()
         self.world_size = overwatch.world_size()
+        self._epoch = 0
 
     def _get_item_from_global_idx(self, global_idx):
         """Get item from global index, handling single, list,
@@ -458,21 +463,34 @@ class DistributedRepeatingDataset(IterableDataset):
         pass
 
     def __iter__(self):
-        epoch = 0
+        # Incorporate DataLoader worker info so that data is split
+        # across both distributed processes AND per-process workers.
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is not None:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+        else:
+            worker_id = 0
+            num_workers = 1
+
+        # Effective world: distributed processes × per-process workers
+        total_world = self.world_size * num_workers
+        total_rank = self.rank * num_workers + worker_id
+
         while True:
-            # Create indices for the entire virtual concatenated dataset
             indices = np.arange(self.total_len)
             if self.shuffle:
-                rng = np.random.default_rng(self.seed + epoch)
+                epoch_offset = self._epoch if self.reshuffle_each_epoch else 0
+                rng = np.random.default_rng(self.seed + epoch_offset)
                 rng.shuffle(indices)
 
-            # Distribute the indices across the world size
-            shard = indices[self.rank::self.world_size].tolist()
+            shard = indices[total_rank::total_world].tolist()
 
             for idx in shard:
                 yield self._get_item_from_global_idx(idx)
 
-            epoch += 1
+            if self.reshuffle_each_epoch:
+                self._epoch += 1
 
     def __len__(self):
         """Return the total length of all datasets."""
