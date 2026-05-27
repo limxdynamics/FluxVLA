@@ -35,7 +35,8 @@ class ParquetDataset(Dataset):
                  use_delta: bool = False,
                  statistic_name: str = 'private',
                  window_start_idx: int = 1,
-                 frame_window_size: int = 1) -> None:
+                 frame_window_size: int = 1,
+                 expose_index: bool = False) -> None:
         """Initialize the Parquet dataset.
 
         Args:
@@ -62,6 +63,10 @@ class ParquetDataset(Dataset):
                 Defaults to 'private'.
             window_start_idx (int): Start index for the action window.
                 Defaults to 1.
+            expose_index (bool): Whether to add the concatenated dataset index
+                to each raw sample before transforms. This is useful for
+                offline sample-weight transforms such as SARM RA-BC.
+                Defaults to False.
         """
         super().__init__()
         self.action_window_size = action_window_size
@@ -127,6 +132,7 @@ class ParquetDataset(Dataset):
         self.statistic_name = statistic_name
         self.window_start_idx = window_start_idx
         self.frame_window_size = frame_window_size
+        self.expose_index = expose_index
         for transform in transforms:
             self.transforms.append(build_transform_from_cfg(transform))
 
@@ -236,6 +242,8 @@ class ParquetDataset(Dataset):
         data['stats'] = dataset_statistics[self.statistic_name]
         data['actions'] = np.array(actions, dtype=np.float32)
         data['action_masks'] = np.array(action_masks, dtype=np.float32)
+        if self.expose_index:
+            data['index'] = np.array(index, dtype=np.int64)
         data['task_description'] = self.tasks[dataset_idx][data['task_index']][
             'task']  # noqa: E501
         data['data_root'] = self.data_root_path[dataset_idx]

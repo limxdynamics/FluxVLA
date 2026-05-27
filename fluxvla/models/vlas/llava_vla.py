@@ -167,7 +167,8 @@ class LlavaVLA(OpenVLA):
             attention_mask=fused_attention_mask,
             actions=actions,
             action_masks=action_masks,
-            embodiment_ids=embodiment_ids)
+            embodiment_ids=embodiment_ids,
+            sample_weight=kwargs.get('sample_weight'))
         return ret_dict
 
     def predict_action(self,

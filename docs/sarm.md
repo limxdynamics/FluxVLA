@@ -358,3 +358,57 @@ For downstream policy code that supports per-sample losses, the reusable
 weight helper is available at `tools.sarm_rabc.SarmRABCWeights`. It expects
 batches to contain a global `index` or `current_index` field and computes the
 RA-BC delta weight from `progress[t + chunk_size] - progress[t]`.
+
+## RA-BC Policy Training
+
+Policy training can consume the SARM progress file through the generic
+`sample_weight` path:
+
+1. Set `expose_index=True` on the parquet dataset so transforms can see the
+   same global frame index used in `sarm_progress.parquet`.
+2. Insert `AttachRABCWeight` before `ProcessParquetInputs`.
+3. Add `sample_weight` to the `DictCollator.keys` list.
+
+```python
+rabc = dict(
+    enabled=True,
+    weight_key='sample_weight',
+    weighter=dict(
+        type='SARMProgressWeighter',
+        progress_path='./work_dirs/sarm_dense_only/sarm_progress.parquet',
+        chunk_size=50,
+        head_mode='dense',
+    ),
+)
+
+train_dataloader = dict(
+    dataset=dict(
+        datasets=dict(
+            type='ParquetDataset',
+            expose_index=True,
+            transforms=[
+                dict(type='AttachRABCWeight', weighter=rabc['weighter']),
+                dict(type='ProcessParquetInputs', ...),
+                ...
+            ],
+        ),
+    ),
+)
+
+runner = dict(
+    collator=dict(
+        type='DictCollator',
+        keys=[
+            'states', 'images', 'img_masks', 'lang_tokens', 'lang_masks',
+            'actions', 'action_masks', 'sample_weight',
+        ],
+    ),
+)
+```
+
+The loss weighting itself is implemented in
+`fluxvla.engines.losses.reduce_action_bc_loss` and is currently wired into
+PI0/PI05 flow matching, SmolVLA flow matching, shared flow-matching heads,
+LLaVA action heads, OpenVLA token CE, and DreamZero's action/dynamics loss
+path. If a batch does not include `sample_weight`, these models keep the
+previous unweighted loss behavior.

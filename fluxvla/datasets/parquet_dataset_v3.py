@@ -126,7 +126,8 @@ class ParquetDatasetV3(ParquetDataset):
                  use_delta: bool = False,
                  statistic_name: str = 'private',
                  window_start_idx: int = 1,
-                 frame_window_size: int = 1) -> None:
+                 frame_window_size: int = 1,
+                 expose_index: bool = False) -> None:
         """Initialize a parquet dataset backed by LeRobot v3 metadata.
 
         Args:
@@ -144,6 +145,8 @@ class ParquetDatasetV3(ParquetDataset):
                 window.
             frame_window_size (int): Number of timestamps to expose for
                 frame-sequence consumers.
+            expose_index (bool): Whether to expose the concatenated row index
+                to transforms for offline sample weighting.
         """
         Dataset.__init__(self)
         self.action_window_size = action_window_size
@@ -199,6 +202,7 @@ class ParquetDatasetV3(ParquetDataset):
         self.statistic_name = statistic_name
         self.window_start_idx = window_start_idx
         self.frame_window_size = frame_window_size
+        self.expose_index = expose_index
         for transform in transforms:
             self.transforms.append(build_transform_from_cfg(transform))
 
@@ -329,6 +333,8 @@ class ParquetDatasetV3(ParquetDataset):
         data['stats'] = dataset_statistics[self.statistic_name]
         data['actions'] = np.array(actions, dtype=np.float32)
         data['action_masks'] = np.array(action_masks, dtype=np.float32)
+        if self.expose_index:
+            data['index'] = np.array(index, dtype=np.int64)
         data['task_description'] = self._resolve_task_description(
             dataset_idx, data)
         data['data_root'] = self.data_root_path[dataset_idx]

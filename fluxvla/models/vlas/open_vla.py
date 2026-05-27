@@ -17,11 +17,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import torch
+import torch.nn.functional as F
 from torch.distributed.fsdp.wrap import _module_wrap_policy, _or_policy
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from fluxvla.engines import (VLAS, build_tokenizer_from_cfg,
                              initialize_overwatch)
+from fluxvla.engines.losses import reduce_action_bc_loss
 from .base_vla import BaseVLA
 
 overwatch = initialize_overwatch(__name__)
@@ -131,6 +133,7 @@ class OpenVLA(BaseVLA):
                       output_hidden_states: Optional[bool] = None,
                       return_dict: Optional[bool] = None,
                       multimodal_indices: Optional[torch.LongTensor] = None,
+                      return_fused_labels: bool = False,
                       *args,
                       **kwargs) -> CausalLMOutputWithPast:
         """
@@ -175,6 +178,8 @@ class OpenVLA(BaseVLA):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            if return_fused_labels:
+                return output, None, None
             return output
 
         elif input_ids.shape[1] == 1 or pixel_values is None:
@@ -189,7 +194,7 @@ class OpenVLA(BaseVLA):
         # Handle Multimodal Indices is Empty (len == 0) --> simple
         # unimodal forward
         elif len(multimodal_indices) == 0:
-            return self.llm_backbone(
+            output = self.llm_backbone(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=None,
@@ -201,6 +206,9 @@ class OpenVLA(BaseVLA):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
+            if return_fused_labels:
+                return output, attention_mask, labels
+            return output
 
         with torch.set_grad_enabled(self.vision_backbone_requires_grad):
             if isinstance(pixel_values, dict):
@@ -321,7 +329,42 @@ class OpenVLA(BaseVLA):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict)
+        if return_fused_labels:
+            return output, fused_attention_mask, fused_labels
         return output, fused_attention_mask
+
+    def _reorder_fused_sample_weight(
+            self, sample_weight: torch.Tensor, batch_size: int,
+            multimodal_indices: Optional[torch.LongTensor]) -> torch.Tensor:
+        """Match sample weights to the fused batch order."""
+        if multimodal_indices is None:
+            return sample_weight
+
+        all_indices = torch.arange(
+            batch_size, dtype=torch.long, device=multimodal_indices.device)
+        unimodal_mask = torch.ones(
+            batch_size, dtype=torch.bool, device=multimodal_indices.device)
+        unimodal_mask[multimodal_indices] = False
+        fused_order = torch.cat(
+            [multimodal_indices, all_indices[unimodal_mask]])
+        return sample_weight.to(fused_order.device)[fused_order]
+
+    def _reduce_weighted_ce_loss(
+            self, logits: torch.Tensor, fused_labels: torch.Tensor,
+            sample_weight: Optional[torch.Tensor]) -> torch.Tensor:
+        """Compute sample-weighted token CE for OpenVLA."""
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = fused_labels[..., 1:].contiguous()
+        token_losses = F.cross_entropy(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+            ignore_index=self.ignore_index,
+            reduction='none').view_as(shift_labels)
+        token_mask = shift_labels.ne(self.ignore_index)
+        return reduce_action_bc_loss(
+            token_losses.unsqueeze(-1),
+            action_mask=token_mask,
+            sample_weight=sample_weight)
 
     def forward(self,
                 lang_tokens: Optional[torch.LongTensor] = None,
@@ -356,7 +399,7 @@ class OpenVLA(BaseVLA):
         Returns:
             Dict: A dictionary containing the predictions and loss.
         """
-        output, _ = self.forward_model(
+        output, _, fused_labels = self.forward_model(
             input_ids=lang_tokens,
             attention_mask=lang_masks,
             pixel_values=images,
@@ -368,6 +411,7 @@ class OpenVLA(BaseVLA):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             multimodal_indices=multimodal_indices,
+            return_fused_labels=True,
         )
         action_preds = output.logits[:, self.vision_backbone.
                                      num_patches:-1].argmax(dim=2)
@@ -407,9 +451,17 @@ class OpenVLA(BaseVLA):
                 ds_name_list.append(ds.decode())
                 action_accuracy_list.append(action_accuracy_ds)
                 action_l1_loss_list.append(action_l1_loss_ds)
+        loss = output.loss if output.loss is not None else None
+        sample_weight = kwargs.get('sample_weight')
+        if sample_weight is not None and fused_labels is not None:
+            sample_weight = self._reorder_fused_sample_weight(
+                sample_weight, lang_tokens.shape[0], multimodal_indices)
+            loss = self._reduce_weighted_ce_loss(output.logits, fused_labels,
+                                                 sample_weight)
+
         return_dict = dict(
             predictions=output.logits,
-            loss=output.loss if output.loss is not None else None,
+            loss=loss,
             action_accuracy=action_accuracy,
             action_l1_loss=action_l1_loss,
             action_accuracy_ds=action_accuracy_list,
@@ -577,14 +629,14 @@ class OpenVLA(BaseVLA):
         if unnorm_key is None:
             assert len(norm_stats) == 1, (
                 f'Your model was trained on more than one dataset, '
-                f'please pass a `unnorm_key` from the following options to'
-                f'choose the statistics'
+                f'please pass an unnorm_key from the following options to '
+                f'choose the statistics '
                 f'used for un-normalizing actions: {norm_stats.keys()}')
             unnorm_key = next(iter(norm_stats.keys()))
 
         assert unnorm_key in norm_stats, (
-            f'The `unnorm_key` you chose is not in'
-            f'the set of available dataset statistics,'
+            f'The unnorm_key you chose is missing from '
+            f'the set of available dataset statistics. '
             f'please choose from: {norm_stats.keys()}')
         return unnorm_key
 

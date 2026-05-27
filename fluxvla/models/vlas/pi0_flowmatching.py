@@ -23,6 +23,7 @@ from torch.distributed.fsdp.wrap import _or_policy
 
 from fluxvla.engines import (VLAS, build_llm_backbone_from_cfg,
                              build_projector_from_cfg)
+from fluxvla.engines.losses import reduce_action_bc_loss
 from fluxvla.engines.utils.model_utils import (apply_rotary_pos_emb,
                                                create_sinusoidal_pos_embedding,
                                                eager_attention_forward,
@@ -628,12 +629,10 @@ class PI0FlowMatching(BaseVLA):
         if self.ori_action_dim is not None:
             v_t = v_t[:, :, :self.ori_action_dim]
             u_t = u_t[:, :, :self.ori_action_dim]
-        if action_masks is not None:
-            losses = F.mse_loss(u_t, v_t, reduction='none')
-            losses = losses * action_masks.unsqueeze(-1)
-            loss = losses.sum() / (action_masks.sum() * u_t.shape[-1] + 1e-8)
-        else:
-            loss = F.mse_loss(u_t, v_t)
+        losses = F.mse_loss(u_t, v_t, reduction='none')
+        sample_weight = kwarg.get('sample_weight')
+        loss = reduce_action_bc_loss(
+            losses, action_mask=action_masks, sample_weight=sample_weight)
 
         return_dict = dict(
             predictions=v_t,

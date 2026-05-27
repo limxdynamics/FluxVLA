@@ -217,6 +217,20 @@ class SarmRABCWeights:
         weight_tensor = weight_tensor * len(weight_tensor) / weight_sum
         return weight_tensor, stats
 
+    def compute_weight(self, index: int) -> float:
+        """Compute an unnormalized RA-BC weight for one global frame index.
+
+        Args:
+            index (int): Global frame index matching the progress parquet.
+
+        Returns:
+            float: Sample weight in ``[0, 1]`` or ``fallback_weight`` when
+            progress is missing.
+        """
+        delta = self._compute_delta(int(index))
+        weights = self._compute_weights(np.asarray([delta], dtype=np.float32))
+        return float(weights[0])
+
     def _compute_delta(self, global_idx: int) -> float:
         progress = self.progress_lookup.get(global_idx)
         if progress is None:
