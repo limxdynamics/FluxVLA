@@ -67,6 +67,27 @@ class LiberoEvalRunner:
             Default is True.
     """
 
+    @staticmethod
+    def _is_qwen3_inference(cfg: Dict) -> bool:
+        if not hasattr(cfg, 'inference_model'):
+            return False
+        vlm_backbone = cfg.inference_model.get('vlm_backbone', None)
+        return (vlm_backbone is not None
+                and vlm_backbone.get('type', None) == 'Qwen3VL')
+
+    @staticmethod
+    def _use_checkpoint_tokenizer(dataset: Dict, ckpt_path: str) -> None:
+        tokenizer_dir = Path(ckpt_path).resolve().parent.parent / 'tokenizer'
+        if not tokenizer_dir.is_dir():
+            return
+
+        for transform in dataset.get('transforms', []):
+            tokenizer = transform.get('tokenizer', None)
+            if tokenizer is None:
+                continue
+            if tokenizer.get('type', None) == 'PretrainedTokenizer':
+                tokenizer['model_path'] = tokenizer_dir.as_posix()
+
     def __init__(self,
                  cfg: Dict,
                  seed: int,
@@ -139,6 +160,8 @@ class LiberoEvalRunner:
         denormalize_action['norm_stats'] = data_stat_path
         dataset['task_suite_name'] = task_suite_name
         dataset['norm_stats'] = data_stat_path
+        if self._is_qwen3_inference(cfg):
+            self._use_checkpoint_tokenizer(dataset, ckpt_path)
         self.dataset = build_dataset_from_cfg(dataset)
         self.denormalize_action = build_transform_from_cfg(denormalize_action)
         self.eval_chunk_size = eval_chunk_size

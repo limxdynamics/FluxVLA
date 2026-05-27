@@ -12,10 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .collators import *  # noqa: F401, F403
-from .datasets import *  # noqa: F401, F403
-from .engines import *  # noqa: F401, F403
-from .models import *  # noqa: F401, F403
-from .optimizers import *  # noqa: F401, F403
-from .tokenizers import *  # noqa: F401, F403
-from .transforms import *  # noqa: F401, F403
+import transformers
+from mmengine.utils import digit_version
+
+transformers_minimum_version = '5.3.0'
+transformers_maximum_version = '5.3.1'
+transformers_version = digit_version(transformers.__version__)
+
+assert (transformers_version >= digit_version(transformers_minimum_version) and
+        transformers_version < digit_version(transformers_maximum_version)), \
+    f'Transformers=={transformers.__version__} is used but incompatible. ' \
+    f'Please install transformers>={transformers_minimum_version}, ' \
+    f'<{transformers_maximum_version}.'
+
+from .collators import *  # noqa: E402, F401, F403
+from .datasets import *  # noqa: E402, F401, F403
+from .engines import *  # noqa: E402, F401, F403
+from .models import *  # noqa: E402, F401, F403
+from .optimizers import *  # noqa: E402, F401, F403
+from .tokenizers import *  # noqa: E402, F401, F403
+from .transforms import *  # noqa: E402, F401, F403

@@ -540,18 +540,10 @@ class GemmaAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_kwargs)
             else:
-                if hasattr(past_key_value, 'layers'):
-                    layer_cache = past_key_value.layers[self.layer_idx]
-                    key_states = torch.cat([layer_cache.keys, key_states],
-                                           dim=2)
-                    value_states = torch.cat(
-                        [layer_cache.values, value_states], dim=2)
-                else:
-                    key_states = torch.cat(
-                        [past_key_value[self.layer_idx][0], key_states], dim=2)
-                    value_states = torch.cat(
-                        [past_key_value[self.layer_idx][1], value_states],
-                        dim=2)
+                layer_cache = past_key_value.layers[self.layer_idx]
+                key_states = torch.cat([layer_cache.keys, key_states], dim=2)
+                value_states = torch.cat([layer_cache.values, value_states],
+                                         dim=2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != 'eager':

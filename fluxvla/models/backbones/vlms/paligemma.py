@@ -54,12 +54,7 @@ class PaliGemma(VLMBackbone):
         # To handle fsdp wrapping problem.
         self.embed_tokens = nn.Embedding(vlm_config['vocab_size'],
                                          vlm_config['hidden_size'])
-        language_model = getattr(self.vlm, 'language_model', None) or getattr(
-            self.vlm.model, 'language_model', None)
-        if language_model is None:
-            language_model = self.vlm.model
-        if hasattr(language_model, 'embed_tokens'):
-            del language_model.embed_tokens
+        del self.vlm.language_model.embed_tokens
         self.use_llm = use_llm
 
     def forward(self,
