@@ -328,3 +328,33 @@ python scripts/infer_sarm_progress.py \
     inference_dataset.data_root_path=./datasets/SARM_manual_test_10Episodes_lerobotv2.1 \
     inference_dataset.video_keys="['observation.images.cam_high']"
 ```
+
+## RA-BC Progress Weights
+
+FluxVLA also includes the SARM side of RA-BC (Reward-Aligned Behavior
+Cloning): use a trained SARM checkpoint to precompute per-frame progress and
+write a `sarm_progress.parquet` file. The parquet contains `index`,
+`dataset_index`, `episode_index`, `frame_index`, and `progress_sparse` and/or
+`progress_dense` columns, matching the format used by LeRobot's SARM RA-BC
+weighting.
+
+```bash
+python scripts/compute_sarm_rabc_progress.py \
+  --config configs/sarm/sarm_dense_only.py \
+  --ckpt-path ./work_dirs/sarm_dense_only/checkpoints/latest-checkpoint.pt \
+  --output-path ./work_dirs/sarm_dense_only/sarm_progress.parquet \
+  --head-mode dense \
+  --batch-size 1 \
+  --stride 1
+```
+
+`--stride N` computes every Nth frame and linearly interpolates the skipped
+frames, which is useful for larger datasets. The script scores the center
+frame of each SARM observation window by default so the stored progress aligns
+with the parquet `index` column. Use `--frame-index` only if you intentionally
+need a different frame from the SARM sequence.
+
+For downstream policy code that supports per-sample losses, the reusable
+weight helper is available at `tools.sarm_rabc.SarmRABCWeights`. It expects
+batches to contain a global `index` or `current_index` field and computes the
+RA-BC delta weight from `progress[t + chunk_size] - progress[t]`.
