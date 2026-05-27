@@ -139,12 +139,6 @@ class BaseInferenceRunnerSim:
                 else:
                     state_dict = checkpoint
             self.vla.load_state_dict(state_dict, strict=True)
-            # checkpoint = torch.load(ckpt_path, map_location='cpu')
-            # if isinstance(checkpoint, dict) and 'model' in checkpoint:
-            #     state_dict = checkpoint['model']
-            # else:
-            #     state_dict = checkpoint
-            # self.vla.load_state_dict(state_dict, strict=True)
 
         self.seed = seed
         self.state_dim = state_dim
@@ -193,8 +187,7 @@ class BaseInferenceRunnerSim:
         Returns:
             str: Human-readable task description
         """
-        return self.task_descriptions.get(
-            task_id, 'place it in the brown paper bag with right arm')
+        return self.task_descriptions.get(task_id, '')
 
     def run_setup(self):
         """Set up the inference environment.
