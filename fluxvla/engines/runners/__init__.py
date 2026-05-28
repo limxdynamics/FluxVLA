@@ -15,6 +15,7 @@
 from .aloha_inference_runner import AlohaInferenceRunner  # noqa: F401, F403
 from .aloha_rtc_inference_runner import \
     AlohaRTCInferenceRunner  # noqa: F401, F403
+from .base_eval_runner import BaseEvalRunner  # noqa: F401, F403
 from .base_train_runner import BaseTrainRunner  # noqa: F401, F403
 from .ddp_train_runner import DDPTrainRunner  # noqa: F401, F403
 from .fluxbisim_aloha_inference_runner import \

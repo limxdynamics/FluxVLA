@@ -32,13 +32,14 @@ from fluxvla.engines.utils.eval_utils import (get_libero_dummy_action,
                                               save_rollout_video)
 from fluxvla.engines.utils.name_map import str_to_dtype
 from fluxvla.engines.utils.torch_utils import set_seed_everywhere
+from .base_eval_runner import BaseEvalRunner
 from ..utils.root import RUNNERS
 
 overwatch = initialize_overwatch(__name__)
 
 
 @RUNNERS.register_module()
-class LiberoEvalRunner:
+class LiberoEvalRunner(BaseEvalRunner):
     """Runner for evaluating models using Hugging Face Transformers.
     This class sets up the evaluation environment, loads the model,
     and runs the evaluation process.
@@ -83,13 +84,9 @@ class LiberoEvalRunner:
                  mixed_precision_dtype: str = 'bf16',
                  enable_mixed_precision_training: bool = True):
         from fluxvla.engines import (build_dataset_from_cfg,
-                                     build_transform_from_cfg,
-                                     build_vla_from_cfg)
+                                     build_transform_from_cfg)
         self.device_id = overwatch.local_rank()
-        if hasattr(cfg, 'inference_model'):
-            self.vla = build_vla_from_cfg(cfg.inference_model).eval()
-        else:
-            self.vla = build_vla_from_cfg(cfg.model).eval()
+        self.vla = self.build_eval_vla(cfg)
         # Load checkpoint weights if ckpt_path is provided
         if ckpt_path is not None:
             assert Path.exists(Path(ckpt_path)), \

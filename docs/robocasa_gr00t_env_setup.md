@@ -181,36 +181,27 @@ ln -sfnT /shared/datasets/robocasa_lerobot_V2.1 datasets/robocasa_fluxvla
 Training can be launched with:
 
 ```bash
-export ROBOCASA_DATASET_ROOT=/path/to/robocasa_lerobot_V2.1
-export WORK_DIR=work_dirs/groot_robocasa_full
-export PER_DEVICE_BS=16
-export LEARNING_RATE=3e-5
-export WARMUP_RATIO=0.05
-export WEIGHT_DECAY=1e-5
-export LR_SCHEDULER_TYPE=linear-warmup+cosine-decay
-export MAX_STEPS=60000
-export SAVE_ITER_INTERVAL=5000
-export MAX_KEEP_CKPTS=20
+cd /path/to/FluxVLA
+mkdir -p datasets
+ln -sfnT /path/to/robocasa_lerobot_V2.1 datasets/robocasa_fluxvla
 
-bash scripts/train_groot_robocasa.sh
-
-export CONFIG=configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py
-export WORK_DIR=work_dirs/smoke_groot_robocasa_train_0525
-export ROBOCASA_DATASET_ROOT=/mnt/workspace/mnt/data/yiming/fluxvla/datasets/robocasa_lerobot_V2.1
-
-export NPROC_PER_NODE=1
-export PER_DEVICE_BS=1
-export MAX_STEPS=2
-export SAVE_ITER_INTERVAL=1
-export MAX_KEEP_CKPTS=2
-export LEARNING_RATE=3e-5
-export WARMUP_RATIO=0.05
-export WEIGHT_DECAY=1e-5
-export LR_SCHEDULER_TYPE=linear-warmup+cosine-decay
-export ACTIVE_TRACKERS="('jsonl',)"
-export WANDB_MODE=disabled
-
-bash scripts/train_groot_robocasa.sh
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/train.py \
+  --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
+  --work-dir work_dirs/smoke_groot_robocasa_train \
+  --cfg-options \
+    runner.type=FSDPTrainRunner \
+    runner.sharding_strategy=no-shard \
+    train_dataloader.per_device_batch_size=1 \
+    runner.enable_gradient_checkpointing=False \
+    runner.learning_rate=3e-5 \
+    runner.weight_decay=1e-5 \
+    runner.warmup_ratio=0.05 \
+    runner.lr_scheduler_type=linear-warmup+cosine-decay \
+    runner.max_epochs=None \
+    runner.max_steps=2 \
+    runner.save_iter_interval=1 \
+    runner.max_keep_ckpts=2 \
+    "runner.metric.active_trackers=('jsonl',)"
 ```
 
 起训练时报错：
@@ -251,32 +242,35 @@ PY
 Evaluation can be launched with:
 
 ```bash
-bash scripts/eval_robocasa.sh \
+MUJOCO_GL=egl WANDB_MODE=disabled TOKENIZERS_PARALLELISM=false \
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/eval.py \
   --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
   --ckpt-path work_dirs/groot_robocasa_full/checkpoints/step-060000.safetensors \
-  --output-dir work_dirs/groot_robocasa_full/eval_step060000 \
   --cfg-options \
     eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.output_dir=work_dirs/groot_robocasa_full/eval_step060000 \
     eval.num_trials_per_task=20
 
 使用基础gr00t评测一个任务一次，不传参覆盖eval.task_list即使默认测评24任务，eval.num_trials_per_task每个任务评测次数
-bash scripts/eval_robocasa.sh \
+MUJOCO_GL=egl WANDB_MODE=disabled TOKENIZERS_PARALLELISM=false \
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/eval.py \
   --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
   --ckpt-path checkpoints/GR00T-N1.5-3B \
-  --output-dir work_dirs/smoke_eval_base \
   --cfg-options \
     eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.output_dir=work_dirs/smoke_eval_base \
     eval.task_list="['gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env']" \
     eval.num_trials_per_task=1 \
     eval.save_video=False
 
 使用你微调后的gr00t评测一个任务一次
-bash scripts/eval_robocasa.sh \
+MUJOCO_GL=egl WANDB_MODE=disabled TOKENIZERS_PARALLELISM=false \
+torchrun --standalone --nnodes 1 --nproc-per-node 1 scripts/eval.py \
   --config configs/gr00t/gr00t_eagle_3b_robocasa_finetune.py \
   --ckpt-path work_dirs/smoke_groot_robocasa_24x30/checkpoints/step-000002-epoch-00-loss=0.0256.safetensors \
-  --output-dir work_dirs/smoke_groot_robocasa_24x30/eval_step_000002 \
   --cfg-options \
     eval.norm_stats_path=work_dirs/official_groot_gr1_dataset_statistics.json \
+    eval.output_dir=work_dirs/smoke_groot_robocasa_24x30/eval_step_000002 \
     eval.task_list="['gr1_unified/PnPCupToDrawerClose_GR1ArmsAndWaistFourierHands_Env']" \
     eval.num_trials_per_task=1 \
     eval.save_video=true
