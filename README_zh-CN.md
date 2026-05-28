@@ -41,6 +41,14 @@ FluxVLA Engine是面向具身智能落地应用的全链路一体化工程平台
 
 ## 📢 最新动态
 
+**\[2026/05/28\]** 🔥 正式发布面向双臂操作的模型解耦 DAgger 流水线 [FluxDAgger](https://github.com/FluxVLA/FluxDAgger)，便于接入不同 VLA 与奖励模型。
+
+**\[2026/05/28\]** 🔥 正式发布具身操作仿真 Benchmark [FluxBisim](https://github.com/FluxVLA/FluxBisim)。
+
+**\[2026/05/09\]** 🔥 现已支持 SmolVLA。
+
+**\[2026/04/24\]** 🔥 现已支持 Pi0.5-RTC。
+
 **\[2026/04/22\]** 🔥 现已支持基于 ZMQ 的远程推理框架。
 
 **\[2026/04/15\]** 🔥 现已支持世界动作模型 DreamZero。
