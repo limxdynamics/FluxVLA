@@ -1,40 +1,36 @@
-# ============================================================
-# Robocasa 评测 Transform — 观测预处理 + 动作反归一化
-# ============================================================
+# Copyright 2026 Limx Dynamics
 #
-# 评测时的观测预处理 pipeline:
-#   ProcessRobocasaEvalInputs → NormalizeStatesAndActions
-#   → PreparePromptWithState → ProcessPrompts
-#   → ResizeImages → SimpleNormalizeImages
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# 动作反归一化:
-#   DenormalizeRobocasaAction: min_max 反归一化，无 gripper 后处理
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# 作者: yiming | 创建: 2026-04-14
-# ============================================================
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""RoboCasa transforms for evaluation preprocessing and action denormalization."""
 
-import json
 import copy
+import json
 from typing import Any, Dict, List, Optional
 
 import cv2
 import numpy as np
 import torch
 
-from fluxvla.engines.utils.root import TRANSFORMS, DATASETS
+from fluxvla.engines.utils.root import DATASETS, TRANSFORMS
 
-# 关节布局必须和训练数据严格一致！
-# 参见 scripts/convert_robocasa_for_fluxvla.py 顶部注释:
-#   "提取后 29 维排列: left_arm(7) + left_hand(6) + right_arm(7) + right_hand(6) + waist(3)"
-# 以及 RobocasaEvalRunner 的 ROBOCASA_ACTION_KEYS 字典
-# 历史坑: v1 版本把 right_arm 和 left_hand 位置写反，
-#        导致 eval 时 state 从第 7 维开始整段错位 → 12/12 fail。
+# This order must match the converted training parquet exactly:
+# left_arm + left_hand + right_arm + right_hand + waist.
 ROBOCASA_STATE_KEYS = [
-    'state.left_arm',    # 7 维 → [0:7]
-    'state.left_hand',   # 6 维 → [7:13]
-    'state.right_arm',   # 7 维 → [13:20]
-    'state.right_hand',  # 6 维 → [20:26]
-    'state.waist',       # 3 维 → [26:29]
+    'state.left_arm',    # 7D -> [0:7]
+    'state.left_hand',   # 6D -> [7:13]
+    'state.right_arm',   # 7D -> [13:20]
+    'state.right_hand',  # 6D -> [20:26]
+    'state.waist',       # 3D -> [26:29]
 ]
 
 ROBOCASA_GR1_FLUXVLA_ORDER = {
@@ -81,6 +77,16 @@ class RobocasaGR1N15Bridge:
     right_hand + waist, applies sin/cos to state, and min-max normalizes
     action only. This transform performs the order conversion and state
     encoding while also reordering flat action statistics.
+
+    Args:
+        source_order: Source flat vector order. Only ``fluxvla`` is supported.
+        state_key: Key containing the state vector in the sample dict.
+        action_key: Key containing the action window in the sample dict.
+        stats_action_key: Key containing action statistics in ``data['stats']``.
+        apply_state_sincos: If True, encode states as sin/cos features.
+        reorder_actions: If True, reorder action vectors to N1.5 order.
+        reorder_action_stats: If True, reorder flat action statistics to N1.5
+            order so normalization matches reordered action dimensions.
     """
 
     def __init__(self,
@@ -160,9 +166,9 @@ class RobocasaGR1N15Bridge:
 
 @TRANSFORMS.register_module()
 class ProcessRobocasaEvalInputs:
-    """从 Robocasa gymnasium obs dict 中提取图像和状态。
+    """Extract images, state, and task text from a RoboCasa Gymnasium obs dict.
 
-    Robocasa obs 格式:
+    Expected RoboCasa obs keys:
         video.ego_view_pad_res256_freq20: (256, 256, 3) uint8
         video.ego_view_bg_crop_pad_res256_freq20: (256, 256, 3) uint8
         state.left_arm: (7,)
@@ -172,11 +178,20 @@ class ProcessRobocasaEvalInputs:
         state.waist: (3,)
         annotation.human.coarse_action: str
 
-    输出:
+    Output keys:
         images: list of numpy (H, W, 3)
         states: numpy (29,)
         task_description: str
-        replay_img: numpy (H, W, 3) 用于录制回放视频
+        replay_img: numpy (H, W, 3) used for rollout video saving
+
+    Args:
+        img_key: Observation key used as the policy image input.
+        resize_size: Square image size expected by the model.
+        center_crop_scale: Optional center-crop scale before resizing.
+        normalize: If True, convert image pixels from uint8 [0, 255] to
+            float32 [0, 1] and return CHW tensors for PI0.5. If False, keep
+            HWC uint8 images for downstream image transforms.
+        embodiment_id: Optional embodiment id passed through for GR00T heads.
     """
 
     def __init__(self,
@@ -191,8 +206,8 @@ class ProcessRobocasaEvalInputs:
         self.img_key = img_key
         self.resize_size = resize_size
         self.center_crop_scale = center_crop_scale
-        self.normalize = normalize  # 是否做 pixel/255 归一化
-        # 与训练侧 ProcessParquetInputs 配置对齐；当前评测管线不消费该字段，仅避免 cfg 报错
+        self.normalize = normalize
+        # Keep the signature aligned with training ProcessParquetInputs.
         self.embodiment_id = embodiment_id
 
     def _center_crop(self, img: np.ndarray) -> np.ndarray:
@@ -208,30 +223,29 @@ class ProcessRobocasaEvalInputs:
     def __call__(self, data: Dict) -> Dict:
         result = {}
 
-        # --- 图像提取 + 处理 ---
+        # Image extraction and preprocessing.
         img = data.get(self.img_key, None)
         if img is not None:
-            # 保存原始图像用于回放视频
+            # Preserve the raw image for rollout video saving.
             result['replay_img'] = img.copy()
 
-            # 官方 GR00T eval 的 VideoCrop(scale=0.95) 在 eval 模式下为 center crop。
+            # Official GR00T VideoCrop(scale=0.95) is a center crop in eval.
             img = self._center_crop(img)
 
-            # Resize 到模型期望尺寸 (robocasa 输出 256x256 → 224x224)
+            # Resize RoboCasa 256x256 frames to the model input size.
             if img.shape[0] != self.resize_size or img.shape[1] != self.resize_size:
                 img = cv2.resize(img, (self.resize_size, self.resize_size))
 
             if self.normalize:
-                # PI0.5: 归一化 uint8 [0,255] → float32 [0,1]
+                # PI0.5 path: uint8 [0, 255] -> float32 [0, 1].
                 img = img.astype(np.float32) / 255.0
-                # HWC → CHW
+                # HWC -> CHW.
                 img = np.transpose(img, (2, 0, 1))  # (3, 224, 224)
-                # 转为 tensor
+                # Convert to tensor.
                 pixel_values = torch.from_numpy(img).float()  # (3, 224, 224)
                 result['pixel_values'] = pixel_values
             else:
-                # GR00T: 保留 uint8 [0,255]，输出为 'pixel_values' 供后续 TransformImage 处理
-                # 保持 HWC 格式，不转 CHW
+                # GR00T path: keep HWC uint8 images for downstream transforms.
                 result['pixel_values'] = img  # (224, 224, 3) uint8
 
             result['img_masks'] = np.array([True])
@@ -240,7 +254,7 @@ class ProcessRobocasaEvalInputs:
                 f'Image key {self.img_key} not found in obs. '
                 f'Available keys: {list(data.keys())}')
 
-        # --- 状态提取: 拼接 29 维关节角度 ---
+        # State extraction: concatenate the 29 active joint dimensions.
         state_parts = []
         for key in ROBOCASA_STATE_KEYS:
             val = data.get(key, None)
@@ -253,14 +267,14 @@ class ProcessRobocasaEvalInputs:
                 f'State keys not found in obs. '
                 f'Available keys: {list(data.keys())}')
 
-        # --- 任务描述 ---
+        # Task description.
         result['task_description'] = data.get('task_description', '')
 
         if self.embodiment_id is not None:
             result['embodiment_ids'] = np.array(
                 self.embodiment_id, dtype=np.int32)
 
-        # --- 传递 norm_stats (如果有) ---
+        # Forward norm stats when provided by the eval dataset.
         if 'norm_stats' in data:
             result['norm_stats'] = data['norm_stats']
         if 'stats' in data:
@@ -271,17 +285,20 @@ class ProcessRobocasaEvalInputs:
 
 @TRANSFORMS.register_module()
 class DenormalizeRobocasaAction:
-    """Robocasa 动作反归一化。
+    """Denormalize RoboCasa actions.
 
-    与 DenormalizeLiberoAction 的差异:
-    - stats key 不附加 '_no_noops' 后缀
-    - 无 gripper binarize / invert 后处理
-    - 默认 min_max 归一化
+    Differences from DenormalizeLiberoAction:
+    - no ``_no_noops`` suffix on the statistics key
+    - no gripper binarization or inversion post-processing
+    - min-max normalization by default
 
     Args:
-        norm_stats: 归一化统计量文件路径或 dict
-        action_dim: 实际动作维度 (29)
-        norm_type: 归一化类型 ('min_max')
+        norm_stats: Normalization statistics path or dict.
+        action_dim: Number of active RoboCasa action dimensions.
+        norm_type: Normalization type.
+        clip_actions: If True, clip normalized actions to [-1, 1] first.
+        stats_order: Order of the flat action statistics. Only ``fluxvla`` is
+            supported by this transform.
     """
 
     def __init__(self,
@@ -307,7 +324,7 @@ class DenormalizeRobocasaAction:
             dtype=np.int64)
 
     def __call__(self, data: Dict) -> np.ndarray:
-        """反归一化动作。
+        """Denormalize one predicted action.
 
         Args:
             data: dict with 'action' (numpy) and 'task_suite_name' (str)
@@ -316,7 +333,7 @@ class DenormalizeRobocasaAction:
             numpy array of denormalized action, shape (action_dim,)
         """
         task_key = data.get('task_suite_name', '')
-        # Robocasa 不用 '_no_noops' 后缀
+        # RoboCasa statistics do not use the LIBERO '_no_noops' suffix.
         if task_key in self.norm_stats:
             stats = self.norm_stats[task_key]
         else:
@@ -327,7 +344,7 @@ class DenormalizeRobocasaAction:
         action = data['action']
         action_stats = self._reorder_action_stats(stats['action'])
 
-        # 先截断到实际维度
+        # Keep only the active action dimensions.
         action = action[:self.action_dim]
 
         if self.norm_type == 'min_max':
@@ -358,20 +375,20 @@ class DenormalizeRobocasaAction:
         high = np.array(stats['max'])[:self.action_dim]
         if self.clip_actions:
             action = np.clip(action, -1.0, 1.0)
-        # min_max 反归一化: action ∈ [-1, 1] → [low, high]
+        # Min-max denormalization: action in [-1, 1] -> [low, high].
         return 0.5 * (action + 1) * (high - low) + low
 
 
 @DATASETS.register_module()
 class RobocasaEvalDataset:
-    """Robocasa 评测数据集 — 将 gymnasium obs 转换为模型输入 batch。
+    """RoboCasa eval dataset wrapper.
 
-    类似 LiberoParquetEvalDataset，但适配 Robocasa obs 格式。
+    Converts a Gymnasium observation dict into the model input batch format.
 
     Args:
-        norm_stats: 归一化统计量路径或 dict
-        unnorm_key: stats dict 中的 key (如 'robocasa_gr1_test')
-        transforms: transform 配置列表
+        norm_stats: Normalization statistics path or dict.
+        unnorm_key: Key inside the statistics dict.
+        transforms: Transform config list.
     """
 
     def __init__(self,
@@ -384,7 +401,7 @@ class RobocasaEvalDataset:
         self.transforms = [build_transform_from_cfg(t)
                            for t in (transforms or [])]
         self.unnorm_key = unnorm_key
-        # 分组评测时由 RobocasaEvalRunner 每任务 set_active_stats_blob 覆盖
+        # In grouped evaluation this is set per task by RobocasaEvalRunner.
         self._active_stats_blob: Optional[Dict] = None
         self.last_debug: Dict[str, Any] = {}
 
@@ -395,15 +412,15 @@ class RobocasaEvalDataset:
             self.norm_stats = norm_stats
 
     def set_active_stats_blob(self, blob: Optional[Dict]) -> None:
-        """指定本步使用的 stats（proprio/action/...），用于分组 dataset_statistics。
+        """Set the active statistics blob for grouped evaluation.
 
-        blob 为 dataset_statistics*.json 中 unnorm_key 对应的那一层 dict。
-        传 None 则恢复为使用 self.norm_stats[self.unnorm_key]。
+        ``blob`` is the ``unnorm_key`` level from a dataset_statistics*.json
+        file. Passing None restores the default ``self.norm_stats`` path.
         """
         self._active_stats_blob = blob
 
     def __call__(self, inputs: Dict) -> tuple:
-        """将 Robocasa obs 转换为模型输入。
+        """Convert a RoboCasa observation into model inputs.
 
         Args:
             inputs: gymnasium obs dict
@@ -413,13 +430,13 @@ class RobocasaEvalDataset:
         """
         data = dict(inputs)
 
-        # 注入归一化统计量 (NormalizeStatesAndActions 需要)
+        # Inject statistics required by NormalizeStatesAndActions.
         if self._active_stats_blob is not None:
             data['stats'] = self._active_stats_blob
         elif self.norm_stats is not None and self.unnorm_key in self.norm_stats:
             data['stats'] = self.norm_stats[self.unnorm_key]
 
-        # 执行 transform pipeline
+        # Run transform pipeline.
         for t in self.transforms:
             data = t(data)
 
@@ -430,7 +447,7 @@ class RobocasaEvalDataset:
             'text': data.get('text', ''),
         }
 
-        # 组装 batch (与 LiberoParquetEvalDataset 格式一致)
+        # Assemble a batch compatible with LiberoParquetEvalDataset.
         assert 'lang_tokens' in data and 'lang_masks' in data, \
             'Prompt transform must provide lang_tokens and lang_masks'
 
@@ -457,8 +474,8 @@ class RobocasaEvalDataset:
             batch['states'] = torch.from_numpy(
                 data['states']).bfloat16().cuda().unsqueeze(0)
 
-        # GR00T FlowMatchingInferenceHead.predict_action 会 copy_ 到 buffer，不能为 None。
-        # 若上游未显式传入 embodiment_id，则退回到历史默认 0。
+        # GR00T FlowMatchingInferenceHead.predict_action copies this value into
+        # a buffer, so provide a default embodiment id when upstream omits it.
         bsz = batch['images'].shape[0]
         dev = batch['images'].device
         if 'embodiment_ids' in data:

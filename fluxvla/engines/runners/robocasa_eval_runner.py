@@ -1,24 +1,17 @@
-# ============================================================
-# RobocasaEvalRunner — Robocasa 仿真评测 Runner
-# ============================================================
+# Copyright 2026 Limx Dynamics
 #
-# 对标 LiberoEvalRunner，在 FluxVLA 框架中评测模型在 Robocasa 环境上的表现。
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# 与 LiberoEvalRunner 的核心差异:
-#   - 环境: gymnasium API (5 元组) vs LIBERO 自定义 API (4 元组)
-#   - 动作: 29 维关节角度 dict vs 7 维末端 flat list
-#   - 状态: 29 维关节角度 vs 8 维 eef_pos+quat+gripper
-#   - 图像: 单相机 ego_view vs 双相机 agentview+wrist
-#   - 归一化: min_max vs mean_std
-#   - 无 gripper binarize/invert 后处理
-#   - 无等待机制 (LIBERO 需前 10 步等物体掉落)
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# 环境要求:
-#   运行时需要 PYTHONPATH 前置 robosuite 1.5.1 源码路径:
-#   PYTHONPATH=/root/projects/robosuite:$PYTHONPATH
-#
-# 作者: yiming | 创建: 2026-04-14
-# ============================================================
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""RoboCasa simulation evaluation runner."""
 
 import copy
 import json
@@ -43,15 +36,15 @@ from ..utils.root import RUNNERS
 
 overwatch = initialize_overwatch(__name__)
 
-# Robocasa GR1 29 维动作拆分为 env.step 所需的 dict 格式。
-# 这里使用官方 GR00T N1.5 fourier_gr1_arms_waist 顺序：
-# left_arm + right_arm + left_hand + right_hand + waist。
+# Split RoboCasa GR1 29D actions into the dict format required by env.step.
+# This uses official GR00T N1.5 fourier_gr1_arms_waist order:
+# left_arm + right_arm + left_hand + right_hand + waist.
 ROBOCASA_ACTION_KEYS = {
-    'action.left_arm':   (0, 7),    # 左臂 7 维
-    'action.right_arm':  (7, 14),   # 右臂 7 维
-    'action.left_hand':  (14, 20),  # 左手 6 维
-    'action.right_hand': (20, 26),  # 右手 6 维
-    'action.waist':      (26, 29),  # 腰部 3 维
+    'action.left_arm':   (0, 7),    # left arm, 7D
+    'action.right_arm':  (7, 14),   # right arm, 7D
+    'action.left_hand':  (14, 20),  # left hand, 6D
+    'action.right_hand': (20, 26),  # right hand, 6D
+    'action.waist':      (26, 29),  # waist, 3D
 }
 
 
@@ -60,17 +53,26 @@ class RobocasaEvalRunner:
     """Runner for evaluating VLA models on Robocasa simulation tasks.
 
     Args:
-        cfg: 完整配置对象 (包含 model 段)
-        seed: 随机种子
-        ckpt_path: 模型权重路径 (.safetensors 或 .pt)
-        model_family: 模型族 ('pi0' 等)
-        task_list: Robocasa gymnasium 环境名列表
-        dataset: 评测数据集配置 (观测预处理 transform pipeline)
-        denormalize_action: 动作反归一化配置
-        eval_chunk_size: 每次推理取多少步动作执行，默认 10
-        max_episode_steps: 单 episode 最大步数，默认 720
-        num_trials_per_task: 每个任务的评测 episode 数，默认 50
-        mixed_precision_dtype: 混合精度类型，默认 'bf16'
+        cfg: Full config object containing the model section.
+        seed: Random seed.
+        ckpt_path: Path to the model checkpoint.
+        model_family: Model family name, such as ``pi0`` or ``groot``.
+        task_list: RoboCasa Gymnasium environment names.
+        dataset: Evaluation dataset config.
+        denormalize_action: Action denormalization transform config.
+        eval_chunk_size: Number of predicted actions executed per step.
+        max_episode_steps: Maximum number of environment steps per episode.
+        num_trials_per_task: Number of trials for each task.
+        mixed_precision_dtype: Mixed precision dtype name.
+        enable_mixed_precision_training: Whether autocast is enabled.
+        unnorm_key: Top-level key in the dataset statistics.
+        output_dir: Optional output directory for logs and videos.
+        save_video: Whether to save rollout videos.
+        video_steps_per_render: Render every N environment steps.
+        video_fps: Saved rollout video FPS.
+        norm_stats_path: Optional explicit dataset statistics path.
+        grouped_norm_stats: Whether to load one statistics file per group.
+        norm_stats_group_names: Per-task group names for grouped statistics.
     """
 
     def __init__(self,
@@ -101,20 +103,20 @@ class RobocasaEvalRunner:
 
         self.device_id = overwatch.local_rank()
 
-        # --- 构建模型 ---
+        # Build model.
         if hasattr(cfg, 'inference_model'):
             self.vla = build_vla_from_cfg(cfg.inference_model).eval()
         else:
             self.vla = build_vla_from_cfg(cfg.model).eval()
 
-        # --- 加载权重 ---
+        # Load checkpoint weights.
         if ckpt_path is not None:
             assert Path(ckpt_path).exists(), \
                 f'Checkpoint not found: {ckpt_path}'
 
-            # 支持三种格式：目录（多文件 safetensors）、单个 safetensors、.pt 文件
+            # Support checkpoint directories, single safetensors, and .pt files.
             if os.path.isdir(ckpt_path):
-                # 目录路径：加载所有 .safetensors 文件并合并
+                # Directory path: merge all sharded safetensors files.
                 overwatch.info(f'Loading checkpoint from directory: {ckpt_path}')
                 state_dict = dict()
                 safetensors_files = sorted([
@@ -130,25 +132,24 @@ class RobocasaEvalRunner:
                     state_dict.update(load_file(file_path, device='cpu'))
                 overwatch.info(f'Loaded {len(safetensors_files)} safetensors files')
             elif ckpt_path.endswith('.safetensors'):
-                # 单个 safetensors 文件
+                # Single safetensors file.
                 state_dict = load_file(ckpt_path, device='cpu')
             else:
-                # .pt 文件
+                # PyTorch checkpoint.
                 checkpoint = torch.load(ckpt_path, map_location='cpu')
                 state_dict = checkpoint.get('model', checkpoint)
 
-            # 应用 name_mapping（如果配置中有定义且需要）
-            # 这对于加载官方预训练模型（如 GR00T-N1.5-3B）非常重要
-            # 注意：name_mapping 通常在 cfg.model 中，而不是 cfg.inference_model
+            # Apply name_mapping only when the checkpoint uses source prefixes.
+            # This is needed for official checkpoints such as GR00T-N1.5-3B.
+            # name_mapping is usually defined in cfg.model, not cfg.inference_model.
             #
-            # 智能检测：只有当 checkpoint 的 key 与映射源前缀匹配时才应用映射
-            # - 官方 GR00T-N1.5-3B：key 以 'backbone.eagle_model.*' 开头 → 需要映射
-            # - FluxVLA 自训的 checkpoint：key 以 'vlm_backbone.vlm.*' 开头 → 不需要映射
-            # 这样保证对 PI0.5/LIBERO/自训 groot 等所有管线向后兼容
+            # Detection rules:
+            # - official GR00T-N1.5-3B uses source prefixes and needs mapping
+            # - FluxVLA-trained checkpoints already use model-native prefixes
+            # This keeps PI0.5, LIBERO, and fine-tuned GR00T paths compatible.
             model_cfg = cfg.model if hasattr(cfg, 'model') else cfg.inference_model
             if 'name_mapping' in model_cfg and model_cfg['name_mapping']:
-                # 检测 checkpoint 的 key 格式
-                # model_cfg.name_mapping 的 value 是 checkpoint 的源前缀
+                # model_cfg.name_mapping values are checkpoint source prefixes.
                 ckpt_prefixes = list(model_cfg['name_mapping'].values())
                 needs_mapping = any(
                     any(k.startswith(p) for k in state_dict.keys())
@@ -188,25 +189,25 @@ class RobocasaEvalRunner:
         self.norm_stats_group_names = norm_stats_group_names or []
         work_dir = Path(self.ckpt_path).resolve().parent.parent
 
-        # --- 统计量: 显式 norm_stats_path、单文件 dataset_statistics.json 或分组统计 ---
+        # Statistics can come from an explicit path, a default file, or groups.
         if norm_stats_path is not None and self.grouped_norm_stats:
             raise ValueError(
                 'norm_stats_path cannot be used together with grouped_norm_stats')
 
         if self.grouped_norm_stats:
             assert len(self.norm_stats_group_names) == len(task_list), (
-                'norm_stats_group_names 必须与 task_list 等长，一一对应')
+                'norm_stats_group_names must have the same length as task_list')
             self._stats_full_by_group: Dict[str, dict] = {}
             self._denorm_by_group: Dict[str, Any] = {}
             for g in sorted(set(self.norm_stats_group_names)):
                 gpath = work_dir / f'dataset_statistics_{g}.json'
                 assert gpath.is_file(), (
-                    f'[grouped_norm_stats] 缺少 {gpath}（分组训练后应由 '
-                    f'save_grouped_dataset_statistics 生成）')
+                    f'[grouped_norm_stats] missing {gpath}; grouped training '
+                    f'should create it via save_grouped_dataset_statistics')
                 with open(gpath, 'r', encoding='utf-8') as f:
                     self._stats_full_by_group[g] = json.load(f)
                 assert unnorm_key in self._stats_full_by_group[g], (
-                    f'{gpath} 中缺少 unnorm_key={unnorm_key!r}')
+                    f'{gpath} does not contain unnorm_key={unnorm_key!r}')
             for g in self._stats_full_by_group:
                 da_cfg = copy.deepcopy(denormalize_action)
                 da_cfg['norm_stats'] = self._stats_full_by_group[g]
@@ -254,7 +255,7 @@ class RobocasaEvalRunner:
         self.video_steps_per_render = video_steps_per_render
         self.video_fps = video_fps
 
-        # 加载 norm_stats 到模型 (predict_action 可能需要)
+        # Attach norm_stats to the model for heads that consume them.
         if self.grouped_norm_stats:
             first_g = self.norm_stats_group_names[0]
             self.vla.norm_stats = self._stats_full_by_group[first_g]
@@ -265,7 +266,7 @@ class RobocasaEvalRunner:
         self._active_denorm = self.denormalize_action
 
     def run_setup(self):
-        """初始化 GPU 和模型。"""
+        """Initialize CUDA placement and model state."""
         set_seed_everywhere(self.seed)
         torch.cuda.set_device(self.device_id)
         self.vla.eval()
@@ -276,28 +277,25 @@ class RobocasaEvalRunner:
         self.vla.cuda(self.device_id)
 
     def run(self):
-        """执行 Robocasa 评测循环。"""
+        """Run the RoboCasa evaluation loop."""
         import gymnasium as gym
 
-        # 前置依赖健康检查 —— 避免新机器复现时被误导性的
-        # `ImportError: cannot import name 'PandaOmron'` 。
-        # 根因: robocasa 0.2.0 (GR1 tabletop) 硬要求 robosuite 1.5.x,
-        # 但 fluxvla site-packages 里装的是 robosuite 1.4.1 (LIBERO 用)。
-        # 正确做法见 docs/robocasa_docs_yiming/integration_logs/01_env_dependency.md:
-        #   运行时需在命令前加 `PYTHONPATH=/root/projects/robosuite:$PYTHONPATH`
-        #   让 Python 优先加载本地 1.5.1 源码。
+        # Fail early with a clear message when the wrong robosuite version is
+        # imported. RoboCasa GR1 tabletop needs robosuite 1.5.x, while the
+        # package installed for LIBERO may still be robosuite 1.4.1.
         import robosuite as _robosuite_check
         if _robosuite_check.__version__ not in ("1.5.0", "1.5.1"):
             raise RuntimeError(
-                f"[RobocasaEvalRunner] robosuite 版本不兼容: "
-                f"当前 {_robosuite_check.__version__} (位于 {_robosuite_check.__file__}), "
-                f"robocasa 要求 1.5.x。\n"
-                f"请在启动命令前加: "
+                f"[RobocasaEvalRunner] incompatible robosuite version: "
+                f"got {_robosuite_check.__version__} from "
+                f"{_robosuite_check.__file__}; robocasa requires 1.5.x.\n"
+                f"Please start with: "
                 f"PYTHONPATH=/root/projects/robosuite:$PYTHONPATH\n"
-                f"详见 docs/robocasa_docs_yiming/integration_logs/01_env_dependency.md 第四节。"
+                f"See docs/robocasa_docs_yiming/integration_logs/"
+                f"01_env_dependency.md for details."
             )
 
-        # 触发 Robocasa gymnasium 环境注册
+        # Trigger RoboCasa Gymnasium environment registration.
         import robocasa  # noqa: F401
         from robocasa.utils.gym_utils import GrootRoboCasaEnv  # noqa: F401
 
@@ -348,11 +346,11 @@ class RobocasaEvalRunner:
                 log_file.write(
                     f'Task {task_id} ({env_name}), Trial {trial_id}\n')
 
-                # --- 创建 Robocasa 环境 ---
+                # Create RoboCasa environment.
                 env = gym.make(env_name)
                 obs, info = env.reset(seed=self.seed + local_id)
 
-                # 分组统计: 每任务切换 state 归一化 blob / 反归一化器 / vla.norm_stats
+                # In grouped mode, switch stats, denormalizer, and vla.norm_stats per task.
                 if self.grouped_norm_stats:
                     gname = self.norm_stats_group_names[task_id]
                     self.dataset.set_active_stats_blob(
@@ -364,24 +362,22 @@ class RobocasaEvalRunner:
                         self.dataset.set_active_stats_blob(None)
                     self._active_denorm = self.denormalize_action
 
-                # 从 obs 中提取任务描述
-                # 注意: 训练时 task_description 来自 tasks.jsonl 原文
-                # (如 "unlocked_waist: pick up the bottled water, ...")
-                # 评测必须保留整句，不能 split(':'), 否则 prompt 与训练不一致
-                # 会导致模型预测的动作完全不匹配任务。
+                # Keep the task description identical to the training text from
+                # tasks.jsonl. Do not split prefixes such as
+                # "unlocked_waist: ..."; otherwise the prompt distribution shifts.
                 task_desc = obs.get(
                     'annotation.human.coarse_action', '')
                 overwatch.info(f'Task desc: {task_desc}')
                 log_file.write(f'Task desc: {task_desc}\n')
 
-                # --- 评测循环 ---
+                # Evaluation loop.
                 success = False
                 replay_images = []
                 video_step_count = 1
                 t = 0
 
                 while t < self.max_episode_steps:
-                    # 构造输入 dict 给 dataset transform
+                    # Build input dict for the dataset transform pipeline.
                     obs['task_description'] = task_desc
                     batch, _ = self.dataset(obs)
                     debug_info = getattr(self.dataset, 'last_debug', {})
@@ -399,7 +395,7 @@ class RobocasaEvalRunner:
                                 f'State range: min={state_arr.min():.6g}, max={state_arr.max():.6g}\n')
                     batch['unnorm_key'] = self.unnorm_key
 
-                    # --- 模型推理 ---
+                    # Model inference.
                     with torch.autocast(
                             'cuda', dtype=self.mixed_precision_dtype,
                             enabled=self.enable_mixed_precision_training):
@@ -423,9 +419,9 @@ class RobocasaEvalRunner:
                             f'min={actions.min():.6g}, max={actions.max():.6g}, '
                             f'mean={actions.mean():.6g}\n')
 
-                    # --- 执行动作 chunk ---
+                    # Execute one action chunk.
                     for action in actions:
-                        # 反归一化: [-1,1] → 原始关节角度
+                        # Denormalize from [-1, 1] to raw joint positions.
                         denorm_input = dict(
                             action=action,
                             task_suite_name=self.unnorm_key,
@@ -443,18 +439,18 @@ class RobocasaEvalRunner:
                                 f'min={action_denormed.min():.6g}, '
                                 f'max={action_denormed.max():.6g}\n')
 
-                        # 拆分 29 维 → Robocasa dict 格式
+                        # Split 29D action into RoboCasa's dict action format.
                         action_dict = {}
                         for key, (start, end) in \
                                 ROBOCASA_ACTION_KEYS.items():
                             action_dict[key] = \
                                 action_denormed[start:end]
 
-                        # 环境执行
+                        # Step the environment.
                         obs, reward, terminated, truncated, info = \
                             env.step(action_dict)
 
-                        # 收集每步的图像帧用于视频录制
+                        # Collect rendered frames for rollout videos.
                         if self.save_video:
                             video_step_count += 1
                             if video_step_count % self.video_steps_per_render == 0:
@@ -472,7 +468,7 @@ class RobocasaEvalRunner:
                     if success or terminated or truncated:
                         break
 
-                # --- 记录结果 ---
+                # Record result.
                 if success:
                     total_successes += 1
                 total_episodes += 1
@@ -483,7 +479,7 @@ class RobocasaEvalRunner:
                 log_file.write(
                     f'  Result: {result_str} (steps={t})\n')
 
-                # --- 保存评测视频 ---
+                # Save rollout video.
                 if self.save_video and replay_images:
                     video_dir = os.path.join(work_dir, 'rollouts')
                     os.makedirs(video_dir, exist_ok=True)
@@ -512,7 +508,7 @@ class RobocasaEvalRunner:
                 step_tensor = torch.ones(
                     1, device=torch.cuda.current_device())
 
-            # --- 分布式同步 ---
+            # Distributed synchronization.
             dist.barrier()
             dist.all_reduce(step_tensor, op=dist.ReduceOp.SUM)
             if rank == 0 and pbar is not None:

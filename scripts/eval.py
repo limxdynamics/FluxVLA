@@ -36,12 +36,6 @@ def parse_args():
         default=None,
         help='Path to the checkpoint file.')
     parser.add_argument(
-        '--output-dir',
-        type=str,
-        default=None,
-        help='Optional output directory for evaluation logs/videos. If not set, '
-        'the runner uses its default checkpoint-relative location.')
-    parser.add_argument(
         '--cfg-options',
         nargs='+',
         action=DictAction,
@@ -59,8 +53,6 @@ if __name__ == '__main__':
         cfg.merge_from_dict(args.cfg_options)
     cfg.eval.cfg = cfg
     cfg.eval.ckpt_path = args.ckpt_path
-    if args.output_dir is not None:
-        cfg.eval.output_dir = args.output_dir
     if hasattr(cfg.eval,
                'processor') and not hasattr(cfg.eval.processor, 'model_path'):
         cfg.eval.processor.model_path = args.ckpt_path

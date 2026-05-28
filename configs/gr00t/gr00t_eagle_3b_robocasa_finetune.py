@@ -2,8 +2,8 @@
 # GR00T-N1.5 Eagle 3B RoboCasa GR1 finetuning.
 #
 # The same config supports both small subsets and full RoboCasa GR1 datasets.
-# Point datasets/robocasa_fluxvla to the desired converted LeRobot dataset, or
-# use scripts/train_groot_robocasa.sh with ROBOCASA_DATASET_ROOT.
+# Point datasets/robocasa_fluxvla to the desired converted LeRobot dataset
+# before launching scripts/train.py.
 # ============================================================
 
 model = dict(
