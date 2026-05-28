@@ -15,8 +15,7 @@
 import logging
 import os
 from functools import partial
-from importlib import import_module
-from typing import Callable, Dict, Optional, TypeAlias
+from typing import Callable, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -27,24 +26,17 @@ from torch.distributions import Beta
 from fluxvla.engines import HEADS
 from fluxvla.engines.losses import reduce_action_bc_loss
 
-KVCacheType: TypeAlias = torch.Tensor
-
 logger = logging.getLogger(__name__)
 
 
 def _import_dreamzero_modules():
     """Lazily import DreamZero modules so the rest of fluxvla still works
     even when optional dependencies (flash-attn, etc.) are missing."""
-    flow_match_module = import_module(
-        'fluxvla.models.third_party_models.dreamzero.modules.'
-        'flow_match_scheduler')
-    wan_chunk_module = import_module(
-        'fluxvla.models.third_party_models.dreamzero.modules.'
-        'wan_video_dit_action_casual_chunk')
-    return (
-        wan_chunk_module.CausalWanModel,
-        flow_match_module.FlowMatchScheduler,
-    )
+    from fluxvla.models.third_party_models.dreamzero.modules.flow_match_scheduler import \
+        FlowMatchScheduler  # noqa: E501
+    from fluxvla.models.third_party_models.dreamzero.modules.wan_video_dit_action_casual_chunk import \
+        CausalWanModel  # noqa: E501
+    return CausalWanModel, FlowMatchScheduler
 
 
 def _ensure_file(path, hf_filename):
@@ -391,15 +383,15 @@ class DreamZeroHead(nn.Module):
         dtype: torch.dtype,
         device: torch.device,
         cache_seq_len: int,
-    ) -> tuple[KVCacheType, KVCacheType]:
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
         Initialize a pair of Per-GPU caches for the Wan model.
         Use the model's num_heads and head_dim (5B has 24 heads, 14B has 40).
         """
         num_heads = self.model.num_heads
         head_dim = self.model.dim // num_heads
-        cache: KVCacheType = []
-        cache_neg: KVCacheType = []
+        cache: list[torch.Tensor] = []
+        cache_neg: list[torch.Tensor] = []
         for _ in range(self.model.num_layers):
             cache.append(
                 torch.zeros(
@@ -540,11 +532,8 @@ class DreamZeroHead(nn.Module):
         latents_shape: tuple[int, int, int, int],
         num_inference_steps: int,
     ) -> torch.Tensor:
-        scheduler_module = import_module(
-            'fluxvla.models.third_party_models.dreamzero.modules.'
-            'flow_unipc_multistep_scheduler')
-        FlowUniPCMultistepScheduler = (
-            scheduler_module.FlowUniPCMultistepScheduler)
+        from fluxvla.models.third_party_models.dreamzero.modules.flow_unipc_multistep_scheduler import \
+            FlowUniPCMultistepScheduler  # noqa: E501
 
         device = states.device
         b = states.shape[0]

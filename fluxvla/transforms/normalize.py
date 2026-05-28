@@ -332,14 +332,14 @@ class NormalizeStatesAndActions:
         norm_type (str): Type of normalization to use.
             Options: 'mean_std', 'quantile', 'min_max', or 'none'.
             Defaults to 'mean_std'.
-        state_key (str): The key in the data dictionary
+        state_key (str | None): The key in the data dictionary
             that contains the state information.
         action_key (str | None): The key in the data dictionary
             that contains the action information. If None, actions are skipped.
     """
 
     def __init__(self,
-                 state_key: str,
+                 state_key: Optional[str],
                  action_key: Optional[str],
                  action_dim: int = None,
                  state_dim: int = None,
