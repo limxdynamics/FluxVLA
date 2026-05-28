@@ -17,8 +17,9 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 
+from ..utils.postprocess import Trajectory, TrajectoryPostprocessor
+from ..utils.postprocess.plot_utils import plot_postprocess_comparison
 from ..utils.root import RUNNERS
-from ..utils.trajectory_utils import resample_remaining
 from .base_inference_runner import BaseInferenceRunner
 
 
@@ -54,12 +55,14 @@ class Tron2InferenceRunner(BaseInferenceRunner):
                  enable_head_control: bool = False,
                  async_execution: bool = False,
                  execute_horizon: int = None,
+                 postprocess_config: dict = None,
                  *args,
                  **kwargs):
         self.gripper_threshold = gripper_threshold
         self.enable_head_control = enable_head_control
         self.async_execution = async_execution
         self.execute_horizon = execute_horizon
+        self.postprocess_config = postprocess_config or {}
         # Set Tron2-specific defaults
         if 'camera_names' not in kwargs or kwargs['camera_names'] is None:
             kwargs['camera_names'] = [
@@ -88,6 +91,8 @@ class Tron2InferenceRunner(BaseInferenceRunner):
         super().__init__(*args, **kwargs)
 
         self.dt = 1.0 / self.publish_rate
+        self.trajectory_postprocessor = TrajectoryPostprocessor(
+            config=self.postprocess_config)
 
         if prepare_pose is None:
             # Initialize Tron2-specific prepare poses
@@ -271,15 +276,49 @@ class Tron2InferenceRunner(BaseInferenceRunner):
     LEFT_GRIPPER_COL = 16
     RIGHT_GRIPPER_COL = 17
     GRIPPER_CLOSED = 0.0
+    DEFAULT_JOINT_DOF_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 
     def _postprocess_actions(self, raw_action):
-        """Denormalize and snap near-closed grippers to fully closed."""
-        actions = super()._postprocess_actions(raw_action)
+        """Denormalize, apply jerk-constrained smoothing, and snap grippers."""
+        raw_chunk_actions = super()._postprocess_actions(raw_action)
+        raw_trajectory = Trajectory(
+            t0=self._action_ctx.inference_start,
+            dt=self.dt,
+            positions=raw_chunk_actions,
+        )
+        self._action_ctx.raw_trajectory = raw_trajectory.copy()
+
+        previous_trajectory = getattr(self._prev_ctx, 'trajectory', None)
+        processed_trajectory = self.trajectory_postprocessor.process(
+            traj=raw_trajectory,
+            dof_indices=self.DEFAULT_JOINT_DOF_INDICES,
+            prev_traj=previous_trajectory)
+
         for col in (self.LEFT_GRIPPER_COL, self.RIGHT_GRIPPER_COL):
-            actions[:,
-                    col] = np.where(actions[:, col] < self.gripper_threshold,
-                                    self.GRIPPER_CLOSED, actions[:, col])
-        return actions
+            mask = processed_trajectory.positions[:,
+                                                  col] < self.gripper_threshold
+            processed_trajectory.positions[mask, col] = self.GRIPPER_CLOSED
+
+        self._action_ctx.trajectory = processed_trajectory
+
+        self._debug_plot(processed_trajectory)
+        return processed_trajectory.positions
+
+    def _debug_plot(self, processed_traj):
+        if not self.postprocess_config.get('debug_plot', False):
+            return
+        prev = self._prev_ctx
+        prev_raw = getattr(prev, 'raw_trajectory', None)
+        prev_post = getattr(prev, 'trajectory', None)
+
+        plot_postprocess_comparison(
+            dof_indices=self.DEFAULT_JOINT_DOF_INDICES,
+            cur_raw=self._action_ctx.raw_trajectory,
+            cur_post=processed_traj,
+            prev_raw=prev_raw,
+            prev_post=prev_post,
+            plot_dofs=self.postprocess_config.get('debug_plot_dofs'),
+        )
 
     def _execute_actions(self, actions: np.ndarray, rate):
         """Execute a chunk of dual-arm robot actions.
@@ -294,7 +333,7 @@ class Tron2InferenceRunner(BaseInferenceRunner):
         if self.async_execution and self._prev_ctx is not None:
             ctx.action_timestamp = ctx.inference_start
             offset = (time.time() - ctx.action_timestamp) / self.dt
-            actions = resample_remaining(actions, offset)
+            actions = self._resample_remaining(actions, offset)
         else:
             ctx.action_timestamp = time.time()
             if self.execute_horizon is not None:

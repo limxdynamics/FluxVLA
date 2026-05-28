@@ -25,9 +25,11 @@ mmengine==0.10.7
 mujoco==3.3.2
 numpy==1.26.4
 opencv-python
+osqp
 peft==0.11.1
 robomimic==0.2.0
 robosuite==1.4.1
+ruckig>=0.9.0
 sentencepiece==0.1.99
 sentry-sdk==2.27.0
 tensorflow==2.15.0
