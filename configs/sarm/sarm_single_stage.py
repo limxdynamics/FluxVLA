@@ -14,10 +14,10 @@ current_transforms = [
     ),
     dict(
         type='NormalizeStatesAndActions',
-        state_key='states',
+        state_key='observation.state',
         action_key=None,
         state_dim=32,
-        norm_type='none'),
+        norm_type='mean_std'),
     dict(
         type='TokenizeText',
         tokenizer=dict(

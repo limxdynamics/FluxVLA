@@ -312,14 +312,13 @@ class SARMDataset(ParquetDatasetV3):
 
         Args:
             index (int): Global row index in the concatenated parquet dataset.
-            dataset_statistics: Unused compatibility argument for the existing
-                dataset/collator API.
+            dataset_statistics: Optional normalized statistics mapping
+                supplied by dataset wrappers.
 
         Returns:
             Dict: SARM sample containing image and state sequences, tokenizable
             task text, sparse targets, and optional dense targets.
         """
-        del dataset_statistics
         data = self.dataset[index]
         dataset_idx = self._get_dataset_index(index)
         episode_index = int(data['episode_index'])
@@ -375,6 +374,8 @@ class SARMDataset(ParquetDatasetV3):
         output = {
             'images': images,
             'states': states,
+            'stats': self._get_state_statistics(dataset_idx,
+                                                dataset_statistics),
             'task_description':
             self._resolve_task_description(dataset_idx, data),
             'lengths': np.asarray(valid_length, dtype=np.int64),
@@ -392,3 +393,10 @@ class SARMDataset(ParquetDatasetV3):
         for transform in self.transforms:
             output = transform(output)
         return output
+
+    def _get_state_statistics(self, dataset_idx: int,
+                              dataset_statistics) -> Dict:
+        """Return stats used by state normalization transforms."""
+        if dataset_statistics is not None:
+            return dataset_statistics[self.statistic_name]
+        return self.stats[dataset_idx]['stats']
