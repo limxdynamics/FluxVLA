@@ -247,6 +247,7 @@ class DreamZeroVLA(BaseVLA):
             actions=actions,
             action_masks=action_masks,
             embodiment_ids=embodiment_ids,
+            sample_weight=kwargs.get('sample_weight'),
         )
 
     # ------------------------------------------------------------------

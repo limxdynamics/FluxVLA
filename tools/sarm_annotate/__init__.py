@@ -1,4 +1,5 @@
-# Copyright 2026 Limx Dynamics
+# flake8: noqa
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""SARM subtask annotation pipeline for LeRobot datasets.
 
-from .attach_rabc_weight import AttachRABCWeight  # noqa: F401, F403
-from .fast_tokenizer import FASTTokenizer  # noqa: F401, F403
-from .normalize import Normalize  # noqa: F401, F403
-from .prompters import *  # noqa: F401, F403
-from .rlds_transform import RLDSBatchTransform  # noqa: F401, F403
-from .transform_actions import *  # noqa: F401, F403
-from .transform_images import *  # noqa: F401, F403
-from .transform_inputs import *  # noqa: F401, F403
-from .transform_prompts import *  # noqa: F401, F403
+Ported from ``lerobot/data_processing/sarm_annotations`` in HuggingFace LeRobot.
+Takes a standard LeRobot dataset and uses a local Qwen3-VL model to annotate
+sparse / dense subtasks, writing them back as extra columns on the standard
+``meta/episodes.jsonl`` / ``meta/episodes/*.parquet`` metadata. The columns
+produced match what :mod:`fluxvla.datasets.utils.sarm_utils` reads.
+"""

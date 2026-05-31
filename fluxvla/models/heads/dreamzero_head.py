@@ -25,6 +25,7 @@ from torch.distributed.fsdp.wrap import _module_wrap_policy
 from torch.distributions import Beta
 
 from fluxvla.engines import HEADS
+from fluxvla.engines.losses import reduce_action_bc_loss
 
 KVCacheType: TypeAlias = torch.Tensor
 
@@ -359,7 +360,9 @@ class DreamZeroHead(nn.Module):
             dynamics_loss *
             self.scheduler.training_weight(timestep.flatten(0, 1)).unflatten(
                 0, (noise.shape[0], noise.shape[1])).to(device))
-        weighted_dynamics_loss = weight_dyn.mean()
+        sample_weight = kwargs.get('sample_weight')
+        weighted_dynamics_loss = reduce_action_bc_loss(
+            weight_dyn.unsqueeze(-1), sample_weight=sample_weight)
 
         action_loss_raw = F.mse_loss(
             action_noise_pred.float(),
@@ -371,7 +374,8 @@ class DreamZeroHead(nn.Module):
                 timestep_action.flatten(0, 1)).unflatten(
                     0,
                     (noise_action.shape[0], noise_action.shape[1])).to(device))
-        weighted_action_loss = weight_act.mean()
+        weighted_action_loss = reduce_action_bc_loss(
+            weight_act.unsqueeze(-1), sample_weight=sample_weight)
 
         loss = weighted_dynamics_loss + weighted_action_loss
 

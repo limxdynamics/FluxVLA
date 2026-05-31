@@ -412,3 +412,57 @@ class LiberoPromptFromInputs:
         inputs['lang_tokens'] = np.asarray(tokens, dtype=np.int64)
         inputs['lang_masks'] = np.asarray(token_mask, dtype=np.bool_)
         return inputs
+
+
+@TRANSFORMS.register_module()
+class TokenizeText:
+    """Tokenize task text for CLIP-based SARM training and inference."""
+
+    def __init__(self,
+                 tokenizer: Dict,
+                 max_length: int = 77,
+                 text_key: str = 'task_description',
+                 output_ids_key: str = 'text_input_ids',
+                 output_attention_mask_key: str = 'text_attention_mask'):
+        """Initialize text tokenization.
+
+        Args:
+            tokenizer (Dict): Tokenizer config passed to the FluxVLA registry.
+            max_length (int): Maximum token sequence length.
+            text_key (str): Input text key in the sample dictionary.
+            output_ids_key (str): Output key for token ids.
+            output_attention_mask_key (str): Output key for attention masks.
+        """
+        from fluxvla.engines import build_tokenizer_from_cfg
+        from fluxvla.engines.utils.hf_hub import resolve_hf_local_path
+        tokenizer = dict(tokenizer)
+        model_path = tokenizer.get('model_path')
+        if isinstance(model_path, str):
+            tokenizer['model_path'] = resolve_hf_local_path(model_path)
+        self.tokenizer = build_tokenizer_from_cfg(tokenizer)
+        self.max_length = max_length
+        self.text_key = text_key
+        self.output_ids_key = output_ids_key
+        self.output_attention_mask_key = output_attention_mask_key
+
+    def __call__(self, data: Dict) -> Dict:
+        """Tokenize the configured text field.
+
+        Args:
+            data (Dict): Sample dictionary containing ``text_key``.
+
+        Returns:
+            Dict: Sample dictionary with token ids and attention mask.
+        """
+        encoded = self.tokenizer(
+            data[self.text_key],
+            padding='max_length',
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors='np',
+        )
+        data[self.output_ids_key] = encoded['input_ids'][0].astype(np.int64)
+        data[self.
+             output_attention_mask_key] = encoded['attention_mask'][0].astype(
+                 np.int64)
+        return data

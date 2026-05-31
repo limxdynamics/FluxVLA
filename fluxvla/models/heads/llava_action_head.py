@@ -22,6 +22,7 @@ from torch.distributed.fsdp.wrap import _module_wrap_policy
 from transformers import LlamaConfig, LlamaModel
 
 from fluxvla.engines import HEADS
+from fluxvla.engines.losses import reduce_action_bc_loss
 
 
 class Mlp(nn.Module):
@@ -299,12 +300,13 @@ class LlavaActionHead(nn.Module):
         y = self.decode_action(y)
         action_decoder_output_embeddings = y[:, 2:]
         pred_actions = self.pred_action(action_decoder_output_embeddings)
-        losses = F.mse_loss(
-            pred_actions, actions,
-            reduction='none') * action_masks.unsqueeze(-1)
+        losses = F.mse_loss(pred_actions, actions, reduction='none')
         ret_dict = dict(
             pred_actions=pred_actions,
-            loss=losses.sum() / (action_masks.sum() * actions.shape[-1]),
+            loss=reduce_action_bc_loss(
+                losses,
+                action_mask=action_masks,
+                sample_weight=kwargs.get('sample_weight')),
         )
         return ret_dict
 

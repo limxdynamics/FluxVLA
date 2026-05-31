@@ -22,6 +22,7 @@ from torch.distributed.fsdp.wrap import _module_wrap_policy
 from torch.distributions import Beta
 
 from fluxvla.engines import HEADS
+from fluxvla.engines.losses import reduce_action_bc_loss
 from fluxvla.models.blocks import SelfAttentionTransformer
 from fluxvla.models.blocks.cross_attention_dit import DiT
 
@@ -150,7 +151,7 @@ class MultiEmbodimentActionEncoder(nn.Module):
         elif timesteps.dim() == 2:
             assert timesteps.shape == (B, T)
         else:
-            raise ValueError(f'Expected timesteps shape (B,) or (B,T), got '
+            raise ValueError(f'Expected timesteps shape (B,) or (B, T), got '
                              f'{timesteps.shape}')
 
         # 2) Standard action MLP step for shape => (B, T, w)
@@ -347,10 +348,12 @@ class FlowMatchingHead(nn.Module):
             velocity = velocity[:, :, :self.ori_action_dim]
 
         # Slice out only the action portion of pred and target.
-        loss = F.mse_loss(
-            pred_actions, velocity,
-            reduction='none') * action_masks.unsqueeze(-1)
-        loss = loss.sum() / (action_masks.sum() * actions.shape[-1])
+        losses = F.mse_loss(pred_actions, velocity, reduction='none')
+        loss = reduce_action_bc_loss(
+            losses,
+            action_mask=action_masks,
+            sample_weight=kwargs.get('sample_weight')) * (
+                velocity.shape[-1] / actions.shape[-1])
 
         return dict(
             pred_actions=pred_actions,

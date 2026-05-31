@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
@@ -330,17 +330,17 @@ class NormalizeStatesAndActions:
         pad_value (float): The value to use for padding.
             Defaults to 0.0.
         norm_type (str): Type of normalization to use.
-            Options: 'mean_std', 'quantile', or 'min_max'.
+            Options: 'mean_std', 'quantile', 'min_max', or 'none'.
             Defaults to 'mean_std'.
-        state_key (str): The key in the data dictionary
+        state_key (str | None): The key in the data dictionary
             that contains the state information.
-        action_key (str): The key in the data dictionary
-            that contains the action information.
+        action_key (str | None): The key in the data dictionary
+            that contains the action information. If None, actions are skipped.
     """
 
     def __init__(self,
-                 state_key: str,
-                 action_key: str,
+                 state_key: Optional[str],
+                 action_key: Optional[str],
                  action_dim: int = None,
                  state_dim: int = None,
                  norm_type: str = 'mean_std',
@@ -362,41 +362,58 @@ class NormalizeStatesAndActions:
             self.action_norm_mask = None
 
     def __call__(self, data: Dict) -> Dict:
-        assert 'stats' in data, "Input data must contain 'stats' key"
-        state_stats = data['stats'][self.state_key]
-        action_stats = data['stats'][self.action_key]
+        states = np.asarray(data['states'], dtype=np.float32)
+        actions = None
+        if self.action_key is not None and 'actions' in data:
+            actions = np.asarray(data['actions'], dtype=np.float32)
 
-        if self.norm_type == 'quantile':
-            states = self._normalize_quantile(data['states'], state_stats)
-            if 'actions' in data:
-                actions = self._normalize_quantile(data['actions'],
-                                                   action_stats,
-                                                   self.action_norm_mask)
-                data['actions'] = actions
+        if self.norm_type == 'none':
             data['states'] = states
-        elif self.norm_type == 'min_max':
-            states = self._normalize_min_max(data['states'], state_stats)
-            if 'actions' in data:
-                actions = self._normalize_min_max(data['actions'],
-                                                  action_stats,
-                                                  self.action_norm_mask)
+            if actions is not None:
                 data['actions'] = actions
-            data['states'] = states
-        else:  # norm_type == 'mean_std'
-            states = self._normalize(data['states'], state_stats)
-            if 'actions' in data:
-                actions = self._normalize(data['actions'], action_stats,
-                                          self.action_norm_mask)
-                data['actions'] = actions
+        else:
+            assert 'stats' in data, "Input data must contain 'stats' key"
+            state_stats = data['stats'][self.state_key]
+            action_stats = None
+            if self.action_key is not None:
+                action_stats = data['stats'][self.action_key]
+
+            if self.norm_type == 'quantile':
+                states = self._normalize_quantile(states, state_stats)
+                if actions is not None:
+                    actions = self._normalize_quantile(actions, action_stats,
+                                                       self.action_norm_mask)
+                    data['actions'] = actions
+            elif self.norm_type == 'min_max':
+                states = self._normalize_min_max(states, state_stats)
+                if actions is not None:
+                    actions = self._normalize_min_max(actions, action_stats,
+                                                      self.action_norm_mask)
+                    data['actions'] = actions
+            else:  # norm_type == 'mean_std'
+                states = self._normalize(states, state_stats)
+                if actions is not None:
+                    actions = self._normalize(actions, action_stats,
+                                              self.action_norm_mask)
+                    data['actions'] = actions
             data['states'] = states
         if self.state_dim is not None:
-            data['states'] = np.zeros((self.state_dim))
-            data['states'][:states.shape[0]] = states
-        if self.action_dim is not None:
-            data['actions'] = np.zeros(
-                (data['actions'].shape[0], self.action_dim))
-            data['actions'][:, :actions.shape[-1]] = actions
+            data['states'] = self._pad_or_truncate_last_dim(
+                states, self.state_dim)
+        if self.action_dim is not None and actions is not None:
+            data['actions'] = self._pad_or_truncate_last_dim(
+                actions, self.action_dim)
         return data
+
+    def _pad_or_truncate_last_dim(self, values: np.ndarray,
+                                  target_dim: int) -> np.ndarray:
+        current_dim = values.shape[-1]
+        if current_dim >= target_dim:
+            return values[..., :target_dim]
+        padded_shape = (*values.shape[:-1], target_dim)
+        padded = np.full(padded_shape, self.pad_value, dtype=values.dtype)
+        padded[..., :current_dim] = values
+        return padded
 
     def _normalize(self, x, stats: Dict, norm_mask: List[bool] = None):
         if norm_mask is None:

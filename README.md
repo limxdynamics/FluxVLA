@@ -270,9 +270,55 @@ Replace `libero_10_no_noops_lerobotv2.1` with the corresponding folder name of t
 </details>
 
 <details>
+<summary><b>SARM datasets</b></summary>
+
+FluxVLA SARM workflows accept standard LeRobot v2.1 or v3.x datasets. Besides the usual observation / action fields, the dataset must carry SARM subtask annotations in episodes metadata.
+
+Published SARM example datasets on Hugging Face:
+
+- LeRobot v3.x manual sparse+dense annotations for training / inference: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x unlabeled dataset kept for manual or VLM labeling: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- New LeRobot v2.1 manual conversion for training / inference and legacy-tool compatibility: [limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- New LeRobot v2.1 unlabeled conversion for manual or VLM labeling workflows: [limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
+
+Download them under `./datasets` with:
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+```
+
+Use the `manual_*` datasets directly for training / inference. Use the `vlm_*` datasets as clean starting points for manual stage writing or VLM auto-annotation. Prefer the v2.1 pair when another tool expects `meta/episodes.jsonl` plus per-episode videos; prefer the v3.0 pair when you want to keep native LeRobot v3.x metadata layout.
+
+Before using a LeRobot v3.x SARM dataset, sanity-check the video metadata:
+
+- LeRobot v3.x allows either many episodes in one MP4 or one MP4 per episode.
+
+- If many episodes share one MP4, each episode that points to that file must
+  use correct `from_timestamp` / `to_timestamp` offsets.
+
+- If videos are already split as `file-000.mp4`, `file-001.mp4`, ..., each
+  episode should point to its own `file_index`, and `from_timestamp` will
+  usually reset to `0.0`.
+
+- If the directory contains multiple MP4 files but all episodes still point to
+  `file-000.mp4`, the dataset metadata is malformed and should be fixed before
+  use.
+
+- For ready-to-use SARM dataset structure, annotation columns, and progress inference usage, see [docs/sarm.md](docs/sarm.md).
+
+- For writing manual stages or generating VLM-based annotations, see [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md).
+
+</details>
+
+<details>
 <summary><b>Private dataset directory structure</b></summary>
 
 If you train with fluxvla on private datasets, you need to convert your raw data (e.g., HDF5 files collected by ALOHA robots) into the LeRobot Dataset v2.1 format. For a step-by-step conversion guide, see [Data Conversion Guide](docs/data_convert.md).
+
+For SARM specifically, FluxVLA supports both LeRobot v2.1 and v3.x datasets as long as the required SARM annotation columns are present. The SARM-specific metadata contract is documented in [docs/sarm.md](docs/sarm.md).
 
 The converted dataset should follow this directory structure:
 
@@ -310,6 +356,8 @@ The converted dataset should follow this directory structure:
 
 Download the required pretrained checkpoints and place them under `./checkpoints`. Download only the checkpoints you need based on your configuration.
 
+For SARM workflows, you typically need a CLIP checkpoint for training / inference and optionally a Qwen3-VL checkpoint for VLM-based annotation. Detailed usage is documented in [docs/sarm.md](docs/sarm.md).
+
 <details>
 <summary><b>VLA models</b></summary>
 
@@ -330,6 +378,7 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 | Model      | Size | Download link                                                                        |
 | ---------- | ---- | ------------------------------------------------------------------------------------ |
 | Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)                |
+| Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct)             |
 | SmolVLM2   | 500M | [🤗 Hugging Face](https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct) |
 
 </details>
@@ -350,12 +399,15 @@ Download the required pretrained checkpoints and place them under `./checkpoints
 
 | Model               | Download link                                                                        |
 | ------------------- | ------------------------------------------------------------------------------------ |
+| CLIP ViT-B/32       | [🤗 Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)               |
 | ViT-Large (DINOv2)  | [🤗 Hugging Face](https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m) |
 | ViT-SO400M (SigLIP) | [🤗 Hugging Face](https://huggingface.co/timm/ViT-SO400M-14-SigLIP)                  |
 | SigLIP2             | [🤗 Hugging Face](https://huggingface.co/google/siglip2-base-patch16-224)            |
 | paligemma           | [🤗 Hugging Face](https://huggingface.co/google/paligemma-3b-pt-224)                 |
 
 > **Tip**: You can speed up downloads with `huggingface-cli download <model-name> --local-dir ./checkpoints/<model-name>`.
+
+For the built-in SARM configs, place the CLIP files under `./checkpoints/clip-vit-base-patch32`. If you use VLM-based SARM annotation, place the official SARM VLM under `./checkpoints/Qwen3-VL-30B-A3B-Instruct`.
 
 </details>
 
@@ -393,6 +445,13 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 - Supports Llama, Gemma, and Qwen-family LLM backbones.
 - Supports DINOv2 and SigLIP vision backbones.
 - Supports PaliGemma and Qwen-VL VLM backbones.
+
+</details>
+
+<details>
+<summary><b>Supports SARM workflows</b></summary>
+
+- Supports [SARM](https://github.com/xdofai/opensarm) training, annotation, and progress inference on LeRobot v2.1/v3.x datasets. See [docs/sarm.md](docs/sarm.md) for details.
 
 </details>
 
@@ -641,4 +700,3 @@ If you use FluxVLA in your research or projects, please cite it as:
 - RLDS datasets will be deprecated and replaced by Parquet datasets.
 - Full implementation of the logger feature.
 - Support Isaac Sim.
-- Support SARM.

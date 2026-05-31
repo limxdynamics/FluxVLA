@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import inspect
 import math
 import os
 from abc import ABC, abstractmethod
@@ -815,11 +816,30 @@ class BaseTrainRunner(ABC):
             f'batch={self.global_batch_size} '
             f'({self.per_device_batch_size}x{overwatch.world_size()})')
 
+    def _vla_accepts_kwarg(self, key: str) -> bool:
+        """Return whether the wrapped VLA forward accepts ``key``."""
+        cache = getattr(self, '_vla_accepts_kwarg_cache', {})
+        if key in cache:
+            return cache[key]
+
+        module = self.vla.module if hasattr(self.vla, 'module') else self.vla
+        signature = inspect.signature(module.forward)
+        accepts = key in signature.parameters or any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in signature.parameters.values())
+        cache[key] = accepts
+        self._vla_accepts_kwarg_cache = cache
+        return accepts
+
     def _training_step(self, batch) -> torch.Tensor:
         """Execute single training step: forward, backward, optimize."""
         if self.enable_mixed_precision_training:
             batch = self._convert_batch_to_dtype(batch,
                                                  self.mixed_precision_dtype)
+        if ('sample_weight' in batch
+                and not self._vla_accepts_kwarg('sample_weight')):
+            batch = dict(batch)
+            batch.pop('sample_weight')
         with torch.autocast(
                 'cuda',
                 dtype=self.mixed_precision_dtype,

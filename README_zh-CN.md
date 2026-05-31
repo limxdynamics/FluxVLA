@@ -270,9 +270,50 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 </details>
 
 <details>
+<summary><b>SARM 数据集</b></summary>
+
+FluxVLA 的 SARM 工作流支持标准 LeRobot v2.1 与 v3.x 数据集。除常规 observation / action 字段外，数据集还需要在 episodes 元信息里带有 SARM subtask 标注列。
+
+已发布到 Hugging Face 的 SARM 示例数据集：
+
+- LeRobot v3.x 版、用于训练 / 推理的完整人工 sparse+dense 标注数据：[limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv3.0)
+- LeRobot v3.x 版、供手工或 VLM 继续标注的无标注数据：[limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv3.0](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv3.0)
+- 新增的 LeRobot v2.1 manual 转换版，可直接用于训练 / 推理，也适合需要旧版目录结构的工具链：[limxdynamics/FluxVLAData/SARM_manual_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_manual_test_10Episodes_lerobotv2.1)
+- 新增的 LeRobot v2.1 vlm 转换版，作为手工补 stage 或 VLM 自动标注的干净起点：[limxdynamics/FluxVLAData/SARM_vlm_test_10Episodes_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/SARM_vlm_test_10Episodes_lerobotv2.1)
+
+可通过以下命令下载到 `./datasets`：
+
+```bash
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv3.0/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_manual_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include "SARM_vlm_test_10Episodes_lerobotv2.1/*" --local-dir ./datasets
+```
+
+`manual_*` 两份数据可以直接接训练 / 推理；`vlm_*` 两份数据适合作为手工写 stage 或 VLM 自动标注的起点。如果下游工具假定存在 `meta/episodes.jsonl` 和逐集视频，优先使用 v2.1；如果你要保留原生 LeRobot v3.x 的元信息布局，优先使用 v3.0。
+
+在使用 LeRobot v3.x 的 SARM 数据集前，建议先做一次视频元信息自检：
+
+- LeRobot v3.x 既允许多个 episode 共用一个 MP4，也允许一个 episode 对应一个 MP4。
+
+- 如果多个 episode 共用同一个 MP4，那么每个 episode 的 `from_timestamp` / `to_timestamp` 必须正确描述它在该视频中的片段区间。
+
+- 如果视频本身已经拆成 `file-000.mp4`、`file-001.mp4` 这样的逐集文件，那么每个 episode 就应该指向各自的 `file_index`，且 `from_timestamp` 通常应回到 `0.0`。
+
+- 如果目录里明明有多个 MP4，但所有 episode 仍都指向 `file-000.mp4`，那就是错误的 metadata，应先修正再使用。
+
+- SARM 数据集目录、标注列契约与 progress 推理说明见 [docs/sarm.md](docs/sarm.md)。
+
+- 手动写入 stage 或使用 VLM 自动标注见 [tools/sarm_annotate/README.md](tools/sarm_annotate/README.md)。
+
+</details>
+
+<details>
 <summary><b>私有数据集目录结构</b></summary>
 
 若使用 fluxvla 在私有数据集上训练，需要先将原始数据（如 ALOHA 双臂机器人采集的 HDF5 文件）转换为 LeRobot Dataset v2.1 格式。详细的转换步骤请参考 [数据转换指南](docs/data_convert.md)。
+
+对 SARM 而言，只要补齐所需的 SARM 标注列，FluxVLA 同时兼容 LeRobot v2.1 与 v3.x 数据集。SARM 需要的元信息格式见 [docs/sarm.md](docs/sarm.md)。
 
 转换后的数据集目录结构如下：
 
@@ -310,6 +351,8 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 下载所需预训练 checkpoint 并放到 `./checkpoints` 目录。请根据配置仅下载你需要的 checkpoint。
 
+如果使用 SARM 工作流，通常至少需要一个 CLIP checkpoint 用于训练 / 推理；如果要用 VLM 自动标注，还需要官方 SARM 使用的 Qwen3-VL checkpoint。详细用法见 [docs/sarm.md](docs/sarm.md)。
+
 <details>
 <summary><b>VLA 模型</b></summary>
 
@@ -326,9 +369,10 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 <details>
 <summary><b>视觉语言模型（VLM）</b></summary>
 
-| 模型       | 大小 | 下载链接                                                              |
-| ---------- | ---- | --------------------------------------------------------------------- |
-| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) |
+| 模型       | 大小 | 下载链接                                                                 |
+| ---------- | ---- | ------------------------------------------------------------------------ |
+| Qwen2.5-VL | 3B   | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct)    |
+| Qwen3-VL   | 30B  | [🤗 Hugging Face](https://huggingface.co/Qwen/Qwen3-VL-30B-A3B-Instruct) |
 
 </details>
 
@@ -348,12 +392,15 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 
 | 模型                | 下载链接                                                                             |
 | ------------------- | ------------------------------------------------------------------------------------ |
+| CLIP ViT-B/32       | [🤗 Hugging Face](https://huggingface.co/openai/clip-vit-base-patch32)               |
 | ViT-Large (DINOv2)  | [🤗 Hugging Face](https://huggingface.co/timm/vit_large_patch14_reg4_dinov2.lvd142m) |
 | ViT-SO400M (SigLIP) | [🤗 Hugging Face](https://huggingface.co/timm/ViT-SO400M-14-SigLIP)                  |
 | SigLIP2             | [🤗 Hugging Face](https://huggingface.co/google/siglip2-base-patch16-224)            |
 | paligemma           | [🤗 Hugging Face](https://huggingface.co/google/paligemma-3b-pt-224)                 |
 
 > **提示**：可使用 `huggingface-cli download <model-name> --local-dir ./checkpoints/<model-name>` 加速下载。
+
+对于内置的 SARM 配置，请将 CLIP 文件放到 `./checkpoints/clip-vit-base-patch32`。如果使用 VLM 自动标注，请将官方 SARM VLM 放到 `./checkpoints/Qwen3-VL-30B-A3B-Instruct`。
 
 </details>
 
@@ -391,6 +438,13 @@ huggingface-cli download limxdynamics/FluxVLAEngine --include "pi05_paligemma_li
 - 支持 Llama、Gemma 与 Qwen 系列 LLM 主干。
 - 支持 DINOv2、SigLIP 视觉主干。
 - 支持 PaliGemma 与 Qwen-VL VLM 主干。
+
+</details>
+
+<details>
+<summary><b>支持 SARM 工作流</b></summary>
+
+- 支持 [SARM](https://github.com/xdofai/opensarm) 的训练、标注与 progress 推理，并兼容 LeRobot v2.1/v3.x 数据集。详情见 [docs/sarm.md](docs/sarm.md)。
 
 </details>
 
@@ -639,4 +693,3 @@ pip install triton==3.2.0
 - RLDS 数据集将废弃并被 Parquet 数据集替代。
 - logger 功能将完整实现。
 - 支持 issacsim。
-- 支持SARM
