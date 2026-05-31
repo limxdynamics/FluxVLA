@@ -151,7 +151,7 @@ class MultiEmbodimentActionEncoder(nn.Module):
         elif timesteps.dim() == 2:
             assert timesteps.shape == (B, T)
         else:
-            raise ValueError(f'Expected timesteps shape (B,) or (B,T), got '
+            raise ValueError(f'Expected timesteps shape (B,) or (B, T), got '
                              f'{timesteps.shape}')
 
         # 2) Standard action MLP step for shape => (B, T, w)
@@ -352,7 +352,8 @@ class FlowMatchingHead(nn.Module):
         loss = reduce_action_bc_loss(
             losses,
             action_mask=action_masks,
-            sample_weight=kwargs.get('sample_weight'))
+            sample_weight=kwargs.get('sample_weight')) * (
+                velocity.shape[-1] / actions.shape[-1])
 
         return dict(
             pred_actions=pred_actions,
