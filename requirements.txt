@@ -1,6 +1,6 @@
-torch==2.6.0
-torchvision==0.21.0
-torchaudio==2.6.0
+torch>=2.6.0
+torchvision>=0.21.0
+torchaudio>=2.6.0
 accelerate==0.33.0
 bddl==1.0.1
 boto3==1.38.32

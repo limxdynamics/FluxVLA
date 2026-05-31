@@ -57,8 +57,6 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 ## 🛠️ Installation
 
-The installation guide below uses NVCC 12.4 as an example. If your environment differs, adjust the CUDA version accordingly.
-
 <details>
 <summary><b>1. Create a conda environment</b></summary>
 
@@ -75,10 +73,11 @@ conda activate fluxvla
 > **Important**: Before running `pip install -r requirements.txt`, you must install PyTorch from the official CUDA index first. The default PyPI index cannot fetch CUDA-enabled builds.
 
 ```bash
-pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+# CUDA 12.8
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
 ```
 
-For other CUDA versions, replace `cu124` with the corresponding value (e.g., `cu118`, `cu121`). See: [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) .
+For other CUDA versions, replace `cu128` with the corresponding value (e.g., `cu118`, `cu121`). See: [https://pytorch.org/get-started/locally/](https://pytorch.org/get-started/locally/) and [https://pytorch.org/get-started/previous-versions/](https://pytorch.org/get-started/previous-versions/).
 
 </details>
 
@@ -646,16 +645,6 @@ pip install numpy==1.26.4
 
 </details>
 
-<details>
-<summary><b>Q: Inference fails on RTX 5090 (e.g., Triton kernel errors or CUDA compatibility issues).</b></summary>
-
-<b>A:</b> RTX 5090 (Blackwell architecture) requires an updated Triton version. Upgrade to Triton 3.2.0 or higher:
-
-```bash
-pip install triton==3.2.0
-```
-
-</details>
 
 ## Contributing
 
