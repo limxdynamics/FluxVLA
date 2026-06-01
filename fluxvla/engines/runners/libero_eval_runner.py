@@ -67,6 +67,16 @@ class LiberoEvalRunner:
             Default is True.
     """
 
+    @staticmethod
+    def _inject_checkpoint_tokenizer(dataset: Dict, ckpt_path: str) -> None:
+        model_path = Path(ckpt_path).resolve().parent.parent
+        if not (model_path / 'tokenizer').is_dir():
+            return
+
+        for transform in dataset.get('transforms', []):
+            if 'tokenizer' in transform:
+                transform['model_path'] = model_path.as_posix()
+
     def __init__(self,
                  cfg: Dict,
                  seed: int,
@@ -142,6 +152,7 @@ class LiberoEvalRunner:
         dataset['task_suite_name'] = task_suite_name
         dataset['norm_stats_key'] = self.norm_stats_key
         dataset['norm_stats'] = data_stat_path
+        self._inject_checkpoint_tokenizer(dataset, ckpt_path)
         self.dataset = build_dataset_from_cfg(dataset)
         self.denormalize_action = build_transform_from_cfg(denormalize_action)
         self.eval_chunk_size = eval_chunk_size

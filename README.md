@@ -57,6 +57,14 @@ FluxVLA Engine is a full-stack, end-to-end engineering platform for deploying em
 
 ## 🛠️ Installation
 
+**Existing installations**: If you already cloned and installed FluxVLA(v0.1.0), you do not need to recreate the conda environment for the `transformers==5.3.0` update. Pull the latest code and upgrade only Transformers:
+
+```bash
+git pull
+python -m pip install --upgrade "transformers==5.3.0"
+python -c "import transformers; print(transformers.__version__)"
+```
+
 The installation guide below uses NVCC 12.4 as an example. If your environment differs, adjust the CUDA version accordingly.
 
 <details>

@@ -363,6 +363,7 @@ class LiberoPromptFromInputs:
 
     def __init__(self,
                  tokenizer: Dict,
+                 model_path: str = None,
                  max_len: int = 180,
                  pad_token_id: int = 0,
                  prompt_suffix: str = '',
@@ -370,6 +371,8 @@ class LiberoPromptFromInputs:
                  negative_prompt: str = None,
                  add_new_line: bool = False) -> None:
         from fluxvla.engines import build_tokenizer_from_cfg
+        if model_path is not None:
+            tokenizer['model_path'] = os.path.join(model_path, 'tokenizer')
         self.tokenizer = build_tokenizer_from_cfg(tokenizer)
         self.max_len = max_len
         self.pad_token_id = pad_token_id

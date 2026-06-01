@@ -34,8 +34,12 @@ from transformers.modeling_utils import (ALL_ATTENTION_FUNCTIONS,
                                          PreTrainedModel)
 from transformers.models.gemma.configuration_gemma import GemmaConfig
 from transformers.processing_utils import Unpack
-from transformers.utils import (LossKwargs, auto_docstring, can_return_tuple,
-                                logging)
+from transformers.utils import auto_docstring, can_return_tuple, logging
+
+try:
+    from transformers.utils import TransformersKwargs
+except ImportError:
+    from transformers.utils import LossKwargs as TransformersKwargs
 
 from fluxvla.engines import LLM_BACKBONES
 
@@ -201,24 +205,51 @@ class GemmaRotaryEmbedding(nn.Module):
         device (Optional[torch.device]): The device to use.
     """
 
-    def __init__(self, config: GemmaConfig, device=None):
+    def __init__(self, config, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, 'rope_scaling') and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get(
-                'rope_type', config.rope_scaling.get('type'))
-        else:
-            self.rope_type = 'default'
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
-
         self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            self.config, device)
+        rope_params = getattr(self.config, 'rope_parameters', None)
+        if rope_params is None:
+            rope_params = getattr(self.config, 'rope_scaling', None)
+        if rope_params is None:
+            rope_params = {
+                'rope_type': 'default',
+                'rope_theta': getattr(config, 'rope_theta', 10000.0),
+            }
+        if getattr(self.config, 'rope_parameters', None) is None:
+            self.config.rope_parameters = rope_params
+
+        self.rope_type = rope_params.get('rope_type',
+                                         rope_params.get('type', 'default'))
+        rope_init_fn = self.compute_default_rope_parameters
+        if self.rope_type != 'default':
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        self.rope_init_fn = rope_init_fn
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
         self.register_buffer('inv_freq', inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self.register_buffer(
+            'original_inv_freq', inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(config=None,
+                                        device=None,
+                                        seq_len=None):
+        rope_params = getattr(config, 'rope_parameters', None)
+        if rope_params is None:
+            rope_params = getattr(config, 'rope_scaling', None) or {}
+        base = rope_params.get('rope_theta',
+                               getattr(config, 'rope_theta', 10000.0))
+        dim = getattr(config, 'head_dim',
+                      None) or config.hidden_size // config.num_attention_heads
+        attention_factor = 1.0
+        inv_freq = 1.0 / (
+            base**(torch.arange(0, dim, 2, dtype=torch.int64).to(
+                device=device, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update
@@ -509,10 +540,10 @@ class GemmaAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_kwargs)
             else:
-                key_states = torch.cat(
-                    [past_key_value[self.layer_idx][0], key_states], dim=2)
-                value_states = torch.cat(
-                    [past_key_value[self.layer_idx][1], value_states], dim=2)
+                layer_cache = past_key_value.layers[self.layer_idx]
+                key_states = torch.cat([layer_cache.keys, key_states], dim=2)
+                value_states = torch.cat([layer_cache.values, value_states],
+                                         dim=2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != 'eager':
@@ -1024,7 +1055,7 @@ class ConditionGemmaModel(GemmaPreTrainedModel):
 GemmaModel = ConditionGemmaModel
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs):
+class KwargsForCausalLM(FlashAttentionKwargs, TransformersKwargs):
     ...
 
 

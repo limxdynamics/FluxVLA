@@ -18,8 +18,8 @@ from typing import Callable, Dict, List, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from pytest import Cache
 from torch.distributed.fsdp.wrap import _or_policy
+from transformers.cache_utils import Cache
 
 from fluxvla.engines import (VLAS, build_llm_backbone_from_cfg,
                              build_projector_from_cfg)
@@ -344,8 +344,6 @@ class PI0FlowMatching(BaseVLA):
         Returns:
             List[torch.Tensor]: Output embeddings after processing all layers.
         """
-        _rope_device_tensor = torch.empty(
-            0, device=inputs_embeds[0].device, dtype=inputs_embeds[0].dtype)
         for layer_idx in range(num_layers):
             query_states = []
             key_states = []
@@ -377,8 +375,15 @@ class PI0FlowMatching(BaseVLA):
             key_states = torch.cat(key_states, dim=2)
             value_states = torch.cat(value_states, dim=2)
 
-            cos, sin = self.llm_backbone.rotary_emb(_rope_device_tensor,
-                                                    position_ids)
+            dummy_tensor = torch.zeros(
+                query_states.shape[0],
+                query_states.shape[2],
+                query_states.shape[-1],
+                device=query_states.device,
+                dtype=query_states.dtype,
+            )
+            cos, sin = (
+                self.llm_backbone.rotary_emb(dummy_tensor, position_ids))
             query_states, key_states = apply_rotary_pos_emb(
                 query_states, key_states, cos, sin)
 
@@ -411,9 +416,11 @@ class PI0FlowMatching(BaseVLA):
                                                             start_pos:end_pos])
 
                 out_emb = gated_residual(hidden_states, out_emb, gates[i])
-                after_first_residual = out_emb
+                after_first_residual = out_emb.clone()
                 out_emb, gate = layer.post_attention_layernorm(
                     out_emb, cond=adarms_cond[i])
+                if layer.mlp.up_proj.weight.dtype == torch.bfloat16:
+                    out_emb = out_emb.to(dtype=torch.bfloat16)
 
                 out_emb = layer.mlp(out_emb)
                 out_emb = gated_residual(after_first_residual, out_emb, gate)
