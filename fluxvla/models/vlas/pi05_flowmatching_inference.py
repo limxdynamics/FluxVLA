@@ -522,7 +522,7 @@ class PI05FlowMatchingInference(PI05FlowMatching):
                        *args,
                        **kwargs):
         if not self._triton_ready:
-            self.prepare_triton_inference(
+            self.materialize_inference_weights(
                 num_views=self.num_views,
                 max_prompt_len=self.triton_max_prompt_len,
                 chunk_size=self.n_action_steps,
@@ -582,19 +582,21 @@ class PI05FlowMatchingInference(PI05FlowMatching):
             time_val = time_val + dt
         return torch.cat(time_embs, dim=0)
 
-    def _prepare_action_time_triton(self) -> dict:
+    def _materialize_action_time_weights(self) -> dict:
         weights = {}
         weights.update(
-            self.action_in_proj.prepare_triton('decoder_action_in_proj'))
+            self.action_in_proj.materialize_weights('decoder_action_in_proj'))
         weights.update(
-            self.action_out_proj.prepare_triton('decoder_action_out_proj'))
-        weights.update(self.time_mlp_in.prepare_triton('decoder_time_mlp_in'))
+            self.action_out_proj.materialize_weights(
+                'decoder_action_out_proj'))
         weights.update(
-            self.time_mlp_out.prepare_triton('decoder_time_mlp_out'))
+            self.time_mlp_in.materialize_weights('decoder_time_mlp_in'))
+        weights.update(
+            self.time_mlp_out.materialize_weights('decoder_time_mlp_out'))
         return weights
 
-    def prepare_triton_inference(self, num_views, max_prompt_len, chunk_size,
-                                 num_steps):
+    def materialize_inference_weights(self, num_views, max_prompt_len,
+                                      chunk_size, num_steps):
         """Collect weights and build the Triton pipeline.
 
         Args:
@@ -604,15 +606,15 @@ class PI05FlowMatchingInference(PI05FlowMatching):
             num_steps (int): Denoising steps.
         """
         self._triton_weights = {}
-        self._triton_weights.update(self.vision_backbone.prepare_triton())
+        self._triton_weights.update(self.vision_backbone.materialize_weights())
         self._triton_weights.update(
-            self.llm_backbone.prepare_triton(role='llm'))
+            self.llm_backbone.materialize_weights(role='llm'))
         self._triton_weights.update(
-            self.llm_expert.prepare_triton(role='expert'))
+            self.llm_expert.materialize_weights(role='expert'))
         self._triton_weights.update(
-            self.projector.prepare_triton(
+            self.projector.materialize_weights(
                 prefix='encoder_multi_modal_projector'))
-        self._triton_weights.update(self._prepare_action_time_triton())
+        self._triton_weights.update(self._materialize_action_time_weights())
         self._triton_weights.update(
             {'decoder_time_embeds': self._prepare_adarms_cond(num_steps)})
 

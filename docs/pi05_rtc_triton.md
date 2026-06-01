@@ -178,7 +178,7 @@ inference_model = dict(
 
 - number of denoising steps used by the Triton inference graph
 - default is `10`
-- must match the weight precomputation performed in `prepare_triton_inference()`
+- must match the weight precomputation performed in `materialize_inference_weights()`
 
 ## 6. What happens at runtime
 

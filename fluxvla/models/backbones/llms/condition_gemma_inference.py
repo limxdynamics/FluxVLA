@@ -6,20 +6,20 @@ from .condition_gemma import ConditionGemmaModel
 
 @LLM_BACKBONES.register_module()
 class ConditionGemmaInferenceModel(ConditionGemmaModel):
-    """Inference variant of ConditionGemma with Triton weight prep.
+    """Inference variant of ConditionGemma with weight materialization.
 
-    Extends :class:`ConditionGemmaModel` with :meth:`prepare_triton`,
+    Extends :class:`ConditionGemmaModel` with :meth:`materialize_weights`,
     which extracts, fuses and reformats model weights for the
-    Triton-based CUDA-graph inference pipeline
+    kernel-based CUDA-graph inference pipeline
     (:class:`PI05FlowMatchingInference`).
 
-    Weight pre-processing performed by :meth:`prepare_triton`:
+    Weight pre-processing performed by :meth:`materialize_weights`:
 
     * **Encoder (role='llm')**: Fuses RMSNorm scale ``(1 + w)``
       into QKV / gate / up projections so that normalization and
       linear projection become a single matmul.  Converts Q/K
       weight layout from ``[heads, head_dim, in]`` to the
-      interleaved format required by Triton fused-RoPE kernels.
+      interleaved format required by fused-RoPE kernels.
     * **Decoder (role='expert')**: Collects AdaRMS modulation
       weights (``input_layernorm.dense``,
       ``post_attention_layernorm.dense``) and final-norm
@@ -29,7 +29,7 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
 
     All returned tensors are bf16, column-major (transposed),
     contiguous, and on CUDA — ready to be consumed by
-    :meth:`PI05FlowMatchingInference.prepare_triton_inference`.
+    :meth:`PI05FlowMatchingInference.materialize_inference_weights`.
 
     Args:
         Inherits all arguments from :class:`ConditionGemmaModel`.
@@ -39,8 +39,8 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
         encoder = ConditionGemmaInferenceModel(**cfg_enc)
         decoder = ConditionGemmaInferenceModel(**cfg_dec)
         weights = {}
-        weights.update(encoder.prepare_triton(role='llm'))
-        weights.update(decoder.prepare_triton(role='expert'))
+        weights.update(encoder.materialize_weights(role='llm'))
+        weights.update(decoder.materialize_weights(role='expert'))
     """
 
     def _apply_rope_format_conversion(self,
@@ -62,7 +62,7 @@ class ConditionGemmaInferenceModel(ConditionGemmaModel):
 
         return w_q, w_k
 
-    def prepare_triton(self, role='llm') -> dict:
+    def materialize_weights(self, role='llm') -> dict:
         weights = {}
 
         if role == 'llm':
