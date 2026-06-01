@@ -30,11 +30,6 @@ def parse_args():
     parser.add_argument(
         '--dtype', default='bf16', choices=['bf16', 'fp16', 'fp32'])
     parser.add_argument(
-        '--optimizer',
-        default='passthrough',
-        choices=['passthrough', 'time_mpc'])
-    parser.add_argument('--optimizer-horizon', type=int, default=20)
-    parser.add_argument(
         '--dataset-key',
         default=None,
         choices=['inference', 'eval'],
@@ -120,14 +115,8 @@ def main():
     dtype_map = {
         'bf16': torch.bfloat16,
         'fp16': torch.float16,
-        'fp32': torch.float32,
+        'fp32': torch.float32
     }
-    from .optimizer import PassThroughOptimizer, TimeParameterizationMPC
-    if args.optimizer == 'time_mpc':
-        optimizer = TimeParameterizationMPC(horizon=args.optimizer_horizon)
-    else:
-        optimizer = PassThroughOptimizer()
-    print(f'[serve] Using {optimizer.__class__.__name__}')
 
     from .zmq_server import create_server
 
@@ -136,7 +125,6 @@ def main():
         dataset=dataset,
         denormalize_action=denormalize_action,
         task_suite_name=task_suite_name,
-        optimizer=optimizer,
         host=args.host,
         port=args.port,
         device=args.device,

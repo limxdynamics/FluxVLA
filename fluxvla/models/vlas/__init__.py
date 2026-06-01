@@ -23,7 +23,7 @@ from .smolvla_flowmatching import SmolVLAFlowMatching  # noqa: F401, F403
 from .pi05_flowmatching_inference_rtc import \
     PI05FlowMatchingRTCInference  # noqa: F401, F403
 from .x_vla import X_VLA  # noqa: F401, F403
-from .smolvla_flowmatching import SmolVLAFlowMatching  # noqa: F401, F403
+
 
 try:
     from .dreamzero_vla import DreamZeroVLA  # noqa: F401

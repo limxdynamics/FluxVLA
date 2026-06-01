@@ -285,13 +285,7 @@ class BaseInferenceRunner:
             if self.enable_mixed_precision:
                 self.vla.to(device='cuda', dtype=self.mixed_precision_dtype)
             else:
-                if self.vla.__class__.__name__ in (
-                        'PI05FlowMatchingInference',
-                        'PI05FlowMatchingRTCInference'):
-                    # load checkpoint to cpu, waiting to copy weights
-                    pass
-                else:
-                    self.vla.cuda()
+                self.vla.cuda()
             overwatch.info(
                 f'Model loaded (dtype={self.mixed_precision_dtype}). '
                 f'Seed set to {self.seed}')
@@ -356,12 +350,7 @@ class BaseInferenceRunner:
                         dtype=self.mixed_precision_dtype,
                         enabled=(self.enable_mixed_precision
                                  and not self._use_remote)):
-                    torch.cuda.synchronize()
-                    time0 = time.perf_counter()
                     raw_action = self._predict_action(inputs)
-                    torch.cuda.synchronize()
-                    print(f'prediction time :'
-                          f' {(time.perf_counter() - time0) * 1000} ms.')
 
                 actions = self._postprocess_actions(raw_action)
                 self._execute_actions(actions, rate)

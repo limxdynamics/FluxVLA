@@ -21,11 +21,6 @@ def __getattr__(name):
         'encode_predict_response',
     }
     _server = {'PolicyServer', 'create_server', 'serialize_actions'}
-    _optimizer = {
-        'BaseOptimizer',
-        'PassThroughOptimizer',
-        'TimeParameterizationMPC',
-    }
 
     if name in _public:
         from . import serializers
@@ -33,16 +28,10 @@ def __getattr__(name):
     if name in _server:
         from . import zmq_server
         return getattr(zmq_server, name)
-    if name in _optimizer:
-        from . import optimizer
-        return getattr(optimizer, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
 __all__ = [
-    'BaseOptimizer',
-    'PassThroughOptimizer',
-    'TimeParameterizationMPC',
     'FORMAT_MSGPACK',
     'FORMAT_PROTOBUF',
     'MsgSerializer',
