@@ -170,9 +170,9 @@ class ParquetDataset(Dataset):
         while (index == len(self.dataset) - 1
                or self.dataset[index]['episode_index'] !=
                self.dataset[index + 1]['episode_index']
-               or self._get_dataset_index(index + 1) != dataset_idx or
-               _get_task_name(dataset_idx, index + 1) == 'empty' or
-               _get_task_name(dataset_idx, index + 1) == 'static'):
+               or self._get_dataset_index(index + 1) != dataset_idx
+               or _get_task_name(dataset_idx, index + 1) == 'empty'
+               or _get_task_name(dataset_idx, index + 1) == 'static'):
 
             index = self._rand_another()
             data = self.dataset[index]

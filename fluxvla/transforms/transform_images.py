@@ -211,12 +211,13 @@ class RandomCropImages:
         if arr.ndim == 3:
             original_shape = arr.shape
             if arr.shape[0] % 3 == 0 and arr.shape[-1] != 3:
-                return list(arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])), \
-                    'array', original_shape
+                arr = arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])
+                return list(arr), 'array', original_shape
             return [arr], 'array', original_shape
         if arr.ndim == 4:
             return list(arr), 'array', arr.shape
-        raise ValueError(f'RandomCropImages: unsupported image shape {arr.shape}')
+        raise ValueError(
+            f'RandomCropImages: unsupported image shape {arr.shape}')
 
     def _restore_images(self, cropped, kind, original_shape):
         if kind == 'list':
@@ -280,12 +281,13 @@ class ColorJitterImages:
         if arr.ndim == 3:
             original_shape = arr.shape
             if arr.shape[0] % 3 == 0 and arr.shape[-1] != 3:
-                return list(arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])), \
-                    'array', original_shape
+                arr = arr.reshape(-1, 3, arr.shape[-2], arr.shape[-1])
+                return list(arr), 'array', original_shape
             return [arr], 'array', original_shape
         if arr.ndim == 4:
             return list(arr), 'array', arr.shape
-        raise ValueError(f'ColorJitterImages: unsupported image shape {arr.shape}')
+        raise ValueError(
+            f'ColorJitterImages: unsupported image shape {arr.shape}')
 
     def _restore_images(self, jittered, kind, original_shape):
         if kind == 'list':
@@ -308,7 +310,8 @@ class ColorJitterImages:
         jittered = self.transform(tensor).detach().cpu().numpy()
         if channel_first:
             return jittered.astype(arr.dtype, copy=False)
-        return np.transpose(jittered, (1, 2, 0)).astype(image.dtype, copy=False)
+        jittered = np.transpose(jittered, (1, 2, 0))
+        return jittered.astype(image.dtype, copy=False)
 
     def __call__(self, data: dict):
         assert 'images' in data, "Input data must contain 'images' key"
@@ -524,9 +527,8 @@ class NormalizeImages:
                                                  (0, 2, 3, 1))
                 data[img_key] = normalized_images.reshape(original_shape)
             else:
-                raise ValueError(
-                    f'NormalizeImages: unsupported image shape '
-                    f'{original_shape}')
+                raise ValueError(f'NormalizeImages: unsupported image shape '
+                                 f'{original_shape}')
             return data
 
         original_shape = images.shape
@@ -540,14 +542,12 @@ class NormalizeImages:
             flat_images = np.transpose(images[None],
                                        (0, 3, 1, 2)).astype(np.float32)
             normalized_images = self._normalize_flat_images(flat_images)
-            data[img_key] = np.transpose(normalized_images,
-                                         (0, 2, 3, 1))[0]
+            data[img_key] = np.transpose(normalized_images, (0, 2, 3, 1))[0]
         elif images.ndim == 4 and images.shape[1] == 3:
             flat_images = images.astype(np.float32)
             data[img_key] = self._normalize_flat_images(flat_images)
         elif images.ndim == 4 and images.shape[-1] == 3:
-            flat_images = np.transpose(images, (0, 3, 1,
-                                                2)).astype(np.float32)
+            flat_images = np.transpose(images, (0, 3, 1, 2)).astype(np.float32)
             normalized_images = self._normalize_flat_images(flat_images)
             data[img_key] = np.transpose(normalized_images, (0, 2, 3, 1))
         else:
