@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import logging
 import os
 from pathlib import Path
@@ -26,7 +25,7 @@ import torchvision
 from PIL import Image
 
 from fluxvla.engines import TRANSFORMS
-from fluxvla.engines.utils.eval_utils import crop_and_resize, get_libero_image
+from fluxvla.engines.utils.eval_utils import crop_and_resize
 from .utils import pad_to_dim, parse_image
 
 
@@ -332,26 +331,26 @@ class ProcessOBSInputs():
 @TRANSFORMS.register_module()
 class ProcessLiberoEvalInputs:
     """ Process Libero eval inputs.
-    This class processes the Libero eval inputs by loading the images,
-    applying the center crop, and returning the processed inputs.
+    This transform loads LIBERO observation images, rotates them, converts
+    them to PIL images, and leaves model-specific resizing to later image
+    transforms. If enabled, center crop is applied with the same TensorFlow
+    crop-and-resize path used by the original OpenVLA evaluation.
 
     Args:
         img_keys (List[str]): Image keys to fetch from inputs.
             Default to ['agentview_image'].
-        center_crop (bool): If True, center crop at 0.9 area before resize.
-            Default to False.
+        center_crop (bool): If True, center crop to 0.9 area and resize back
+            to 224x224 before later model-specific processing.
         use_pil (bool): If True, use PIL to load the images.
             Default to True.
     """
 
     def __init__(self,
                  img_keys: List[str] = ['agentview_image'],
-                 resize_size: int = 224,
                  center_crop: bool = False,
                  use_pil: bool = True,
                  embodiment_id: int = None) -> None:
         self.img_keys = img_keys
-        self.resize_size = resize_size
         self.center_crop = center_crop
         self.use_pil = use_pil
         self.embodiment_id = embodiment_id
@@ -359,11 +358,15 @@ class ProcessLiberoEvalInputs:
     def __call__(self, inputs: Dict) -> Dict:
         # Load raw images
         imgs = list()
+        replay_img = None
         for img_key in self.img_keys:
             if img_key not in inputs:
                 raise KeyError(f'Image key `{img_key}` not found in inputs!')
-            imgs.append(get_libero_image(inputs, self.resize_size, img_key))
-        replay_img = copy.deepcopy(imgs[0])
+            img = np.asarray(inputs[img_key])
+            img = img[::-1, ::-1].copy()
+            if replay_img is None:
+                replay_img = img.copy()
+            imgs.append(img)
         images = list()
         img_masks = list()
         if self.use_pil:
@@ -371,35 +374,19 @@ class ProcessLiberoEvalInputs:
                 image = Image.fromarray(img)
                 image = image.convert('RGB')
 
-                # (If trained with image augmentations)
-                # Center crop image and then
-                # resize back up to original size.
-                # IMPORTANT: Let's say crop scale == 0.9. To get the new height
-                # and width (post-crop), multiply
-                # the original height and width by sqrt(0.9) -- not 0.9!
                 if self.center_crop:
                     batch_size = 1
                     crop_scale = 0.9
-
-                    # Convert to TF Tensor and record original data type
-                    # (should be tf.uint8)
                     image = tf.convert_to_tensor(np.array(image))
                     orig_dtype = image.dtype
-
-                    # Convert to data type tf.float32 and values between [0,1]
                     image = tf.image.convert_image_dtype(image, tf.float32)
-
-                    # Crop and then resize back to original size
                     image = crop_and_resize(image, crop_scale, batch_size)
-
-                    # Convert back to original data type
                     image = tf.clip_by_value(image, 0, 1)
                     image = tf.image.convert_image_dtype(
                         image, orig_dtype, saturate=True)
-
-                    # Convert back to PIL Image
                     image = Image.fromarray(image.numpy())
                     image = image.convert('RGB')
+
                 images.append(image)
                 img_masks.append(True)
         else:
