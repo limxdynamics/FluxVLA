@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""RoboCasa transforms for evaluation preprocessing and action denormalization."""
+"""RoboCasa transforms for evaluation preprocessing and action denorm."""
 
 import copy
 import json
@@ -26,11 +26,11 @@ from fluxvla.engines.utils.root import DATASETS, TRANSFORMS
 # This order must match the converted training parquet exactly:
 # left_arm + left_hand + right_arm + right_hand + waist.
 ROBOCASA_STATE_KEYS = [
-    'state.left_arm',    # 7D -> [0:7]
-    'state.left_hand',   # 6D -> [7:13]
-    'state.right_arm',   # 7D -> [13:20]
+    'state.left_arm',  # 7D -> [0:7]
+    'state.left_hand',  # 6D -> [7:13]
+    'state.right_arm',  # 7D -> [13:20]
     'state.right_hand',  # 6D -> [20:26]
-    'state.waist',       # 3D -> [26:29]
+    'state.waist',  # 3D -> [26:29]
 ]
 
 ROBOCASA_GR1_FLUXVLA_ORDER = {
@@ -82,7 +82,7 @@ class RobocasaGR1N15Bridge:
         source_order: Source flat vector order. Only ``fluxvla`` is supported.
         state_key: Key containing the state vector in the sample dict.
         action_key: Key containing the action window in the sample dict.
-        stats_action_key: Key containing action statistics in ``data['stats']``.
+        stats_action_key: Action statistics key in ``data['stats']``.
         apply_state_sincos: If True, encode states as sin/cos features.
         reorder_actions: If True, reorder action vectors to N1.5 order.
         reorder_action_stats: If True, reorder flat action statistics to N1.5
@@ -201,8 +201,8 @@ class ProcessRobocasaEvalInputs:
                  normalize: bool = True,
                  embodiment_id: Optional[int] = None):
         if center_crop_scale is not None and not (0 < center_crop_scale <= 1):
-            raise ValueError(
-                f'center_crop_scale must be in (0, 1], got {center_crop_scale}')
+            raise ValueError(f'center_crop_scale must be in (0, 1], got '
+                             f'{center_crop_scale}')
         self.img_key = img_key
         self.resize_size = resize_size
         self.center_crop_scale = center_crop_scale
@@ -233,7 +233,8 @@ class ProcessRobocasaEvalInputs:
             img = self._center_crop(img)
 
             # Resize RoboCasa 256x256 frames to the model input size.
-            if img.shape[0] != self.resize_size or img.shape[1] != self.resize_size:
+            if (img.shape[0] != self.resize_size
+                    or img.shape[1] != self.resize_size):
                 img = cv2.resize(img, (self.resize_size, self.resize_size))
 
             if self.normalize:
@@ -250,9 +251,8 @@ class ProcessRobocasaEvalInputs:
 
             result['img_masks'] = np.array([True])
         else:
-            raise ValueError(
-                f'Image key {self.img_key} not found in obs. '
-                f'Available keys: {list(data.keys())}')
+            raise ValueError(f'Image key {self.img_key} is missing from obs. '
+                             f'Available keys: {list(data.keys())}')
 
         # State extraction: concatenate the 29 active joint dimensions.
         state_parts = []
@@ -263,9 +263,8 @@ class ProcessRobocasaEvalInputs:
         if state_parts:
             result['states'] = np.concatenate(state_parts)  # (29,)
         else:
-            raise ValueError(
-                f'State keys not found in obs. '
-                f'Available keys: {list(data.keys())}')
+            raise ValueError(f'State keys are missing from obs. '
+                             f'Available keys: {list(data.keys())}')
 
         # Task description.
         result['task_description'] = data.get('task_description', '')
@@ -337,9 +336,8 @@ class DenormalizeRobocasaAction:
         if task_key in self.norm_stats:
             stats = self.norm_stats[task_key]
         else:
-            raise KeyError(
-                f'Stats key "{task_key}" not found. '
-                f'Available: {list(self.norm_stats.keys())}')
+            raise KeyError(f'Stats key "{task_key}" not found. '
+                           f'Available: {list(self.norm_stats.keys())}')
 
         action = data['action']
         action_stats = self._reorder_action_stats(stats['action'])
@@ -370,7 +368,7 @@ class DenormalizeRobocasaAction:
         return action_stats
 
     def _denormalize_min_max(self, action: np.ndarray,
-                              stats: Dict) -> np.ndarray:
+                             stats: Dict) -> np.ndarray:
         low = np.array(stats['min'])[:self.action_dim]
         high = np.array(stats['max'])[:self.action_dim]
         if self.clip_actions:
@@ -398,8 +396,9 @@ class RobocasaEvalDataset:
                  **kwargs) -> None:
         from fluxvla.engines import build_transform_from_cfg
 
-        self.transforms = [build_transform_from_cfg(t)
-                           for t in (transforms or [])]
+        self.transforms = [
+            build_transform_from_cfg(t) for t in (transforms or [])
+        ]
         self.unnorm_key = unnorm_key
         # In grouped evaluation this is set per task by RobocasaEvalRunner.
         self._active_stats_blob: Optional[Dict] = None
@@ -433,7 +432,8 @@ class RobocasaEvalDataset:
         # Inject statistics required by NormalizeStatesAndActions.
         if self._active_stats_blob is not None:
             data['stats'] = self._active_stats_blob
-        elif self.norm_stats is not None and self.unnorm_key in self.norm_stats:
+        elif (self.norm_stats is not None
+              and self.unnorm_key in self.norm_stats):
             data['stats'] = self.norm_stats[self.unnorm_key]
 
         # Run transform pipeline.
@@ -480,7 +480,8 @@ class RobocasaEvalDataset:
         dev = batch['images'].device
         if 'embodiment_ids' in data:
             eid = torch.as_tensor(
-                data['embodiment_ids'], dtype=torch.long, device=dev).reshape(-1)
+                data['embodiment_ids'], dtype=torch.long,
+                device=dev).reshape(-1)
             if eid.numel() == 1 and bsz > 1:
                 eid = eid.expand(bsz)
             elif eid.numel() != bsz:
@@ -488,6 +489,7 @@ class RobocasaEvalDataset:
                     f'embodiment_ids length {eid.numel()} != batch size {bsz}')
             batch['embodiment_ids'] = eid
         else:
-            batch['embodiment_ids'] = torch.zeros(bsz, dtype=torch.long, device=dev)
+            batch['embodiment_ids'] = torch.zeros(
+                bsz, dtype=torch.long, device=dev)
 
         return batch, replay_img

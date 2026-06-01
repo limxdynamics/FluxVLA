@@ -1,10 +1,17 @@
-# ============================================================
-# GR00T-N1.5 Eagle 3B RoboCasa GR1 finetuning.
+# Copyright 2026 Limx Dynamics
 #
-# The same config supports both small subsets and full RoboCasa GR1 datasets.
-# Point datasets/robocasa_fluxvla to the desired converted LeRobot dataset
-# before launching scripts/train.py.
-# ============================================================
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""GR00T-N1.5 Eagle 3B RoboCasa GR1 finetuning config."""
 
 model = dict(
     type='LlavaVLA',
@@ -36,7 +43,8 @@ model = dict(
     freeze_projector=False)
 
 _STAT = 'robocasa_gr1_24tasks_30ep'
-_OFFICIAL_GR1_STATS_PATH = 'work_dirs/official_groot_gr1_dataset_statistics.json'
+_OFFICIAL_GR1_STATS_PATH = (
+    'work_dirs/official_groot_gr1_dataset_statistics.json')
 
 _ROBOCASA_TASK_DIRS = [
     'PnPBottleToCabinetClose',
@@ -109,7 +117,8 @@ train_dataloader = dict(
                         num_images=1,
                         tokenizer=dict(
                             type='PretrainedTokenizer',
-                            model_path='fluxvla/models/third_party_models/eagle2_hg_model')),
+                            model_path=('fluxvla/models/third_party_models/'
+                                        'eagle2_hg_model'))),
                     dict(type='RandomCropImages', scale=0.95),
                     dict(type='ResizeImages', height=224, width=224),
                     dict(
@@ -218,12 +227,13 @@ eval = dict(
         type='RobocasaEvalDataset',
         unnorm_key=_STAT,
         transforms=[
-            dict(type='ProcessRobocasaEvalInputs',
-                 img_key='video.ego_view_bg_crop_pad_res256_freq20',
-                 resize_size=224,
-                 center_crop_scale=0.95,
-                 normalize=False,
-                 embodiment_id=24),
+            dict(
+                type='ProcessRobocasaEvalInputs',
+                img_key='video.ego_view_bg_crop_pad_res256_freq20',
+                resize_size=224,
+                center_crop_scale=0.95,
+                normalize=False,
+                embodiment_id=24),
             dict(type='RobocasaGR1N15Bridge'),
             dict(
                 type='NormalizeStatesAndActions',
@@ -239,7 +249,8 @@ eval = dict(
                 return_text=True,
                 tokenizer=dict(
                     type='PretrainedTokenizer',
-                    model_path='fluxvla/models/third_party_models/eagle2_hg_model')),
+                    model_path=('fluxvla/models/third_party_models/'
+                                'eagle2_hg_model'))),
             dict(
                 type='NormalizeImages',
                 means=[[127.5, 127.5, 127.5]],

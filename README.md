@@ -256,6 +256,7 @@ Download the required datasets and place them under `./datasets`. Download only 
 | libero-10              | [limxdynamics/FluxVLAData/libero_10_no_noops_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/libero_10_no_noops_lerobotv2.1)           |
 | libero-goal            | [limxdynamics/FluxVLAData/libero_goal_no_noops_lerobotv2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/libero_goal_no_noops_lerobotv2.1)       |
 | modified_libero_rlds   | [openvla/modified_libero_rlds](https://huggingface.co/datasets/openvla/modified_libero_rlds)                                                                           |
+| RoboCasa GR1           | [limxdynamics/FluxVLAData/robocasa_lerobot_V2.1](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/robocasa_lerobot_V2.1)                             |
 | RealRobot_AgileX_aloha | [limxdynamics/FluxVLAData/RealRobot_AgileX_aloha_lerobot_v2](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/RealRobot_AgileX_aloha_lerobot_v2)     |
 | RealRobot_UR3_Chem     | [limxdynamics/FluxVLAData/RealRobot_UR3_Chem_lerobot_v2](https://huggingface.co/datasets/limxdynamics/FluxVLAData/tree/main/RealRobot_UR3_Chem_lerobot_v2)             |
 
@@ -266,6 +267,8 @@ huggingface-cli download limxdynamics/FluxVLAData --repo-type dataset --include 
 ```
 
 Replace `libero_10_no_noops_lerobotv2.1` with the corresponding folder name of the dataset you want to download.
+
+For RoboCasa GR00T environment setup and assets, see [RoboCasa GR00T Environment Setup](docs/robocasa_gr00t_env_setup.md).
 
 </details>
 
@@ -415,6 +418,14 @@ For the built-in SARM configs, place the CLIP files under `./checkpoints/clip-vi
 <summary><b>Trained models</b></summary>
 
 Checkpoints are available on [🤗 limxdynamics/FluxVLAEngine](https://huggingface.co/limxdynamics/FluxVLAEngine). Linked scores in the [Performance](#performance) table point to the corresponding checkpoints.
+
+You can also download models that have been trained with FluxVLA for inference or evaluation directly. Place them under `./work_dirs`.
+
+| Model                     | Download link                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| PI0.5 PaliGemma Libero-10 | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/pi05_paligemma_libero_10_full_finetune_bs64) |
+| GR00T Eagle 3B Libero-10  | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_libero_10_full_finetune_bs64) |
+| GR00T Eagle 3B RoboCasa   | [🤗 Hugging Face](https://huggingface.co/limxdynamics/FluxVLAEngine/tree/main/gr00t_eagle_3b_robocasa_finetune)            |
 
 ```bash
 # Example: download the PI0.5 checkpoint from limxdynamics/FluxVLAEngine

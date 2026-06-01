@@ -44,15 +44,10 @@ class BaseEvalRunner:
     def default_stats_path(ckpt_path: str) -> str:
         """Return the checkpoint-relative dataset statistics path."""
         return os.path.join(
-            Path(ckpt_path).resolve().parent.parent,
-            'dataset_statistics.json')
+            Path(ckpt_path).resolve().parent.parent, 'dataset_statistics.json')
 
-    def set_common_eval_attrs(self,
-                              cfg: Dict,
-                              seed: int,
-                              ckpt_path: str,
-                              model_family: str,
-                              mixed_precision_dtype: str,
+    def set_common_eval_attrs(self, cfg: Dict, seed: int, ckpt_path: str,
+                              model_family: str, mixed_precision_dtype: str,
                               enable_mixed_precision_training: bool) -> None:
         """Set attributes shared by evaluation runners."""
         self.cfg = cfg

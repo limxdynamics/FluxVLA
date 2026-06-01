@@ -32,8 +32,8 @@ from fluxvla.engines.utils.eval_utils import (get_libero_dummy_action,
                                               save_rollout_video)
 from fluxvla.engines.utils.name_map import str_to_dtype
 from fluxvla.engines.utils.torch_utils import set_seed_everywhere
-from .base_eval_runner import BaseEvalRunner
 from ..utils.root import RUNNERS
+from .base_eval_runner import BaseEvalRunner
 
 overwatch = initialize_overwatch(__name__)
 
