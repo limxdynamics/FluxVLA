@@ -241,15 +241,6 @@ inference_model = dict(
     ori_action_dim=14,
 )
 
-# inference_model.update(
-#     dict(
-#         type='PI05FlowMatchingRTCInference',
-#         num_view=3,
-#         triton_max_prompt_len=48,
-#         num_steps=10
-#     )
-# )
-
 train_dataloader = dict(
     per_device_batch_size=8,
     per_device_num_workers=4,
@@ -342,11 +333,11 @@ runner = dict(
 inference = dict(
     type='AlohaRTCInferenceRunner',
     async_execution=True,
-    execute_horizon=10,
+    execute_horizon=0,
     rtc_config=dict(
         enabled=True,
         method='prefix',
-        prefix_len=5,
+        prefix_len=5,  # based on deployment inference frequency
     ),
     task_descriptions={
         '1': 'pick up the brown bird toy with left arm',
