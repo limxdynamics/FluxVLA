@@ -191,7 +191,6 @@ eval = dict(
             dict(
                 type='ProcessLiberoEvalInputs',
                 img_keys=['agentview_image', 'robot0_eye_in_hand_image'],
-                resize_size=512,
             ),
             dict(
                 type='TransformImage',

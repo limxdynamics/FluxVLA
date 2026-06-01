@@ -901,6 +901,7 @@ class QWen2VLImageTransform:
         merge_size: int = 2,
         img_key: str = 'images',
         to_tensor: bool = False,
+        exact_resize_size: Optional[Tuple[int, int]] = None,
         **kwargs,
     ) -> None:
         self.img_transform = Qwen2VLImageProcessorHF(
@@ -921,11 +922,29 @@ class QWen2VLImageTransform:
             **kwargs)
         self.img_key = img_key
         self.to_tensor = to_tensor
+        self.exact_resize_size = exact_resize_size
+
+    def _exact_resize(self, images: np.ndarray) -> np.ndarray:
+        if self.exact_resize_size is None:
+            return images
+        if len(self.exact_resize_size) != 2:
+            raise ValueError(
+                'exact_resize_size must be a (height, width) pair.')
+        height, width = self.exact_resize_size
+        resized_images = []
+        for image in images:
+            resized_images.append(
+                cv2.resize(
+                    image.transpose(1, 2, 0), (width, height),
+                    interpolation=cv2.INTER_CUBIC).transpose(2, 0, 1))
+        return np.stack(resized_images, axis=0)
 
     def __call__(self, inputs):
-        ret_dict = self.img_transform(inputs[self.img_key].reshape(
-            -1, 3, inputs[self.img_key].shape[-2],
-            inputs[self.img_key].shape[-1]))
+        images = inputs[self.img_key].reshape(-1, 3,
+                                              inputs[self.img_key].shape[-2],
+                                              inputs[self.img_key].shape[-1])
+        images = self._exact_resize(images)
+        ret_dict = self.img_transform(images)
         if self.to_tensor:
             inputs[self.img_key] = torch.from_numpy(ret_dict['pixel_values'])
             inputs['image_grid_thw'] = torch.from_numpy(
