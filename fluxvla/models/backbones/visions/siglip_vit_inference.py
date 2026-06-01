@@ -7,7 +7,7 @@ from .siglip_vit import SigLIPViTBackbone
 @VISION_BACKBONES.register_module()
 class SigLIPViTBackboneInference(SigLIPViTBackbone):
 
-    def materialize_weights(self) -> dict:
+    def prepare_triton(self) -> dict:
         vm = self.vision.vision_model
         weights = {}
 
