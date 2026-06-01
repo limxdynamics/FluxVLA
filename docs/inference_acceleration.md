@@ -144,7 +144,7 @@ PI0.5 uses a unified inference model class `PI05FlowMatchingInference` that repl
 
 ### PI0.5-RTC Example
 
-PI0.5-RTC extends the accelerated pipeline with real-time control (RTC) support via `PI05FlowMatchingRTCInference`. It reuses the same fused-kernel CUDA Graph backend while adding action-chunk prefix conditioning, allowing the model to refine predictions based on previously executed actions.
+PI0.5-RTC extends the accelerated pipeline with real-time control (RTC) support via `PI05FlowMatchingRTCInference`. It reuses the same whole-fused-kernel CUDA Graph backend while adding action-chunk prefix conditioning, allowing the model to refine predictions based on previously executed actions.
 
 See `configs/pi05/pi05_paligemma_aloha_rtc_kernel_inference.py`:
 
