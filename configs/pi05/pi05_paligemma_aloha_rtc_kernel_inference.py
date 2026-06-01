@@ -65,7 +65,7 @@ model = dict(
         out_dim=2048,
     ),
     proj_width=1024,
-    n_action_steps=10,
+    n_action_steps=50,
     action_in_proj=dict(type='LinearProjector', in_dim=32, out_dim=1024),
     action_out_proj=dict(type='LinearProjector', in_dim=1024, out_dim=32),
     time_mlp_in=dict(type='LinearProjector', in_dim=1024, out_dim=1024),
@@ -100,7 +100,7 @@ model = dict(
     freeze_llm_backbone=False,
     freeze_vision_backbone=False,
     pretrained_name_or_path=  # noqa: E251
-    './checkpoints/pi05_libero/model.safetensors',  # noqa: E501
+    './checkpoints/pi05_base/model.safetensors',  # noqa: E501
     name_mapping={
         'llm_backbone': 'paligemma_with_expert.paligemma.model.language_model',
         'vision_backbone.vision':
@@ -113,11 +113,21 @@ model = dict(
         'action_in_proj.projector': 'action_in_proj',
         'action_out_proj.projector': 'action_out_proj',
         'llm_backbone.embed_tokens': 'paligemma_with_expert.paligemma.lm_head',
-    })
+    },
+    params_to_change_dtype=[
+        'llm_expert.llm.model.layers',
+        'vlm_backbone.vlm.model.language_model.layers',
+        'vlm_backbone.vlm.model.vision_tower',
+        'vlm_backbone.vlm.model.multi_modal_projector',
+    ],
+    ori_action_dim=14,
+)
 
 inference_model = dict(
-    type='PI05FlowMatchingInference',
-    num_views=2,
+    type='PI05FlowMatchingRTCInference',
+    num_view=3,
+    triton_max_prompt_len=48,
+    num_steps=10,
     llm_backbone=dict(
         type='ConditionGemmaInferenceModel',
         adarms_cond_dim=None,
@@ -169,7 +179,7 @@ inference_model = dict(
         out_dim=2048,
     ),
     proj_width=1024,
-    n_action_steps=10,
+    n_action_steps=50,
     action_in_proj=dict(
         type='LinearProjectorInference', in_dim=32, out_dim=1024),
     action_out_proj=dict(
@@ -208,7 +218,7 @@ inference_model = dict(
     freeze_llm_backbone=False,
     freeze_vision_backbone=False,
     pretrained_name_or_path=  # noqa: E251
-    './checkpoints/pi05_libero/model.safetensors',  # noqa: E501
+    './checkpoints/pi05_base/model.safetensors',  # noqa: E501
     name_mapping={
         'llm_backbone': 'paligemma_with_expert.paligemma.model.language_model',
         'vision_backbone.vision':
@@ -221,71 +231,76 @@ inference_model = dict(
         'action_in_proj.projector': 'action_in_proj',
         'action_out_proj.projector': 'action_out_proj',
         'llm_backbone.embed_tokens': 'paligemma_with_expert.paligemma.lm_head',
-    })
+    },
+    params_to_change_dtype=[
+        'llm_expert.llm.model.layers',
+        'vlm_backbone.vlm.model.language_model.layers',
+        'vlm_backbone.vlm.model.vision_tower',
+        'vlm_backbone.vlm.model.multi_modal_projector',
+    ],
+    ori_action_dim=14,
+)
 
 train_dataloader = dict(
     per_device_batch_size=8,
     per_device_num_workers=4,
     dataset=dict(
         type='DistributedRepeatingDataset',
-        name_mappings={
-            'observation.state': ['proprio'],
-            'action': ['action']
-        },
-        statistic_keys=['observation.state', 'timestamp', 'action'],
-        statistic_name='libero_10_no_noops',
-        datasets=dict(
-            type='ParquetDataset',
-            data_root_path=  # noqa: E251
-            './datasets/libero_10_no_noops_lerobotv2.1',  # noqa: E501
-            transforms=[
-                dict(
-                    type='ProcessParquetInputs',
-                    parquet_keys=[
-                        'observation.state', 'timestamp', 'actions', 'info',
-                        'stats', 'action_masks'
-                    ],
-                    video_keys=[
-                        'observation.images.image',
-                        'observation.images.wrist_image',
-                    ],
-                    name_mappings={
-                        'observation.state': ['states'],
-                        'actions': ['actions']
-                    }),
-                dict(type='ParquetPrompter', use_conversation=False),
-                dict(
-                    type='ProcessPrompts',
-                    tokenizer=dict(type='PaligemmaTokenizer'
-                                   # special_tokens={'pad_token': '<PAD>'}
-                                   )),
-                dict(type='ResizeImages', height=224, width=224),
-                dict(
-                    type='NormalizeImages',
-                    means=[[123.515625, 116.04492188, 103.59375],
-                           [123.515625, 116.04492188, 103.59375]],
-                    stds=[[58.27148438, 57.02636719, 57.27539062],
-                          [58.27148438, 57.02636719, 57.27539062]],
-                ),
-                dict(
-                    type='NormalizeStatesAndActions',
-                    action_dim=32,
-                    state_dim=32,
-                    state_key='proprio',
-                    action_key='action',
-                    norm_type='mean_std')
-            ],
-            action_window_size=10,
-            action_key='action',
-            use_delta=False,
-            statistic_name='libero_10_no_noops',
-            window_start_idx=0)))
+        name_mappings={'observation.state': ['proprio', 'action']},
+        statistic_keys=[
+            'observation.state', 'observation.eepose', 'timestamp'
+        ],
+        datasets=[
+            dict(
+                type='ParquetDataset',
+                data_root_path=  # noqa: E251
+                [
+                    './datasets/RealRobot_AgileX_aloha_lerobot_v2/aloha_example',  # noqa: E501
+                ],
+                transforms=[
+                    dict(
+                        type='ProcessParquetInputs',
+                        parquet_keys=[
+                            'observation.state', 'timestamp', 'actions',
+                            'info', 'stats', 'action_masks'
+                        ],
+                        video_keys=[
+                            'observation.images.cam_high',
+                            'observation.images.cam_left_wrist',
+                            'observation.images.cam_right_wrist'
+                        ],
+                        name_mappings={
+                            'observation.state': ['states'],
+                            'actions': ['actions']
+                        }),
+                    dict(
+                        type='NormalizeStatesAndActions',
+                        action_dim=32,
+                        state_dim=32,
+                        state_key='proprio',
+                        action_key='action',
+                        norm_type='min_max'),
+                    dict(type='PreparePromptWithState'),
+                    dict[str, str | dict[str, str]](
+                        type='ProcessPrompts',
+                        max_len=200,
+                        tokenizer=dict(
+                            type='PretrainedTokenizer',
+                            model_path=  # noqa: E251
+                            'checkpoints/pi05_base',  # noqa: E501
+                            # special_tokens={'pad_token': '<PAD>'}
+                        )),
+                    dict(type='ResizeImages', height=224, width=224),
+                    dict(type='SimpleNormalizeImages'),
+                ],
+                action_window_size=50)
+        ]))
 
 runner = dict(
     type='FSDPTrainRunner',
-    max_epochs=24,
+    max_epochs=6,
     learning_rate=5e-5,
-    weight_decay=0.0,
+    weight_decay=0.01,
     max_grad_norm=1.0,
     sharding_strategy='no-shard',
     collator=dict(
@@ -296,9 +311,13 @@ runner = dict(
         ],
         meta_keys=['task_description', 'prompt', 'info', 'stats']),
     sampler=None,
-    tokenizer=dict(type='PaligemmaTokenizer'
-                   # special_tokens={'pad_token': '<PAD>'}
-                   ),
+    warmup_ratio=0.03,
+    tokenizer=dict(
+        type='PretrainedTokenizer',
+        model_path=  # noqa: E251
+        'checkpoints/pi05_base',  # noqa: E501
+        # special_tokens={'pad_token': '<PAD>'}
+    ),
     metric=dict(
         type='VLAMetric',
         active_trackers=('jsonl', 'wandb'),
@@ -306,55 +325,74 @@ runner = dict(
         grad_accumulation_steps=1,
         window_size=1),
     lr_scheduler_type='linear-warmup+cosine-decay',
-    warmup_ratio=0.03,
-    enable_gradient_checkpointing=True,
+    enable_gradient_checkpointing=False,
     enable_mixed_precision_training=True,
     mixed_precision_dtype='bf16',
     change_key_name=False)
 
-eval = dict(
-    type='LiberoEvalRunner',
-    task_suite_name='libero_10',
-    model_family='pi0',
-    eval_chunk_size=10,
-    resize_size=224,
-    num_trials_per_task=50,
-    num_steps_wait=10,
+inference = dict(
+    type='AlohaRTCInferenceRunner',
+    async_execution=True,
+    execute_horizon=0,
+    rtc_config=dict(
+        enabled=True,
+        method='prefix',
+        prefix_len=5,  # based on deployment inference frequency
+    ),
+    publish_rate=150,
+    task_descriptions={
+        '1': 'pick up the brown bird toy with left arm',
+        '2': 'pick up the brown bird toy with right arm',
+        '3': 'pick up the pruple knitted teddy bear toy with left arm',
+        '4': 'pick up the purple knitted teddy bear toy with right arm',
+        '5': 'pick up the white racing car toy with left arm',
+        '6': 'pick up the white racing car toy with right arm',
+        '7': 'pick up the pruple caterpillar toy with left arm',
+        '8': 'pick up the pruple caterpillar toy with right arm',
+        '9': 'place it in the brown flat cardboard box with left arm',
+        '10': 'place it in the brown flat cardboard box with right arm',
+    },
     seed=7,
     dataset=dict(
-        type='LiberoParquetEvalDataset',
+        type='PrivateInferenceDataset',
+        img_keys=['cam_high', 'cam_left_wrist', 'cam_right_wrist'],
         transforms=[
             dict(
-                type='ProcessLiberoEvalInputs',
-                img_keys=['agentview_image', 'robot0_eye_in_hand_image'],
-            ),
-            dict(
-                type='TransformImage',
-                image_resize_strategy='resize-naive',
-                input_sizes=[[3, 224, 224], [3, 224, 224]],
-                means=[[123.515625, 116.04492188, 103.59375],
-                       [123.515625, 116.04492188, 103.59375]],
-                stds=[[58.27148438, 57.02636719, 57.27539062],
-                      [58.27148438, 57.02636719, 57.27539062]],
-            ),
-            dict(
-                type='LiberoPromptFromInputs',
-                use_conversation=False,
-                tokenizer=dict(type='PaligemmaTokenizer'
-                               # special_tokens={'pad_token': '<PAD>'}
-                               )),
-            dict(
-                type='LiberoProprioFromInputs',
-                norm_type='mean_std',
-                pos_key='robot0_eef_pos',
-                quat_key='robot0_eef_quat',
-                gripper_key='robot0_gripper_qpos',
+                type='NormalizeStatesAndActions',
                 state_dim=32,
-                out_key='states'),
+                state_key='proprio',
+                action_key='action',
+                norm_type='min_max'),
+            dict(type='PreparePromptWithState'),
+            dict[str, str | dict[str, str]](
+                type='ProcessPrompts',
+                tokenizer=dict(
+                    type='PretrainedTokenizer',
+                    model_path=  # noqa: E251
+                    'checkpoints/pi05_base',
+                    # special_tokens={'pad_token': '<PAD>'}
+                )),
+            dict(type='ResizeImages', height=224, width=224),
+            dict(type='SimpleNormalizeImages'),
         ]),
     denormalize_action=dict(
-        type='DenormalizeLiberoAction',
-        norm_type='mean_std',
-        action_dim=7,
+        type='DenormalizePrivateAction',
+        norm_type='min_max',
+        action_dim=14,
     ),
-)
+    action_chunk=50,
+    operator=dict(
+        type='AlohaOperator',
+        img_front_topic='/camera_h/color/image_raw',
+        img_left_topic='/camera_l/color/image_raw',
+        img_right_topic='/camera_r/color/image_raw',
+        img_front_depth_topic='/camera_h/depth/image_raw',
+        img_left_depth_topic='/camera_l/depth/image_raw',
+        img_right_depth_topic='/camera_r/depth/image_raw',
+        puppet_arm_left_cmd_topic='/master/joint_left',
+        puppet_arm_right_cmd_topic='/master/joint_right',
+        puppet_arm_left_topic='/puppet/joint_left',
+        puppet_arm_right_topic='/puppet/joint_right',
+        robot_base_topic='/odom_raw',
+        robot_base_cmd_topic='/cmd_vel',
+    ))

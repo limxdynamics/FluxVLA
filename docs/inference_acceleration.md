@@ -94,7 +94,122 @@ Key differences from the training `model`:
 
 See `configs/pi05/pi05_paligemma_libero_10_full_finetune.py`:
 
+```python
+inference_model = dict(
+    type='PI05FlowMatchingInference',
+    pretrained_name_or_path=  # noqa: E251
+    './checkpoints/pi05_libero/model.safetensors',  # noqa: E501
+    num_views=2,
+    llm_backbone=dict(
+        type='ConditionGemmaInferenceModel',
+            ...
+    ),
+   vision_backbone=dict(
+        type='SigLIPViTBackboneInference',
+            ...
+    ),
+    projector=dict(
+        type='LinearProjectorInference',
+        in_dim=1152,
+        out_dim=2048,
+    ),
+    action_in_proj=dict(
+        type='LinearProjectorInference', in_dim=32, out_dim=1024),
+    action_out_proj=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=32),
+    time_mlp_in=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    time_mlp_out=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    llm_expert=dict(
+        type='ConditionGemmaInferenceModel',
+            ...
+    ),
+    name_mapping={
+        'llm_backbone': 'paligemma_with_expert.paligemma.model.language_model',
+        'vision_backbone.vision':
+        'paligemma_with_expert.paligemma.model.vision_tower',
+        'projector.projector':
+        'paligemma_with_expert.paligemma.model.multi_modal_projector.linear',
+        'llm_expert': 'paligemma_with_expert.gemma_expert.model',
+        'time_mlp_in.projector': 'time_mlp_in',
+        'time_mlp_out.projector': 'time_mlp_out',
+        'action_in_proj.projector': 'action_in_proj',
+        'action_out_proj.projector': 'action_out_proj',
+        'llm_backbone.embed_tokens': 'paligemma_with_expert.paligemma.lm_head'
+    })
+```
+
 PI0.5 uses a unified inference model class `PI05FlowMatchingInference` that replaces the entire pipeline with Triton-fused operations and a single CUDA Graph. The inference model is automatically selected during evaluation.
+
+### PI0.5-RTC Example
+
+PI0.5-RTC extends the accelerated pipeline with real-time control (RTC) support via `PI05FlowMatchingRTCInference`. It reuses the same whole-fused-kernel CUDA Graph backend while adding action-chunk prefix conditioning, allowing the model to refine predictions based on previously executed actions.
+
+See `configs/pi05/pi05_paligemma_aloha_rtc_kernel_inference.py`:
+
+```python
+inference_model = dict(
+    type='PI05FlowMatchingRTCInference',
+    pretrained_name_or_path=  # noqa: E251
+    './checkpoints/pi05_base/model.safetensors',  # noqa: E501
+    num_views=2,
+    llm_backbone=dict(
+        type='ConditionGemmaInferenceModel',
+            ...
+    ),
+   vision_backbone=dict(
+        type='SigLIPViTBackboneInference',
+            ...
+    ),
+    projector=dict(
+        type='LinearProjectorInference',
+        in_dim=1152,
+        out_dim=2048,
+    ),
+    action_in_proj=dict(
+        type='LinearProjectorInference', in_dim=32, out_dim=1024),
+    action_out_proj=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=32),
+    time_mlp_in=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    time_mlp_out=dict(
+        type='LinearProjectorInference', in_dim=1024, out_dim=1024),
+    llm_expert=dict(
+        type='ConditionGemmaInferenceModel',
+            ...
+    ),
+    name_mapping={
+        'llm_backbone': 'paligemma_with_expert.paligemma.model.language_model',
+        'vision_backbone.vision':
+        'paligemma_with_expert.paligemma.model.vision_tower',
+        'projector.projector':
+        'paligemma_with_expert.paligemma.model.multi_modal_projector.linear',
+        'llm_expert': 'paligemma_with_expert.gemma_expert.model',
+        'time_mlp_in.projector': 'time_mlp_in',
+        'time_mlp_out.projector': 'time_mlp_out',
+        'action_in_proj.projector': 'action_in_proj',
+        'action_out_proj.projector': 'action_out_proj',
+        'llm_backbone.embed_tokens': 'paligemma_with_expert.paligemma.lm_head'
+    },
+    params_to_change_dtype=[
+        'llm_expert.llm.model.layers',
+        'vlm_backbone.vlm.model.language_model.layers',
+        'vlm_backbone.vlm.model.vision_tower',
+        'vlm_backbone.vlm.model.multi_modal_projector',
+    ])
+
+inference = dict(
+    type='AlohaRTCInferenceRunner',
+    async_execution=True,
+    execute_horizon=0,
+    rtc_config=dict(
+        enabled=True,
+        method='prefix',
+        prefix_len=5,  # based on deployment inference frequency
+    ),
+    ...)
+```
 
 ## Benchmarks
 
@@ -113,3 +228,9 @@ PI0.5 uses a unified inference model class `PI05FlowMatchingInference` that repl
 | ----- | ------------- | ---------------- | ------- |
 | GR00T | 14.7          | 42.6             | 2.90x   |
 | PI0.5 | 4.52          | 31.6             | 6.99x   |
+
+### On RTX 4090 Device (Inference Frequency)
+
+| Model     | Baseline (Hz) | Accelerated (Hz) | Speedup |
+| --------- | ------------- | ---------------- | ------- |
+| PI0.5-rtc | 3.4           | 19.6             | 6.66x   |
