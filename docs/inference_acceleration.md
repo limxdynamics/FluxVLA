@@ -191,13 +191,24 @@ inference_model = dict(
         'action_in_proj.projector': 'action_in_proj',
         'action_out_proj.projector': 'action_out_proj',
         'llm_backbone.embed_tokens': 'paligemma_with_expert.paligemma.lm_head'
-    }),
+    },
     params_to_change_dtype=[
         'llm_expert.llm.model.layers',
         'vlm_backbone.vlm.model.language_model.layers',
         'vlm_backbone.vlm.model.vision_tower',
         'vlm_backbone.vlm.model.multi_modal_projector',
-    ],
+    ])
+
+inference = dict(
+    type='AlohaRTCInferenceRunner',
+    async_execution=True,
+    execute_horizon=0,
+    rtc_config=dict(
+        enabled=True,
+        method='prefix',
+        prefix_len=5,  # based on deployment inference frequency
+    ),
+    ...)
 ```
 
 ## Benchmarks
