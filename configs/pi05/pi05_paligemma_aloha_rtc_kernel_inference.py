@@ -339,6 +339,7 @@ inference = dict(
         method='prefix',
         prefix_len=5,  # based on deployment inference frequency
     ),
+    publish_rate=150,
     task_descriptions={
         '1': 'pick up the brown bird toy with left arm',
         '2': 'pick up the brown bird toy with right arm',
