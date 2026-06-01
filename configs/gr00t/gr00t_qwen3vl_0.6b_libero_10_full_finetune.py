@@ -381,7 +381,7 @@ eval = dict(
                 tokenizer=dict(
                     type='PretrainedTokenizer',
                     model_path=  # noqa: E251
-                    './checkpoints/gr00t_qwen3vl_0.6b_libero/tokenizer/',  # noqa: E501
+                    './checkpoints/gr00t_qwen3vl_0.6b_libero/',  # noqa: E501
                 )),
             dict(
                 type='LiberoProprioFromInputs',
